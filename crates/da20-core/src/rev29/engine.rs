@@ -312,4 +312,27 @@ mod tests {
         let (d4, _) = wind_panel_hw_m(&d, entry, 4.0);
         assert!(d4.is_finite() && d4 > 0.0);
     }
+
+    #[test]
+    fn wind_panel_output_depends_only_on_entry_and_component() {
+        let d = Rev29File::production();
+        let entry = 520.0;
+        let hw = 10.0;
+        let once = wind_panel_hw_m(&d, entry, hw).0;
+        let twice = wind_panel_hw_m(&d, entry, hw).0;
+        assert_eq!(once, twice);
+        assert!((once - entry - (wind_panel_hw_m(&d, entry, 4.0).0 - entry)).abs() > 0.0);
+    }
+
+    #[test]
+    fn obstacle_add_depends_only_on_ground_entry_and_height() {
+        let d = Rev29File::production();
+        let ground = 410.0;
+        let h = 5.0;
+        assert_eq!(
+            obstacle_add_m(&d, ground, h).0,
+            obstacle_add_m(&d, ground, h).0
+        );
+        assert!((obstacle_add_m(&d, ground, 0.0).0 - ground).abs() < 1e-9);
+    }
 }

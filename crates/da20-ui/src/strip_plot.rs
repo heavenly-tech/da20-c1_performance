@@ -6,9 +6,9 @@ use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, take
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, takeoff_hand_path,
-    weight_guide_polyline, wind_panel_segment, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft,
-    y_roc_fpm, CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT,
-    TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    takeoff_panel_guides, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ,
+    CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT, TAKEOFF_OBS,
+    TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -174,6 +174,7 @@ fn render_takeoff_strip(
     let oat_x = x_oat(inputs.oat_c);
     let (hw, _tw) = headwind_and_tailwind(&inputs);
     let kg = lb_to_kg(inputs.weight_lb);
+    let guides = takeoff_panel_guides(inner);
 
     let base_curves = takeoff_base_curves(inner);
     let curve_paths = base_curves.iter().map(|pl| {
@@ -190,8 +191,8 @@ fn render_takeoff_strip(
         view! { <polyline points=pts class="chart-stroke-line"/> }
     });
 
-    let weight_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
-        let pts: String = weight_guide_polyline(inner, line_m)
+    let weight_guides = guides.weight_polylines.iter().map(|poly| {
+        let pts: String = poly
             .iter()
             .map(|(x, y)| format!("{x:.1},{y:.1}"))
             .collect::<Vec<_>>()
@@ -201,24 +202,17 @@ fn render_takeoff_strip(
         }
     });
 
-    let wind_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
-        let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
-        let (wf, _) = da20_core::rev29::engine::weight_factor(inner, kg);
-        let (wf_chart, _) = da20_core::rev29::engine::weight_factor(inner, chart_kg);
-        let after = line_m * wf / wf_chart;
-        let (p0, p1) = wind_panel_segment(inner, after, 20.0);
+    let wind_guides = guides.wind_segments.iter().map(|(p0, p1)| {
         view! {
             <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 class="chart-stroke-guide" opacity="0.7"/>
         }
     });
 
-    let obs_guides = inner.obs_lines.value.iter().take(6).map(|&g_m| {
-        let y0 = y_dist(g_m);
-        let y15 = y_dist(da20_core::rev29::engine::obstacle_add_m(inner, g_m, 15.0).0);
+    let obs_guides = guides.obstacle_ys.iter().map(|(y0, y15)| {
         view! {
             <line
-                x1=TAKEOFF_OBS.x y1=y0
-                x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=y15
+                x1=TAKEOFF_OBS.x y1=*y0
+                x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=*y15
                 class="chart-stroke-guide" opacity="0.7"
             />
         }

@@ -333,15 +333,65 @@ pub fn weight_panel_point(data: &Rev29File, line_m: f64, kg: f64) -> (f64, f64) 
     (x_weight_kg(kg), y_dist(line_m * wf / wf_chart))
 }
 
-/// Wind-panel guide segment endpoints at fixed base distance (after weight).
+/// Wind-panel guide segment at a fixed chart row distance (AFM `hw_lines` value), not user weight.
 pub fn wind_panel_segment(
     data: &Rev29File,
-    after_weight_m: f64,
+    entry_distance_m: f64,
     headwind_max: f64,
 ) -> ((f64, f64), (f64, f64)) {
-    let y0 = y_dist(after_weight_m);
-    let y1 = y_dist(wind_panel_hw_m(data, after_weight_m, headwind_max).0);
+    let y0 = y_dist(entry_distance_m);
+    let y1 = y_dist(wind_panel_hw_m(data, entry_distance_m, headwind_max).0);
     ((x_headwind_kt(0.0), y0), (x_headwind_kt(headwind_max), y1))
+}
+
+/// Obstacle-panel guide: fixed ground-line entry from AFM `obs_lines`, fixed obstacle height.
+pub fn obstacle_guide_ys(data: &Rev29File, ground_line_m: f64, obstacle_h_m: f64) -> (f64, f64) {
+    (
+        y_dist(ground_line_m),
+        y_dist(obstacle_add_m(data, ground_line_m, obstacle_h_m).0),
+    )
+}
+
+const TAKEOFF_GUIDE_HW_MAX_KT: f64 = 20.0;
+const TAKEOFF_GUIDE_OBS_MAX_M: f64 = 15.0;
+const TAKEOFF_GUIDE_LINE_COUNT: usize = 8;
+const TAKEOFF_OBS_GUIDE_COUNT: usize = 6;
+
+/// Digitized Fig 5.4 guide geometry only — no flight inputs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TakeoffPanelGuides {
+    pub weight_polylines: Vec<Vec<(f64, f64)>>,
+    pub wind_segments: Vec<((f64, f64), (f64, f64))>,
+    pub obstacle_ys: Vec<(f64, f64)>,
+}
+
+pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
+    let weight_polylines = data
+        .hw_lines
+        .value
+        .iter()
+        .take(TAKEOFF_GUIDE_LINE_COUNT)
+        .map(|&line_m| weight_guide_polyline(data, line_m))
+        .collect();
+    let wind_segments = data
+        .hw_lines
+        .value
+        .iter()
+        .take(TAKEOFF_GUIDE_LINE_COUNT)
+        .map(|&line_m| wind_panel_segment(data, line_m, TAKEOFF_GUIDE_HW_MAX_KT))
+        .collect();
+    let obstacle_ys = data
+        .obs_lines
+        .value
+        .iter()
+        .take(TAKEOFF_OBS_GUIDE_COUNT)
+        .map(|&g_m| obstacle_guide_ys(data, g_m, TAKEOFF_GUIDE_OBS_MAX_M))
+        .collect();
+    TakeoffPanelGuides {
+        weight_polylines,
+        wind_segments,
+        obstacle_ys,
+    }
 }
 
 #[cfg(test)]
@@ -349,6 +399,68 @@ mod tests {
     use super::*;
     use crate::rev29::engine::{fahrenheit_to_celsius, m_to_ft, takeoff_distances_m};
     use crate::types::FlightInputs;
+
+    #[test]
+    fn takeoff_panel_guides_are_static_chart_data() {
+        let data = Rev29File::production();
+        let guides = takeoff_panel_guides(&data);
+        assert_eq!(guides, takeoff_panel_guides(&data));
+        for (i, &line_m) in data
+            .hw_lines
+            .value
+            .iter()
+            .take(TAKEOFF_GUIDE_LINE_COUNT)
+            .enumerate()
+        {
+            assert_eq!(
+                guides.wind_segments[i],
+                wind_panel_segment(&data, line_m, TAKEOFF_GUIDE_HW_MAX_KT)
+            );
+            assert_eq!(
+                guides.weight_polylines[i],
+                weight_guide_polyline(&data, line_m)
+            );
+        }
+    }
+
+    #[test]
+    fn wind_guide_geometry_unaffected_by_weight_scaling_bug() {
+        let data = Rev29File::production();
+        let guides = takeoff_panel_guides(&data);
+        let line_m = data.hw_lines.value[2];
+        let (wf, _) = crate::rev29::engine::weight_factor(&data, 650.0);
+        let (wf_chart, _) = weight_factor(&data, defaults::TAKEOFF_CHART_WEIGHT_KG);
+        let wrong = wind_panel_segment(&data, line_m * wf / wf_chart, TAKEOFF_GUIDE_HW_MAX_KT);
+        assert_ne!(guides.wind_segments[2], wrong);
+    }
+
+    #[test]
+    fn panel_guides_same_while_path_entry_distance_changes_with_weight() {
+        let data = Rev29File::production();
+        let pa = 1000.0;
+        let oat_a = 10.0;
+        let oat_b = 35.0;
+        let kg_a = lb_to_kg(1400.0);
+        let kg_b = lb_to_kg(1900.0);
+        assert_eq!(takeoff_panel_guides(&data), takeoff_panel_guides(&data));
+        let a = takeoff_distances_m(&data, pa, oat_a, kg_a, 0.0, 0.0, 0.0);
+        let b = takeoff_distances_m(&data, pa, oat_b, kg_b, 0.0, 0.0, 0.0);
+        assert!((a.after_weight_m - b.after_weight_m).abs() > 1.0);
+    }
+
+    #[test]
+    fn wind_and_obstacle_corrections_pure_in_entry_and_component() {
+        let data = Rev29File::production();
+        let entry = 450.0;
+        let hw = 8.0;
+        let out = wind_panel_hw_m(&data, entry, hw).0;
+        assert_eq!(out, wind_panel_hw_m(&data, entry, hw).0);
+        let g = 380.0;
+        let h = 6.0;
+        let obs = obstacle_add_m(&data, g, h).0;
+        assert_eq!(obs, obstacle_add_m(&data, g, h).0);
+        assert!((obstacle_add_m(&data, g, 0.0).0 - g).abs() < 1e-9);
+    }
 
     #[test]
     fn takeoff_path_endpoints_match_core_distances() {
