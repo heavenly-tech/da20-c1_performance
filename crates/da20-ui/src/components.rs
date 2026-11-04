@@ -114,7 +114,7 @@ pub fn WarningsList(
                     {warnings.into_iter().map(|w| {
                         let text = warn_text(locale, &w);
                         view! {
-                            <li><code>{w.code}</code>" — "{text}</li>
+                            <li>{text}</li>
                         }
                     }).collect_view()}
                 </ul>

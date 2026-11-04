@@ -10,7 +10,7 @@ use da20_core::rev29::charts::{
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{ChartPhase, FlightInputs};
-use da20_core::wind::compute_wind;
+use da20_core::wind::{compute_wind, runway_heading_deg};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -397,7 +397,7 @@ fn apply_drag(
         }
         ChartKind::Wind => {
             let angle = nx * 90.0;
-            let rwy = inputs.get().runway.parse::<f64>().unwrap_or(0.0) * 10.0;
+            let rwy = runway_heading_deg(&inputs.get().runway).unwrap_or(0.0);
             inputs.update(|i| {
                 i.wind_dir_deg = (rwy + angle).rem_euclid(360.0);
             });

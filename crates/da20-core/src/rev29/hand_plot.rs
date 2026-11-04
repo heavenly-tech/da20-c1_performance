@@ -41,8 +41,15 @@ pub fn x_oat(oat_c: f64) -> f64 {
     TAKEOFF_OAT.x + (oat_c + 20.0) / 75.0 * TAKEOFF_OAT.w
 }
 
+const WEIGHT_PANEL_KG_MIN: f64 = 600.0;
+
 pub fn x_weight_kg(kg: f64) -> f64 {
-    TAKEOFF_WEIGHT.x + (kg - 600.0) / 200.0 * TAKEOFF_WEIGHT.w
+    let kg = kg.clamp(WEIGHT_PANEL_KG_MIN, defaults::TAKEOFF_CHART_WEIGHT_KG);
+    // AFM Fig 5.4: chart reference weight (800 kg) at the left of the weight panel.
+    TAKEOFF_WEIGHT.x
+        + (defaults::TAKEOFF_CHART_WEIGHT_KG - kg)
+            / (defaults::TAKEOFF_CHART_WEIGHT_KG - WEIGHT_PANEL_KG_MIN)
+            * TAKEOFF_WEIGHT.w
 }
 
 pub fn x_headwind_kt(hw: f64) -> f64 {
@@ -170,21 +177,15 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let y_on_pa_curve = y_dist(core.base_m);
     let weight_ref_x = TAKEOFF_WEIGHT.x;
     let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
-    let chart_x = x_weight_kg(chart_kg);
     let after_wt_y = y_dist(core.after_weight_m);
 
-    // (1) OAT vertical to PA curve; (2) horizontal to weight-panel reference (left edge);
-    // (3) constant-y to chart datum, then weight guides to aircraft weight;
-    // (4) horizontal to wind-panel left edge, then wind guides.
+    // (1) OAT vertical to PA curve; (2) horizontal to weight-panel reference (800 kg, left edge);
+    // (3) weight guides to aircraft weight; (4) horizontal to wind panel, then wind guides.
     let mut points = vec![
         (oat_x, STRIP_BOTTOM),
         (oat_x, y_on_pa_curve),
         (weight_ref_x, y_on_pa_curve),
     ];
-
-    if (weight_ref_x - chart_x).abs() > 0.5 {
-        points.push((chart_x, y_on_pa_curve));
-    }
 
     let along_weight = trace_weight_path(data, core.base_m, chart_kg, weight_kg);
     append_segment(&mut points, &along_weight);
@@ -282,6 +283,18 @@ pub fn chart_read_takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f6
 /// Sample wind-panel ground distance at a given headwind (follow guide line).
 pub fn chart_read_wind_ground_m(data: &Rev29File, after_weight_m: f64, headwind_kt: f64) -> f64 {
     wind_panel_hw_m(data, after_weight_m, headwind_kt).0
+}
+
+/// Sample points along a weight-panel guide (800 kg → 600 kg, same wf curve as the hand path).
+pub fn weight_guide_polyline(data: &Rev29File, line_m: f64) -> Vec<(f64, f64)> {
+    (0..=PATH_STEPS)
+        .map(|i| {
+            let t = i as f64 / PATH_STEPS as f64;
+            let kg = defaults::TAKEOFF_CHART_WEIGHT_KG
+                - t * (defaults::TAKEOFF_CHART_WEIGHT_KG - WEIGHT_PANEL_KG_MIN);
+            weight_panel_point(data, line_m, kg)
+        })
+        .collect()
 }
 
 /// Weight-panel Y at guide line for distance row and weight kg.

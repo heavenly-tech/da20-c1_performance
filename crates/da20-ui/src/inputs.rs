@@ -1,7 +1,7 @@
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
 use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::pressure::{
-    format_qnh_dual, pressure_altitude_derivation, qnh_hpa_to_inhg, qnh_inhg_to_hpa,
+    format_qnh_hpa_trim, pressure_altitude_derivation, qnh_hpa_to_inhg, qnh_inhg_to_hpa,
 };
 use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
@@ -65,7 +65,6 @@ pub fn SharedAirfieldInputs(
                         on:input=move |ev| inputs.update(|i| i.runway = input_value(&ev))/>
                 </div>
                 <WindField locale=locale inputs=inputs/>
-                <p class="lab mono">{format_qnh_dual(i.qnh_hpa)}</p>
                 {(!override_active).then(|| {
                     let deriv = pressure_altitude_derivation(i.field_elevation_ft, i.qnh_hpa);
                     view! { <p class="lab mono pa-deriv">{deriv}</p> }
@@ -106,7 +105,7 @@ pub fn QnhField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> imp
                     <div class="qnh-row">
                         <input type="number" step="any" class="mono"
                             prop:value=move || match unit.get() {
-                                QnhUnit::Hpa => format!("{:.1}", hpa),
+                                QnhUnit::Hpa => format_qnh_hpa_trim(hpa),
                                 QnhUnit::InHg => format!("{:.2}", qnh_hpa_to_inhg(hpa)),
                             }
                             on:input=move |ev| {

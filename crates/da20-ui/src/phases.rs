@@ -238,7 +238,7 @@ fn phase_results(
                 Some(t) => view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
-                        <p class="mono">{c.takeoff_ground_roll}" (0 m): "{t.ground_roll_ft.round() as i64}" ft"</p>
+                        <p class="mono">{c.takeoff_ground_roll_at_chart_zero}" "{t.ground_roll_ft.round() as i64}" ft"</p>
                         <p class="mono">{format_takeoff_over_obstacle_result(
                             locale,
                             t.distance_over_obstacle_raw_ft,

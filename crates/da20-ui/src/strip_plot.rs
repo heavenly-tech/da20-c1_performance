@@ -6,9 +6,9 @@ use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, take
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, takeoff_hand_path,
-    weight_panel_point, wind_panel_segment, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft,
-    y_roc_fpm, CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT,
-    TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    weight_guide_polyline, wind_panel_segment, x_ea_ft, x_oat, x_weight_kg,
+    y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM,
+    STRIP_TOP, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -121,10 +121,7 @@ fn readout_line(
                 "{:.0} m roll / {:.0} m obs",
                 path.chart_ground_m, path.chart_over_obstacle_m
             );
-            format!(
-                "{}: {chart} | {}: {core}",
-                c.plot_readout_chart, c.plot_readout_core
-            )
+            format!("{}: {chart} | {core}", c.plot_readout_chart,)
         }
         StripKind::Climb => {
             let path = climb_hand_path(inner, &inputs, pa);
@@ -183,11 +180,14 @@ fn render_takeoff_strip(
     });
 
     let weight_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
-        let p600 = weight_panel_point(inner, line_m, 600.0);
-        let p800 = weight_panel_point(inner, line_m, 800.0);
+        let pts: String = weight_guide_polyline(inner, line_m)
+            .iter()
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         view! {
-            <line
-                x1=p600.0 y1=p600.1 x2=p800.0 y2=p800.1
+            <polyline
+                points=pts fill="none"
                 stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"
             />
         }
@@ -351,12 +351,14 @@ fn apply_hit(
                     set_pa_override(i, pa, ChartPhase::Takeoff);
                 });
             } else if (TAKEOFF_WEIGHT.x..TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w).contains(&sx) {
-                let kg = 600.0 + (sx - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w * 200.0;
+                let kg = defaults::TAKEOFF_CHART_WEIGHT_KG
+                    - (sx - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w
+                        * (defaults::TAKEOFF_CHART_WEIGHT_KG - 600.0);
                 inputs.update(|i| i.weight_lb = kg / 0.45359237);
             } else if (TAKEOFF_WIND.x..TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
                 let hw = (sx - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
                 inputs.update(|i| {
-                    let rwy = i.runway.parse::<f64>().map(|n| n * 10.0).unwrap_or(0.0);
+                    let rwy = da20_core::wind::runway_heading_deg(&i.runway).unwrap_or(0.0);
                     let angle = (i.wind_dir_deg - rwy).to_radians();
                     let cos = angle.cos();
                     if cos.abs() > 0.05 {
