@@ -34,31 +34,20 @@ pub fn Nav(
                 locale.set(next);
                 next.save();
             }>{move || format!("{} · {}", copy(locale.get()).lang_toggle, locale.get().label())}</button>
-            <select class="lang-btn" prop:value=move || theme_label(theme.get())
-                on:change=move |ev| {
-                    let v = select_value(&ev);
-                    let pref = match v.as_str() {
-                        "light" => ThemePreference::Light,
-                        "dark" => ThemePreference::Dark,
-                        _ => ThemePreference::System,
-                    };
-                    theme.set(pref);
-                    pref.save();
-                    crate::theme::apply_theme(pref);
-                }>
-                <option value="system">{move || copy(locale.get()).theme_system}</option>
-                <option value="light">{move || copy(locale.get()).theme_light}</option>
-                <option value="dark">{move || copy(locale.get()).theme_dark}</option>
-            </select>
+            <button class="lang-btn" type="button" on:click=move |_| {
+                let next = theme.get().toggle();
+                theme.set(next);
+                next.save();
+                crate::theme::apply_theme(next);
+            }>{move || format!(
+                "{} · {}",
+                copy(locale.get()).theme_toggle,
+                match theme.get() {
+                    ThemePreference::Light => copy(locale.get()).theme_light,
+                    ThemePreference::Dark => copy(locale.get()).theme_dark,
+                }
+            )}</button>
         </nav>
-    }
-}
-
-fn theme_label(t: ThemePreference) -> String {
-    match t {
-        ThemePreference::System => "system".into(),
-        ThemePreference::Light => "light".into(),
-        ThemePreference::Dark => "dark".into(),
     }
 }
 
@@ -121,12 +110,4 @@ pub fn WarningsList(warnings: Vec<da20_core::types::CalculationWarning>) -> impl
             }
         })}
     }
-}
-
-fn select_value(ev: &leptos::ev::Event) -> String {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok())
-        .map(|el| el.value())
-        .unwrap_or_default()
 }

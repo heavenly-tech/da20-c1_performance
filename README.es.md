@@ -14,8 +14,8 @@ Versión en español del README principal. La interfaz usa **español por defect
 
 ## Tema
 
-- **Oscuro** (navy + ámbar, mockup aprobado) o **claro** (fondo blanco, trazos oscuros, guía ámbar).
-- Preferencia **Sistema** por defecto; elección guardada en `localStorage`.
+- **Claro por defecto** (fondo blanco, trazos oscuros, guía ámbar).
+- Conmutador a **oscuro** (navy + ámbar, mockup aprobado); la elección se guarda en `localStorage`.
 
 ## Datos
 
