@@ -334,9 +334,10 @@ mod tests {
         let d = takeoff_distances_m(&data, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
         let ft = m_to_ft(d.over_obstacle_m);
         assert!(
-            (ft - 1200.0).abs() < 60.0,
-            "expected ~1200 ft over 5 m obstacle, got {ft:.0}"
+            (ft - 1154.0).abs() / 1154.0 <= 0.015,
+            "expected ~1154 ft raw chart, got {ft:.0}"
         );
+        assert_eq!(crate::takeoff::afm_conservative_distance_ft(ft), 1200.0);
     }
 
     #[test]

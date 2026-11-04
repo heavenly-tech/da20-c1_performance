@@ -127,6 +127,8 @@ pub struct Copy {
     pub strip_fig58_roc: &'static str,
     pub takeoff_ground_roll: &'static str,
     pub takeoff_over_obstacle: &'static str,
+    pub takeoff_chart_reading: &'static str,
+    pub takeoff_afm_conservative: &'static str,
     pub manual_title: &'static str,
     pub manual_intro: &'static str,
     pub afm_link: &'static str,
@@ -226,6 +228,8 @@ const ES: Copy = Copy {
     strip_fig58_roc: "Fig 5.8 ROC",
     takeoff_ground_roll: "Rodaje",
     takeoff_over_obstacle: "Sobre obstáculo de",
+    takeoff_chart_reading: "Lectura carta (Fig 5.4)",
+    takeoff_afm_conservative: "AFM conservador (sig. 50 ft / 15 m)",
     manual_title: "Manual de métodos",
     manual_intro: "Cada cálculo, fuente AFM, interpolación y limitaciones.",
     afm_link: "AFM oficial Rev 29",
@@ -318,6 +322,8 @@ const EN: Copy = Copy {
     strip_fig58_roc: "Fig 5.8 ROC",
     takeoff_ground_roll: "Ground roll",
     takeoff_over_obstacle: "Over obstacle",
+    takeoff_chart_reading: "Chart reading (Fig 5.4)",
+    takeoff_afm_conservative: "AFM conservative (next 50 ft / 15 m)",
     manual_title: "Methods manual",
     manual_intro: "Each calculation path, AFM source, interpolation, and limitations.",
     afm_link: "Official AFM Rev 29",
@@ -346,7 +352,7 @@ const ES_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-9 / 5-10, Figura 5.4",
         summary: "Cadena: rodaje base → factor de peso → panel de viento → obstáculo (m).",
         interpolation: "Lineal en cada panel; aviso si OAT/PA/peso/viento fuera de rango.",
-        limitations: "Tras escala carta 1 ~3,9 %; error residual <0,5 % vs ejemplo Rev 29 (21 °C, 4 kt HW, 5 m).",
+        limitations: "Muestra lectura cruda y valor conservador redondeado al alza (50 ft / 15 m), como el ejemplo Rev 29 (1154 → 1200 ft).",
     },
     MethodCopy {
         title: "ROC trepada (Fig 5.5 / 5.6 / 5.8)",
@@ -406,7 +412,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-9 / 5-10, Figure 5.4",
         summary: "Chain: base roll → weight factor → wind panel → obstacle (m).",
         interpolation: "Linear on each panel; warning if OAT/PA/weight/wind out of range.",
-        limitations: "Sheet 1 OAT/PA scale ~3.9%; residual <0.5% vs Rev 29 example (21 °C, 4 kt HW, 5 m).",
+        limitations: "Shows raw chart chain and conservative round-up (50 ft / 15 m), matching Rev 29 example (1154 → 1200 ft).",
     },
     MethodCopy {
         title: "Climb ROC (Figs 5.5 / 5.6 / 5.8)",
@@ -509,14 +515,6 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
         "DERIVED_ESTIMATE" => match locale {
             Locale::Es => "Estimación derivada de trepada (sin carta AFM).".into(),
             Locale::En => "Derived climb estimate (no AFM chart).".into(),
-        },
-        "TAKEOFF_OBSTACLE_BIAS" => match locale {
-            Locale::Es => {
-                "Fig 5.4: escala carta 1; residual <0,5 % vs ejemplo Rev 29 (21 °C).".into()
-            }
-            Locale::En => {
-                "Fig 5.4: sheet 1 scale; residual <0.5% vs Rev 29 example (21 °C).".into()
-            }
         },
         "UNITS" => match locale {
             Locale::Es => "Despegue: carta en m, pantalla en ft.".into(),

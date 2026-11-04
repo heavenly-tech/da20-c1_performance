@@ -101,8 +101,10 @@ fn readout_line(
             let core = compute_takeoff(&data, &inputs)
                 .map(|t| {
                     format!(
-                        "{:.0} ft roll / {:.0} ft obs",
-                        t.ground_roll_ft, t.distance_over_50ft_ft
+                        "{:.0} ft roll / {:.0} ft raw / {:.0} ft AFM",
+                        t.ground_roll_ft,
+                        t.distance_over_obstacle_raw_ft,
+                        t.distance_over_obstacle_conservative_ft
                     )
                 })
                 .unwrap_or_else(|_| "—".into());

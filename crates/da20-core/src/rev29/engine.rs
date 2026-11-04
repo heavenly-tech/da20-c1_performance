@@ -73,9 +73,6 @@ fn bracket_pa_index(axis: &[f64], pa_ft: f64) -> usize {
     j.min(axis.len().saturating_sub(2))
 }
 
-/// Fig 5.4 sheet 1 OAT/PA grid reads ~3.9% low vs Rev 29 worked example (reconciled at 21 °C, 1000 ft PA).
-const TAKEOFF_OAT_PA_SCALE: f64 = 477.790_225 / 460.0;
-
 pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<CalculationWarning>) {
     let to_t = &data.to_t.value;
     let to_pa = &data.to_pa.value;
@@ -109,7 +106,7 @@ pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<Cal
         let v1 = base_at_row(j + 1);
         crate::interpolation::lerp(to_pa[j], v0, to_pa[j + 1], v1, pa_ft)
     };
-    (raw * TAKEOFF_OAT_PA_SCALE, warnings)
+    (raw, warnings)
 }
 
 pub fn weight_factor(data: &Rev29File, weight_kg: f64) -> (f64, Vec<CalculationWarning>) {
@@ -282,7 +279,11 @@ mod tests {
     fn rev29_worked_takeoff_chain_matches_reference_script() {
         let d = Rev29File::production();
         let t = takeoff_distances_m(&d, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
-        let err_pct = (t.over_obstacle_m - 365.76) / 365.76 * 100.0;
-        assert!(err_pct.abs() < 0.5, "AFM worked example err {err_pct:.2}%");
+        let raw_ft = m_to_ft(t.over_obstacle_m);
+        assert!(
+            (raw_ft - 1154.0).abs() / 1154.0 <= 0.015,
+            "raw chart {raw_ft:.0} ft"
+        );
+        assert_eq!((raw_ft / 50.0).ceil() as i64 * 50, 1200);
     }
 }

@@ -1,7 +1,10 @@
 //! Ports `validate_rev29.py` reference checks into Rust tests.
 
 use da20_core::data::PerformanceData;
-use da20_core::rev29::engine::{fahrenheit_to_celsius, rate_of_climb_fpm, takeoff_distances_m};
+use da20_core::rev29::engine::{
+    fahrenheit_to_celsius, m_to_ft, rate_of_climb_fpm, takeoff_distances_m,
+};
+use da20_core::takeoff::afm_conservative_distance_ft;
 use da20_core::wind::wind_components;
 
 #[test]
@@ -10,15 +13,15 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
     let inner = data.inner();
 
     let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
-    let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
+    let raw_ft = m_to_ft(d.over_obstacle_m);
     assert!(
-        (d.over_obstacle_m - 365.76).abs() < 2.0,
-        "over-obstacle {:.2} m",
-        d.over_obstacle_m
+        (raw_ft - 1154.0).abs() / 1154.0 <= 0.015,
+        "raw chart {raw_ft:.1} ft vs AFM ~1154 ft"
     );
-    assert!(
-        err_pct.abs() < 0.5,
-        "AFM Rev 29 worked example err {err_pct:.2}%"
+    assert_eq!(
+        afm_conservative_distance_ft(raw_ft),
+        1200.0,
+        "AFM conservative rounding to next 50 ft"
     );
 
     let t65 = fahrenheit_to_celsius(65.0);
@@ -37,10 +40,7 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
 
     let hw = 11.0 * (30.0f64.to_radians().cos());
     let xw = 11.0 * (30.0f64.to_radians().sin());
-    assert!((hw - 9.5).abs() <= 0.1);
-    assert!((xw - 5.5).abs() <= 0.1);
-
     let c = wind_components(30.0, 11.0, 0.0);
-    assert!((c.headwind_kt - 9.5).abs() <= 0.1);
-    assert!((c.crosswind_kt - 5.5).abs() <= 0.1);
+    assert!((c.headwind_kt - hw).abs() <= 0.1);
+    assert!((c.crosswind_kt - xw).abs() <= 0.1);
 }

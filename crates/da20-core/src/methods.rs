@@ -3,7 +3,7 @@
 use crate::climb::CLIMB_DERIVED_ESTIMATE_NOTE;
 use crate::cruise::CRUISE_TABLE3_GPH_NOTE;
 use crate::landing::LANDING_TABLE_50FT_M_NOTE;
-use crate::takeoff::TAKEOFF_OBSTACLE_DIGITIZATION_NOTE;
+use crate::takeoff::TAKEOFF_AFM_ROUNDING_NOTE;
 
 #[derive(Debug, Clone)]
 pub struct MethodEntry {
@@ -39,7 +39,7 @@ pub fn all_methods() -> Vec<MethodEntry> {
             afm_reference: "AFM pages 5-9 / 5-10, Figure 5.4",
             summary: "Chain: base ground roll (OAT×PA) → weight factor → Fig 5.4 wind panel (HW/TW) → obstacle slope from sheet 2. Distances in meters, displayed in feet.",
             interpolation: "Linear on each panel axis (see validate_rev29 reference script).",
-            limitations: TAKEOFF_OBSTACLE_DIGITIZATION_NOTE,
+            limitations: TAKEOFF_AFM_ROUNDING_NOTE,
         },
         MethodEntry {
             id: "climb",

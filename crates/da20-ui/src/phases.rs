@@ -236,7 +236,20 @@ fn phase_results(
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
                         <p class="mono">{c.takeoff_ground_roll}" (0 m): "{t.ground_roll_ft.round() as i64}" ft"</p>
-                        <p class="big">{t.distance_over_50ft_ft.round() as i64}<span class="u">" ft"</span></p>
+                        <p class="lab mono">
+                            {c.takeoff_chart_reading}": "
+                            {t.distance_over_obstacle_raw_ft.round() as i64}" ft / "
+                            {t.distance_over_obstacle_raw_m.round() as i64}" m"
+                        </p>
+                        <p class="big">
+                            {t.distance_over_obstacle_conservative_ft.round() as i64}
+                            <span class="u">" ft"</span>
+                        </p>
+                        <p class="lab mono">
+                            {c.takeoff_afm_conservative}": "
+                            {t.distance_over_obstacle_conservative_ft.round() as i64}" ft / "
+                            {t.distance_over_obstacle_conservative_m.round() as i64}" m"
+                        </p>
                         <p class="lab">{format_obstacle_over(locale, inputs.obstacle_height_m)}</p>
                         <WarningsList locale=locale warnings=t.warnings.clone()/>
                     </div>

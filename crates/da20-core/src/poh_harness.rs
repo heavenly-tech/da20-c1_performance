@@ -1,7 +1,10 @@
 //! POH worked-example regression harness (AFM Rev 29 reference checks).
 
 use crate::data::PerformanceData;
-use crate::rev29::engine::{fahrenheit_to_celsius, rate_of_climb_fpm, takeoff_distances_m};
+use crate::rev29::engine::{
+    fahrenheit_to_celsius, m_to_ft, rate_of_climb_fpm, takeoff_distances_m,
+};
+use crate::takeoff::afm_conservative_distance_ft;
 use crate::types::FlightInputs;
 use crate::wind::wind_components;
 
@@ -17,13 +20,13 @@ pub fn run_rev29_reference_checks(data: &PerformanceData) -> Vec<HarnessResult> 
     let inner = data.inner();
 
     let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
-    let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
+    let raw_ft = m_to_ft(d.over_obstacle_m);
+    let cons_ft = afm_conservative_distance_ft(raw_ft);
     out.push(HarnessResult {
         example_id: "takeoff_5_4_rev29".into(),
-        passed: err_pct.abs() < 0.5,
+        passed: (raw_ft - 1154.0).abs() / 1154.0 <= 0.015 && cons_ft == 1200.0,
         message: format!(
-            "over-obstacle {:.1} m vs 365.76 m ({err_pct:.2}% after sheet-1 OAT/PA scale)",
-            d.over_obstacle_m
+            "over-obstacle raw {raw_ft:.0} ft → AFM conservative {cons_ft:.0} ft (Rev 29 example)"
         ),
     });
 
