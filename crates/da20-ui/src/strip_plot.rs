@@ -16,7 +16,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::i18n::{copy, Locale};
+use crate::i18n::{copy, format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StripKind {
@@ -101,10 +101,17 @@ fn readout_line(
             let core = compute_takeoff(&data, &inputs)
                 .map(|t| {
                     format!(
-                        "{:.0} ft roll / {:.0} ft raw / {:.0} ft AFM",
-                        t.ground_roll_ft,
-                        t.distance_over_obstacle_raw_ft,
-                        t.distance_over_obstacle_conservative_ft
+                        "{} | {}",
+                        format_takeoff_over_obstacle_result(
+                            locale,
+                            t.distance_over_obstacle_raw_ft,
+                            t.distance_over_obstacle_raw_m,
+                        ),
+                        format_takeoff_conservative_estimate(
+                            locale,
+                            t.distance_over_obstacle_conservative_ft,
+                            t.distance_over_obstacle_conservative_m,
+                        ),
                     )
                 })
                 .unwrap_or_else(|_| "—".into());

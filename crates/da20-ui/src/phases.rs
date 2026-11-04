@@ -3,7 +3,10 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::components::{ProvenanceLine, WarningsList};
-use crate::i18n::{copy, format_obstacle_over, Locale};
+use crate::i18n::{
+    copy, format_obstacle_over, format_takeoff_conservative_estimate,
+    format_takeoff_over_obstacle_result, Locale,
+};
 use crate::inputs::{
     input_value, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField, SharedAirfieldInputs,
 };
@@ -236,20 +239,16 @@ fn phase_results(
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
                         <p class="mono">{c.takeoff_ground_roll}" (0 m): "{t.ground_roll_ft.round() as i64}" ft"</p>
-                        <p class="lab mono">
-                            {c.takeoff_chart_reading}": "
-                            {t.distance_over_obstacle_raw_ft.round() as i64}" ft / "
-                            {t.distance_over_obstacle_raw_m.round() as i64}" m"
-                        </p>
-                        <p class="big">
-                            {t.distance_over_obstacle_conservative_ft.round() as i64}
-                            <span class="u">" ft"</span>
-                        </p>
-                        <p class="lab mono">
-                            {c.takeoff_afm_conservative}": "
-                            {t.distance_over_obstacle_conservative_ft.round() as i64}" ft / "
-                            {format!("{:.1}", t.distance_over_obstacle_conservative_m)}" m"
-                        </p>
+                        <p class="mono">{format_takeoff_over_obstacle_result(
+                            locale,
+                            t.distance_over_obstacle_raw_ft,
+                            t.distance_over_obstacle_raw_m,
+                        )}</p>
+                        <p class="mono">{format_takeoff_conservative_estimate(
+                            locale,
+                            t.distance_over_obstacle_conservative_ft,
+                            t.distance_over_obstacle_conservative_m,
+                        )}</p>
                         <p class="lab">{format_obstacle_over(locale, inputs.obstacle_height_m)}</p>
                         <WarningsList locale=locale warnings=t.warnings.clone()/>
                     </div>

@@ -127,8 +127,6 @@ pub struct Copy {
     pub strip_fig58_roc: &'static str,
     pub takeoff_ground_roll: &'static str,
     pub takeoff_over_obstacle: &'static str,
-    pub takeoff_chart_reading: &'static str,
-    pub takeoff_afm_conservative: &'static str,
     pub manual_title: &'static str,
     pub manual_intro: &'static str,
     pub afm_link: &'static str,
@@ -228,8 +226,6 @@ const ES: Copy = Copy {
     strip_fig58_roc: "Fig 5.8 ROC",
     takeoff_ground_roll: "Rodaje",
     takeoff_over_obstacle: "Sobre obstáculo de",
-    takeoff_chart_reading: "Lectura carta (Fig 5.4)",
-    takeoff_afm_conservative: "AFM conservador (sig. 50 ft → m)",
     manual_title: "Manual de métodos",
     manual_intro: "Cada cálculo, fuente AFM, interpolación y limitaciones.",
     afm_link: "AFM oficial Rev 29",
@@ -322,8 +318,6 @@ const EN: Copy = Copy {
     strip_fig58_roc: "Fig 5.8 ROC",
     takeoff_ground_roll: "Ground roll",
     takeoff_over_obstacle: "Over obstacle",
-    takeoff_chart_reading: "Chart reading (Fig 5.4)",
-    takeoff_afm_conservative: "AFM conservative (next 100 ft → m)",
     manual_title: "Methods manual",
     manual_intro: "Each calculation path, AFM source, interpolation, and limitations.",
     afm_link: "Official AFM Rev 29",
@@ -352,7 +346,7 @@ const ES_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-9 / 5-10, Figura 5.4",
         summary: "Cadena: rodaje base → factor de peso → panel de viento → obstáculo (m).",
         interpolation: "Lineal en cada panel; aviso si OAT/PA/peso/viento fuera de rango.",
-        limitations: "Muestra lectura cruda y valor conservador al alza a 100 ft (m = equivalente ft), p. ej. 1154 → 1200 ft.",
+        limitations: "Muestra lectura cruda y valor conservador al alza a 50 ft (m = equivalente ft), p. ej. 1154 → 1200 ft.",
     },
     MethodCopy {
         title: "ROC trepada (Fig 5.5 / 5.6 / 5.8)",
@@ -412,7 +406,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-9 / 5-10, Figure 5.4",
         summary: "Chain: base roll → weight factor → wind panel → obstacle (m).",
         interpolation: "Linear on each panel; warning if OAT/PA/weight/wind out of range.",
-        limitations: "Shows raw chart chain and conservative round-up to next 100 ft (m from ft), e.g. 1154 → 1200 ft.",
+        limitations: "Shows raw chart chain and conservative round-up to next 50 ft (m from ft), e.g. 1154 → 1200 ft.",
     },
     MethodCopy {
         title: "Climb ROC (Figs 5.5 / 5.6 / 5.8)",
@@ -459,6 +453,28 @@ pub fn format_obstacle_over(locale: Locale, height_m: f64) -> String {
         "{} {:.1} m / {:.0} ft",
         c.takeoff_over_obstacle, height_m, ft
     )
+}
+
+pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> String {
+    let ft_i = ft.round() as i64;
+    let m_i = m.round() as i64;
+    match locale {
+        Locale::Es => format!("Resultado: {ft_i} ft / {m_i} m"),
+        Locale::En => format!("Result: {ft_i} ft / {m_i} m"),
+    }
+}
+
+pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> String {
+    let ft_i = ft.round() as i64;
+    let m_i = m.round() as i64;
+    match locale {
+        Locale::Es => format!(
+            "Estimación conservadora (redondeo al alza al siguiente 50 ft): {ft_i} ft / {m_i} m"
+        ),
+        Locale::En => format!(
+            "Conservative estimate (rounded up to next 50 ft): {ft_i} ft / {m_i} m"
+        ),
+    }
 }
 
 pub fn phase_slug_label(locale: Locale, slug: &str) -> String {
