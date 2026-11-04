@@ -1,3 +1,4 @@
+use da20_core::pressure::qnh_hpa_to_inhg;
 use da20_core::types::FlightInputs;
 use da20_core::wind_format::format_wind;
 use da20_core::PerformanceData;
@@ -36,12 +37,13 @@ impl ReadingsStore {
 
     pub fn export_csv(&self) -> String {
         let mut out = String::from(
-            "id,label,phase,created_at,field_elev,qnh,oat,runway,wind,wind_kt,weight,climb_figure,obstacle_m,takeoff_ground_ft,takeoff_50ft_ft,climb_roc_fpm,cruise_tas,cruise_ff,landing_ground,landing_50ft,endurance_h,range_nm\n",
+            "id,label,phase,created_at,field_elev,qnh_hpa,qnh_inhg,oat,runway,wind,wind_kt,weight,climb_figure,obstacle_m,cruise_oat,takeoff_ground_ft,takeoff_over_obstacle_ft,climb_roc_fpm,cruise_tas,cruise_ff,landing_ground,landing_50ft,endurance_h,range_nm\n",
         );
         for r in &self.readings {
             let i = &r.inputs;
             let wind = format_wind(i.wind_dir_deg, i.wind_speed_kt);
             let climb_fig = format!("{:?}", i.climb_figure);
+            let qnh_inhg = format!("{:.2}", qnh_hpa_to_inhg(i.qnh_hpa));
             let t_gr = r.takeoff.as_ref().map(|t| t.ground_roll_ft);
             let t_50 = r.takeoff.as_ref().map(|t| t.distance_over_50ft_ft);
             let roc = r.climb.as_ref().map(|c| c.rate_of_climb_fpm);
@@ -51,21 +53,25 @@ impl ReadingsStore {
             let l_50 = r.landing.as_ref().map(|l| l.distance_over_50ft_ft);
             let end_h = r.endurance.as_ref().map(|e| e.endurance_h);
             let range = r.endurance.as_ref().map(|e| e.range_nm);
+            let oat_csv = format!("{:.1}", i.oat_c);
+            let cruise_oat_csv = format!("{:.1}", i.cruise_oat_c);
             out.push_str(&format!(
-                "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
                 r.id,
                 escape_csv(&r.label),
                 escape_csv(&r.phase),
                 r.created_at_iso,
                 i.field_elevation_ft,
                 i.qnh_hpa,
-                i.oat_c,
+                qnh_inhg,
+                oat_csv,
                 i.runway,
                 wind,
                 i.wind_speed_kt,
                 i.weight_lb,
                 escape_csv(&climb_fig),
                 i.obstacle_height_m,
+                cruise_oat_csv,
                 fmt_opt(t_gr),
                 fmt_opt(t_50),
                 fmt_opt(roc),

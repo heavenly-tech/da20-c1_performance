@@ -19,7 +19,7 @@ pub fn compute_climb(
     inputs: &FlightInputs,
     target_pressure_alt_ft: f64,
 ) -> Result<ClimbResult, ClimbError> {
-    let pa = effective_pressure_altitude_ft(inputs);
+    let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Climb));
     let (eq, mut warnings) = equivalent_altitude_ft(data, pa, inputs.oat_c);
     let key = inputs.climb_figure.roc_key();
     let (roc, w) =
@@ -33,10 +33,7 @@ pub fn compute_climb(
         None
     };
 
-    warnings.push(CalculationWarning {
-        code: "DERIVED_ESTIMATE".into(),
-        message: CLIMB_DERIVED_ESTIMATE_NOTE.into(),
-    });
+    warnings.push(CalculationWarning::code_only("DERIVED_ESTIMATE"));
 
     Ok(ClimbResult {
         provenance: provenance_for(data.inner(), data.climb_roc_source()),

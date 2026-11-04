@@ -30,7 +30,7 @@ mod tests {
     fn sctb_equivalent_altitude_finite() {
         let data = PerformanceData::production();
         let inputs = crate::types::FlightInputs::default();
-        let pa = effective_pressure_altitude_ft(&inputs);
+        let pa = effective_pressure_altitude_ft(&inputs, None);
         let (eq, _) = equivalent_altitude_ft(&data, pa, 20.0);
         assert!(eq.is_finite());
         let pa2 = pressure_altitude_ft(2130.0, 1013.0);

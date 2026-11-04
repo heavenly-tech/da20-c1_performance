@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://heavenly.cl/da20/schema/performance-data.schema.json",
+  "$id": "https://da20-c1.heavenly.cl/schema/performance-data.schema.json",
   "title": "DA20-C1 Eclipse AFM Chapter 5 Performance Data",
   "description": "Digitized performance charts and tables with AFM provenance. Real values must come from approved AFM extracts only.",
   "type": "object",

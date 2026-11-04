@@ -3,10 +3,14 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::components::{ProvenanceLine, WarningsList};
-use crate::i18n::{copy, Locale};
-use crate::inputs::{input_value, ClimbFlapToggle, NumField, SharedAirfieldInputs};
+use crate::i18n::{copy, format_obstacle_over, Locale};
+use crate::inputs::{
+    input_value, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField, SharedAirfieldInputs,
+};
 use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, LandingTableView};
 use crate::storage::{compute_all, new_reading, ReadingsStore, SavedBundle};
+use crate::strip_plot::{StripHandPlot, StripKind};
+use da20_core::types::ChartPhase;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -31,12 +35,10 @@ pub fn PhaseShell(
         {move || match phase.get() {
             Phase::Takeoff => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff>
+                    <ObstacleField locale=locale inputs=inputs/>
                     <NumField label=move || copy(locale.get()).weight.to_string()
                         get=move || inputs.get().weight_lb
                         set=move |v| inputs.update(|i| i.weight_lb = v)/>
-                    <NumField label=move || copy(locale.get()).obstacle_m.to_string()
-                        get=move || inputs.get().obstacle_height_m
-                        set=move |v| inputs.update(|i| i.obstacle_height_m = v)/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Climb => view! {
@@ -48,23 +50,13 @@ pub fn PhaseShell(
                 </PhaseGrid>
             }.into_any(),
             Phase::Cruise => view! {
-                <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Cruise>
-                    <NumField label=move || copy(locale.get()).cruise_pa.to_string()
-                        get=move || inputs.get().cruise_pressure_alt_ft
-                        set=move |v| inputs.update(|i| i.cruise_pressure_alt_ft = v)/>
-                    <NumField label=move || copy(locale.get()).cruise_rpm.to_string()
-                        get=move || inputs.get().cruise_rpm
-                        set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Cruise airfield=false>
+                    <CruiseInputs locale=locale inputs=inputs/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Endurance => view! {
-                <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Endurance>
-                    <NumField label=move || copy(locale.get()).cruise_pa.to_string()
-                        get=move || inputs.get().cruise_pressure_alt_ft
-                        set=move |v| inputs.update(|i| i.cruise_pressure_alt_ft = v)/>
-                    <NumField label=move || copy(locale.get()).cruise_rpm.to_string()
-                        get=move || inputs.get().cruise_rpm
-                        set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Endurance airfield=false>
+                    <CruiseInputs locale=locale inputs=inputs/>
                     <NumField label=move || copy(locale.get()).fuel_usable.to_string()
                         get=move || inputs.get().fuel_usable_us_gal
                         set=move |v| inputs.update(|i| i.fuel_usable_us_gal = v)/>
@@ -91,6 +83,7 @@ fn PhaseGrid(
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<da20_core::types::FlightInputs>,
     store: RwSignal<ReadingsStore>,
+    #[prop(default = true)] airfield: bool,
     children: Children,
 ) -> impl IntoView {
     let bundle = Memo::new(move |_| {
@@ -107,13 +100,20 @@ fn PhaseGrid(
             <div class="grid">
                 <div class="card">
                     <h3>{move || copy(locale.get()).inputs_title}</h3>
-                    <SharedAirfieldInputs locale=locale inputs=inputs/>
+                    {airfield.then(|| view! {
+                        <SharedAirfieldInputs
+                            locale=locale
+                            inputs=inputs
+                            chart_phase=chart_phase_for(phase)
+                        />
+                    })}
+                    {(!airfield).then(|| view! { <span></span> })}
                     {children()}
                 </div>
                 <div class="card chart-card">
                     <h3>{phase_title(locale, phase)}</h3>
                     {phase_chart(phase, locale, data, inputs)}
-                    {move || phase_results(locale.get(), phase, bundle.get())}
+                    {move || phase_results(locale.get(), phase, bundle.get(), inputs.get())}
                     <div class="save-row">
                         <label>
                             <input prop:value=move || label.get()
@@ -140,6 +140,15 @@ fn PhaseGrid(
                 </div>
             </div>
         </section>
+    }
+}
+
+fn chart_phase_for(phase: Phase) -> Option<ChartPhase> {
+    match phase {
+        Phase::Takeoff => Some(ChartPhase::Takeoff),
+        Phase::Climb => Some(ChartPhase::Climb),
+        Phase::Landing => Some(ChartPhase::Landing),
+        _ => None,
     }
 }
 
@@ -189,12 +198,11 @@ fn phase_chart(
 ) -> impl IntoView {
     match phase {
         Phase::Takeoff => view! {
-            <InteractiveChart locale=locale kind=ChartKind::Takeoff data=data inputs=inputs/>
-            <InteractiveChart locale=locale kind=ChartKind::Wind data=data inputs=inputs/>
+            <StripHandPlot locale=locale kind=StripKind::Takeoff data=data inputs=inputs/>
         }
         .into_any(),
         Phase::Climb => view! {
-            <InteractiveChart locale=locale kind=ChartKind::Climb data=data inputs=inputs/>
+            <StripHandPlot locale=locale kind=StripKind::Climb data=data inputs=inputs/>
         }
         .into_any(),
         Phase::Cruise => view! {
@@ -214,16 +222,23 @@ fn phase_chart(
     }
 }
 
-fn phase_results(locale: Locale, phase: Phase, b: SavedBundle) -> impl IntoView {
+fn phase_results(
+    locale: Locale,
+    phase: Phase,
+    b: SavedBundle,
+    inputs: da20_core::types::FlightInputs,
+) -> impl IntoView {
+    let c = copy(locale);
     match phase {
         Phase::Takeoff => view! {
             {match &b.takeoff {
                 Some(t) => view! {
                     <div class="results-block">
-                        <ProvenanceLine provenance=t.provenance.clone()/>
-                        <p class="big">{t.ground_roll_ft.round() as i64}<span class="u">" ft roll"</span></p>
-                        <p>"50 ft: "{t.distance_over_50ft_ft.round() as i64}" ft"</p>
-                        <WarningsList warnings=t.warnings.clone()/>
+                        <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
+                        <p class="mono">{c.takeoff_ground_roll}" (0 m): "{t.ground_roll_ft.round() as i64}" ft"</p>
+                        <p class="big">{t.distance_over_50ft_ft.round() as i64}<span class="u">" ft"</span></p>
+                        <p class="lab">{format_obstacle_over(locale, inputs.obstacle_height_m)}</p>
+                        <WarningsList locale=locale warnings=t.warnings.clone()/>
                     </div>
                 }.into_any(),
                 None => view! { <p class="error">"—"</p> }.into_any(),
@@ -237,12 +252,12 @@ fn phase_results(locale: Locale, phase: Phase, b: SavedBundle) -> impl IntoView 
         }.into_any(),
         Phase::Climb => view! {
             {match &b.climb {
-                Some(c) => view! {
+                Some(cl) => view! {
                     <div class="results-block">
-                        <ProvenanceLine provenance=c.provenance.clone()/>
-                        <p class="big">{c.rate_of_climb_fpm.round() as i64}<span class="u">" fpm"</span></p>
-                        <p>"EA "{c.equivalent_altitude_ft.round() as i64}" ft"</p>
-                        <WarningsList warnings=c.warnings.clone()/>
+                        <ProvenanceLine locale=locale provenance=cl.provenance.clone()/>
+                        <p class="big">{cl.rate_of_climb_fpm.round() as i64}<span class="u">" fpm"</span></p>
+                        <p>"EA "{cl.equivalent_altitude_ft.round() as i64}" ft"</p>
+                        <WarningsList locale=locale warnings=cl.warnings.clone()/>
                     </div>
                 }.into_any(),
                 None => view! { <p class="error">"—"</p> }.into_any(),
@@ -250,12 +265,12 @@ fn phase_results(locale: Locale, phase: Phase, b: SavedBundle) -> impl IntoView 
         }.into_any(),
         Phase::Cruise => view! {
             {match &b.cruise {
-                Some(c) => view! {
+                Some(cr) => view! {
                     <div class="results-block">
-                        <ProvenanceLine provenance=c.provenance.clone()/>
-                        <p class="big">{c.tas_kt.round() as i64}<span class="u">" kt TAS"</span></p>
-                        <p>{c.fuel_flow_us_gal_h.round()}" US gal/h"</p>
-                        <WarningsList warnings=c.warnings.clone()/>
+                        <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
+                        <p class="big">{cr.tas_kt.round() as i64}<span class="u">" kt TAS"</span></p>
+                        <p>{format!("{:.1}", cr.fuel_flow_us_gal_h)}" US gal/h"</p>
+                        <WarningsList locale=locale warnings=cr.warnings.clone()/>
                     </div>
                 }.into_any(),
                 None => view! { <p class="error">"—"</p> }.into_any(),
@@ -265,11 +280,11 @@ fn phase_results(locale: Locale, phase: Phase, b: SavedBundle) -> impl IntoView 
             {match &b.endurance {
                 Some(e) => view! {
                     <div class="results-block">
-                        <ProvenanceLine provenance=e.provenance.clone()/>
+                        <ProvenanceLine locale=locale provenance=e.provenance.clone()/>
                         <p class="chip">{copy(locale).derived_not_afm}</p>
                         <p class="big">{format!("{:.1}", e.endurance_h)}<span class="u">" h"</span></p>
-                        <p>{format!("{:.0}", e.range_nm)}" NM · "{e.fuel_flow_us_gal_h.round()}" gph @ "{e.tas_kt.round()}" kt"</p>
-                        <WarningsList warnings=e.warnings.clone()/>
+                        <p>{format!("{:.0}", e.range_nm)}" NM · "{format!("{:.1}", e.fuel_flow_us_gal_h)}" gph @ "{e.tas_kt.round()}" kt"</p>
+                        <WarningsList locale=locale warnings=e.warnings.clone()/>
                     </div>
                 }.into_any(),
                 None => view! { <p class="error">"—"</p> }.into_any(),
@@ -279,10 +294,10 @@ fn phase_results(locale: Locale, phase: Phase, b: SavedBundle) -> impl IntoView 
             {match &b.landing {
                 Some(l) => view! {
                     <div class="results-block">
-                        <ProvenanceLine provenance=l.provenance.clone()/>
+                        <ProvenanceLine locale=locale provenance=l.provenance.clone()/>
                         <p class="big">{l.ground_roll_ft.round() as i64}<span class="u">" ft"</span></p>
                         <p>"50 ft: "{l.distance_over_50ft_ft.round() as i64}" ft"</p>
-                        <WarningsList warnings=l.warnings.clone()/>
+                        <WarningsList locale=locale warnings=l.warnings.clone()/>
                     </div>
                 }.into_any(),
                 None => view! { <p class="error">"—"</p> }.into_any(),

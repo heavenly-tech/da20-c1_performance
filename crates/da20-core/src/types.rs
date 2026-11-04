@@ -11,9 +11,34 @@ pub mod defaults {
     pub const WEIGHT_LB: f64 = 1764.0;
     pub const CRUISE_PRESSURE_ALT_FT: f64 = 6500.0;
     pub const CRUISE_RPM: f64 = 2600.0;
-    /// AFM Section 1 — usable fuel (US gal).
-    pub const FUEL_USABLE_US_GAL: f64 = 23.5;
+    /// Fig 5.4 weight panel reference (AFM worked example, kg).
+    pub const TAKEOFF_REF_WEIGHT_KG: f64 = 725.0;
+    /// Obstacle panel x-axis (AFM Fig 5.4 sheet 2, p. 5-10).
+    pub const OBSTACLE_HEIGHT_MAX_M: f64 = 15.0;
+    pub const OBSTACLE_HEIGHT_DEFAULT_M: f64 = 15.0;
+    pub const OBSTACLE_PRESET_AFM_EXAMPLE_M: f64 = 5.0;
+    /// AFM §1.8 — total / usable / unusable (US gal), standard tanks.
+    pub const FUEL_TOTAL_US_GAL: f64 = 24.5;
+    pub const FUEL_USABLE_US_GAL: f64 = 24.0;
+    pub const FUEL_UNUSABLE_US_GAL: f64 = 0.5;
+    /// Placard alternate configurations (usable US gal).
+    pub const FUEL_USABLE_PLACARD_A_US_GAL: f64 = 21.3;
+    pub const FUEL_USABLE_PLACARD_B_US_GAL: f64 = 19.8;
     pub const FUEL_RESERVE_US_GAL: f64 = 4.5;
+}
+
+/// Chart phase for scoped pressure-altitude override from hand plots.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ChartPhase {
+    Takeoff,
+    Climb,
+    Landing,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct PaOverride {
+    pub pa_ft: f64,
+    pub phase: ChartPhase,
 }
 
 /// AFM climb chart selection (flap configuration / flight phase).
@@ -49,11 +74,17 @@ pub struct FlightInputs {
     pub weight_lb: f64,
     pub cruise_pressure_alt_ft: f64,
     pub cruise_rpm: f64,
+    /// OAT (°C) at cruise pressure altitude for Table 3 (independent of aerodrome OAT).
+    #[serde(default = "default_cruise_oat_c")]
+    pub cruise_oat_c: f64,
     /// Obstacle height for Fig 5.4 sheet 2 (AFM example uses 5 m / 16 ft).
     #[serde(default = "default_obstacle_m")]
     pub obstacle_height_m: f64,
-    /// When set (hand-plot / chart entry), used as PA instead of elev+QNH.
+    /// Hand-plot PA override, scoped to one chart phase.
     #[serde(default)]
+    pub pa_override: Option<PaOverride>,
+    /// Legacy field (deserialized only); migrated into `pa_override` on load.
+    #[serde(default, skip_serializing)]
     pub direct_pressure_altitude_ft: Option<f64>,
     #[serde(default)]
     pub climb_figure: ClimbFigure,
@@ -73,7 +104,11 @@ fn default_fuel_reserve() -> f64 {
 }
 
 fn default_obstacle_m() -> f64 {
-    5.0
+    defaults::OBSTACLE_HEIGHT_DEFAULT_M
+}
+
+fn default_cruise_oat_c() -> f64 {
+    crate::cruise::isa_temp_c_at_pa(defaults::CRUISE_PRESSURE_ALT_FT)
 }
 
 impl Default for FlightInputs {
@@ -88,7 +123,9 @@ impl Default for FlightInputs {
             weight_lb: defaults::WEIGHT_LB,
             cruise_pressure_alt_ft: defaults::CRUISE_PRESSURE_ALT_FT,
             cruise_rpm: defaults::CRUISE_RPM,
-            obstacle_height_m: 5.0,
+            cruise_oat_c: default_cruise_oat_c(),
+            obstacle_height_m: defaults::OBSTACLE_HEIGHT_DEFAULT_M,
+            pa_override: None,
             direct_pressure_altitude_ft: None,
             climb_figure: ClimbFigure::default(),
             fuel_usable_us_gal: defaults::FUEL_USABLE_US_GAL,
@@ -117,7 +154,28 @@ pub struct ProvenanceBlock {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CalculationWarning {
     pub code: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
     pub message: String,
+}
+
+impl CalculationWarning {
+    pub fn code_only(code: &str) -> Self {
+        Self {
+            code: code.into(),
+            args: vec![],
+            message: String::new(),
+        }
+    }
+
+    pub fn with_args(code: &str, args: Vec<String>) -> Self {
+        Self {
+            code: code.into(),
+            args,
+            message: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

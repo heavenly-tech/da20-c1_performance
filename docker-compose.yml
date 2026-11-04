@@ -1,7 +1,14 @@
 services:
   da20-performance:
     build: .
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
-      VIRTUAL_HOST: da20.heavenly.cl
+      VIRTUAL_HOST: da20-c1.heavenly.cl
+      LETSENCRYPT_HOST: da20-c1.heavenly.cl
+    networks:
+      - nginx-proxy
+
+networks:
+  nginx-proxy:
+    external: true

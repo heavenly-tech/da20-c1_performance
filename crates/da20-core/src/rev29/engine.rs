@@ -13,7 +13,9 @@ pub fn linear_interp(
     match interpolate_1d(axis, values, x, ExtrapolationPolicy::Clamp) {
         Ok((v, mut w)) => {
             for warn in &mut w {
-                warn.message = format!("{axis_label}: {}", warn.message);
+                if !axis_label.is_empty() {
+                    warn.args.insert(0, axis_label.to_string());
+                }
             }
             (v, w)
         }
@@ -38,17 +40,37 @@ pub fn equivalent_altitude_ft(
     let fan_pa = &data.fan_pa.value;
     let fan_ea = &data.fan_ea.value;
     let mut warnings = Vec::new();
-    let row_values: Vec<f64> = fan_ea
-        .iter()
-        .map(|row| {
-            let (v, w) = linear_interp(fan_t, row, oat_c, "Fig 5.2 OAT");
-            warnings.extend(w);
-            v
-        })
-        .collect();
-    let (ea, w) = linear_interp(fan_pa, &row_values, pa_ft, "Fig 5.2 PA");
-    warnings.extend(w);
+
+    let mut ea_at_row = |row_idx: usize| -> f64 {
+        let row = &fan_ea[row_idx];
+        let (v, w) = linear_interp(fan_t, row, oat_c, "Fig 5.2 OAT");
+        warnings.extend(w);
+        v
+    };
+
+    let n = fan_pa.len();
+    if n == 0 {
+        return (0.0, warnings);
+    }
+    if n == 1 || pa_ft <= fan_pa[0] {
+        return (ea_at_row(0), warnings);
+    }
+    if pa_ft >= fan_pa[n - 1] {
+        return (ea_at_row(n - 1), warnings);
+    }
+    let j = bracket_pa_index(fan_pa, pa_ft);
+    let v0 = ea_at_row(j);
+    let v1 = ea_at_row(j + 1);
+    let ea = crate::interpolation::lerp(fan_pa[j], v0, fan_pa[j + 1], v1, pa_ft);
     (ea, warnings)
+}
+
+fn bracket_pa_index(axis: &[f64], pa_ft: f64) -> usize {
+    let mut j = 0usize;
+    while j + 1 < axis.len() && axis[j + 1] <= pa_ft {
+        j += 1;
+    }
+    j.min(axis.len().saturating_sub(2))
 }
 
 pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<CalculationWarning>) {
@@ -56,23 +78,34 @@ pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<Cal
     let to_pa = &data.to_pa.value;
     let to_base = &data.to_base_m.value;
     let mut warnings = Vec::new();
-    let row_values: Vec<f64> = to_base
-        .iter()
-        .map(|row| {
-            let xs: Vec<f64> = to_t
-                .iter()
-                .zip(row.iter())
-                .filter_map(|(t, v)| v.map(|x| (*t, x)))
-                .map(|(t, _)| t)
-                .collect();
-            let ys: Vec<f64> = row.iter().filter_map(|v| *v).collect();
-            let (v, w) = linear_interp(&xs, &ys, oat_c, "Fig 5.4 OAT");
-            warnings.extend(w);
-            v
-        })
-        .collect();
-    let (base, w) = linear_interp(to_pa, &row_values, pa_ft, "Fig 5.4 PA");
-    warnings.extend(w);
+
+    let mut base_at_row = |row_idx: usize| -> f64 {
+        let row = &to_base[row_idx];
+        let xs: Vec<f64> = to_t
+            .iter()
+            .zip(row.iter())
+            .filter_map(|(t, v)| v.map(|_| *t))
+            .collect();
+        let ys: Vec<f64> = row.iter().filter_map(|v| *v).collect();
+        let (v, w) = linear_interp(&xs, &ys, oat_c, "Fig 5.4 OAT");
+        warnings.extend(w);
+        v
+    };
+
+    let n = to_pa.len();
+    if n == 0 {
+        return (0.0, warnings);
+    }
+    if n == 1 || pa_ft <= to_pa[0] {
+        return (base_at_row(0), warnings);
+    }
+    if pa_ft >= to_pa[n - 1] {
+        return (base_at_row(n - 1), warnings);
+    }
+    let j = bracket_pa_index(to_pa, pa_ft);
+    let v0 = base_at_row(j);
+    let v1 = base_at_row(j + 1);
+    let base = crate::interpolation::lerp(to_pa[j], v0, to_pa[j + 1], v1, pa_ft);
     (base, warnings)
 }
 

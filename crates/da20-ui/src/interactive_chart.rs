@@ -1,23 +1,34 @@
 //! Per-phase interactive chart (numeric entry + drag on same SVG).
 
-use da20_core::altitude::effective_pressure_altitude_ft;
+use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
 use da20_core::climb::compute_climb;
 use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
-    climb_roc_vs_ea, landing_table_curves, map_to_svg, sample_roc_fpm, sample_takeoff_base_m,
-    takeoff_base_curves, wind_headwind_vs_angle, Polyline,
+    climb_roc_vs_ea, landing_table_curves, map_to_svg, sample_landing_ft, sample_roc_fpm,
+    sample_takeoff_base_m, takeoff_base_curves, wind_headwind_vs_angle, Polyline,
 };
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::takeoff::compute_takeoff;
-use da20_core::types::FlightInputs;
+use da20_core::types::{ChartPhase, FlightInputs};
 use da20_core::wind::compute_wind;
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::i18n::{copy, Locale};
+use crate::inputs::set_chart_pa;
+
+fn chart_phase(kind: ChartKind) -> Option<ChartPhase> {
+    match kind {
+        ChartKind::Takeoff => Some(ChartPhase::Takeoff),
+        ChartKind::Climb => Some(ChartPhase::Climb),
+        ChartKind::Landing => Some(ChartPhase::Landing),
+        ChartKind::Wind => None,
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ChartKind {
     Takeoff,
     Climb,
@@ -38,7 +49,7 @@ pub fn InteractiveChart(
         let d = data.get();
         let inner = d.inner();
         let i = inputs.get();
-        let pa = effective_pressure_altitude_ft(&i);
+        let pa = effective_pressure_altitude_ft(&i, chart_phase(kind));
         match kind {
             ChartKind::Takeoff => {
                 let to_t = &inner.to_t.value;
@@ -52,7 +63,11 @@ pub fn InteractiveChart(
             }
             ChartKind::Landing => {
                 let alts = &inner.land_alt.value;
-                (norm_axis(alts, pa), 0.5)
+                let (_, dist) = sample_landing_ft(inner, pa);
+                let y_min = 600.0;
+                let y_max = 1600.0;
+                let ny = ((dist - y_min) / (y_max - y_min)).clamp(0.0, 1.0);
+                (norm_axis(alts, pa), ny)
             }
             ChartKind::Wind => {
                 let angle = wind_angle_from_inputs(&i);
@@ -160,7 +175,8 @@ fn render_svg(
     let (polylines, x_label, y_label, x_min, x_max, y_min, y_max, highlight_idx) =
         chart_spec(kind, inner, inputs);
 
-    let pa = effective_pressure_altitude_ft(inputs);
+    let phase = chart_phase(kind);
+    let pa = effective_pressure_altitude_ft(inputs, phase);
     let oat_line_x = cx;
     let oat_x_data = x_min + oat_line_x * (x_max - x_min);
     let (oat_sx, _) = map_to_svg(
@@ -209,7 +225,12 @@ fn render_svg(
         <text x="50" y="36" fill="var(--chart-label)" font-size="11">{x_label}</text>
         <text x="330" y="285" fill="var(--chart-label)" font-size="11">{y_label}</text>
         <text x="50" y="288" fill="var(--chart-label)" font-size="10">
-            {format!("OAT {:.0} °C · PA {:.0} ft", inputs.oat_c, pa)}
+            {match kind {
+                ChartKind::Takeoff | ChartKind::Climb => {
+                    format!("OAT {:.0} °C · PA {:.0} ft", inputs.oat_c, pa)
+                }
+                _ => String::new(),
+            }}
         </text>
         {takeoff_overlays(kind, data, inner, inputs)}
     }
@@ -245,7 +266,8 @@ fn readout_pair(
     inputs: &FlightInputs,
 ) -> (String, String) {
     let inner = data.inner();
-    let pa = effective_pressure_altitude_ft(inputs);
+    let phase = chart_phase(kind);
+    let pa = effective_pressure_altitude_ft(inputs, phase);
     let chart = match kind {
         ChartKind::Takeoff => format!(
             "{:.0} m base",
@@ -301,7 +323,8 @@ fn chart_spec(
     f64,
     Option<usize>,
 ) {
-    let pa = effective_pressure_altitude_ft(inputs);
+    let phase = chart_phase(kind);
+    let pa = effective_pressure_altitude_ft(inputs, phase);
     match kind {
         ChartKind::Takeoff => {
             let pl = takeoff_base_curves(inner);
@@ -366,21 +389,22 @@ fn apply_drag(
     let inner = data.inner();
     match kind {
         ChartKind::Takeoff => {
+            let pa = lerp_axis(&inner.to_pa.value, ny);
             inputs.update(|i| {
                 i.oat_c = lerp_axis(&inner.to_t.value, nx);
-                i.direct_pressure_altitude_ft = Some(lerp_axis(&inner.to_pa.value, ny));
+                set_pa_override(i, pa, ChartPhase::Takeoff);
             });
         }
         ChartKind::Climb => {
+            let pa = lerp_axis(&inner.fan_pa.value, ny);
             inputs.update(|i| {
                 i.oat_c = lerp_axis(&inner.fan_t.value, nx);
-                i.direct_pressure_altitude_ft = Some(lerp_axis(&inner.fan_pa.value, ny));
+                set_pa_override(i, pa, ChartPhase::Climb);
             });
         }
         ChartKind::Landing => {
-            inputs.update(|i| {
-                i.direct_pressure_altitude_ft = Some(lerp_axis(&inner.land_alt.value, nx));
-            });
+            let pa = lerp_axis(&inner.land_alt.value, nx);
+            set_chart_pa(inputs, pa, ChartPhase::Landing);
         }
         ChartKind::Wind => {
             let angle = nx * 90.0;
@@ -480,7 +504,7 @@ pub fn LandingTableView(
                     {move || {
                         let d = data.get();
                         let inner = d.inner();
-                        let pa = effective_pressure_altitude_ft(&inputs.get());
+                        let pa = effective_pressure_altitude_ft(&inputs.get(), Some(ChartPhase::Landing));
                         inner.land_alt.value.iter().enumerate().map(|(idx, alt)| {
                             let highlight = (*alt - pa).abs()
                                 < 500.0;

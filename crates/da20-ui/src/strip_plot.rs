@@ -1,0 +1,400 @@
+//! Multi-panel hand-plot strips (Fig 5.4 takeoff, Fig 5.2 → ROC climb).
+
+use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
+use da20_core::climb::compute_climb;
+use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
+use da20_core::rev29::engine::lb_to_kg;
+use da20_core::rev29::hand_plot::{
+    chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, takeoff_hand_path,
+    weight_panel_point, wind_panel_segment, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft,
+    y_roc_fpm, CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT,
+    TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+};
+use da20_core::takeoff::compute_takeoff;
+use da20_core::types::ChartPhase;
+use da20_core::types::FlightInputs;
+use da20_core::PerformanceData;
+use leptos::prelude::*;
+use wasm_bindgen::JsCast;
+
+use crate::i18n::{copy, Locale};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum StripKind {
+    Takeoff,
+    Climb,
+}
+
+#[component]
+pub fn StripHandPlot(
+    locale: RwSignal<Locale>,
+    kind: StripKind,
+    data: RwSignal<PerformanceData>,
+    inputs: RwSignal<FlightInputs>,
+) -> impl IntoView {
+    let dragging = RwSignal::new(false);
+
+    let on_pointer_down = move |ev: web_sys::PointerEvent| {
+        dragging.set(true);
+        if let Some((sx, sy)) = svg_coords(&ev) {
+            apply_hit(kind, sx, sy, data.get(), inputs);
+        }
+        capture_pointer(&ev);
+    };
+    let on_pointer_up = move |ev: web_sys::PointerEvent| {
+        dragging.set(false);
+        release_pointer(&ev);
+    };
+    let on_pointer_move = move |ev: web_sys::PointerEvent| {
+        if !dragging.get() {
+            return;
+        }
+        if let Some((sx, sy)) = svg_coords(&ev) {
+            apply_hit(kind, sx, sy, data.get(), inputs);
+        }
+    };
+
+    view! {
+        <div class="strip-wrap">
+            <p class="hint">{move || copy(locale.get()).plot_hint}</p>
+            <svg
+                class="plot-svg strip-svg"
+                viewBox="0 0 1110 560"
+                on:pointerdown=on_pointer_down
+                on:pointerup=on_pointer_up
+                on:pointerleave=move |_| dragging.set(false)
+                on:pointermove=on_pointer_move
+            >
+                {move || match kind {
+                    StripKind::Takeoff => render_takeoff_strip(data.get(), inputs.get()).into_any(),
+                    StripKind::Climb => render_climb_strip(data.get(), inputs.get()).into_any(),
+                }}
+            </svg>
+            <p class="cursor-readout mono">
+                {move || readout_line(locale.get(), kind, data.get(), inputs.get())}
+            </p>
+        </div>
+    }
+}
+
+fn readout_line(
+    locale: Locale,
+    kind: StripKind,
+    data: PerformanceData,
+    inputs: FlightInputs,
+) -> String {
+    let c = copy(locale);
+    let pa = effective_pressure_altitude_ft(
+        &inputs,
+        Some(match kind {
+            StripKind::Takeoff => ChartPhase::Takeoff,
+            StripKind::Climb => ChartPhase::Climb,
+        }),
+    );
+    let inner = data.inner();
+    match kind {
+        StripKind::Takeoff => {
+            let path = takeoff_hand_path(inner, &inputs, pa);
+            let core = compute_takeoff(&data, &inputs)
+                .map(|t| {
+                    format!(
+                        "{:.0} ft roll / {:.0} ft obs",
+                        t.ground_roll_ft, t.distance_over_50ft_ft
+                    )
+                })
+                .unwrap_or_else(|_| "—".into());
+            let chart = format!(
+                "{:.0} m roll / {:.0} m obs",
+                path.chart_ground_m, path.chart_over_obstacle_m
+            );
+            format!(
+                "{}: {chart} | {}: {core}",
+                c.plot_readout_chart, c.plot_readout_core
+            )
+        }
+        StripKind::Climb => {
+            let path = climb_hand_path(inner, &inputs, pa);
+            let core = compute_climb(&data, &inputs, inputs.cruise_pressure_alt_ft)
+                .map(|r| {
+                    format!(
+                        "{:.0} fpm @ EA {:.0} ft",
+                        r.rate_of_climb_fpm, r.equivalent_altitude_ft
+                    )
+                })
+                .unwrap_or_else(|_| "—".into());
+            match path {
+                Some(p) => {
+                    let chart = format!("{:.0} fpm @ EA {:.0} ft", p.chart_roc_fpm, p.chart_ea_ft);
+                    format!(
+                        "{}: {chart} | {}: {core}",
+                        c.plot_readout_chart, c.plot_readout_core
+                    )
+                }
+                None => format!(
+                    "{}: — | {}: {core}",
+                    c.plot_readout_chart, c.plot_readout_core
+                ),
+            }
+        }
+    }
+}
+
+fn render_takeoff_strip(data: PerformanceData, inputs: FlightInputs) -> impl IntoView {
+    let inner = data.inner();
+    let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Takeoff));
+    let path = takeoff_hand_path(inner, &inputs, pa);
+    let base = chart_read_takeoff_base_m(inner, pa, inputs.oat_c);
+    let oat_x = x_oat(inputs.oat_c);
+    let (hw, _tw) = headwind_and_tailwind(&inputs);
+    let kg = lb_to_kg(inputs.weight_lb);
+
+    let base_curves = takeoff_base_curves(inner);
+    let curve_paths = base_curves.iter().map(|pl| {
+        let pts: String = pl
+            .points
+            .iter()
+            .map(|(t, m)| {
+                let sx = x_oat(*t);
+                let sy = y_dist(*m);
+                format!("{sx:.1},{sy:.1}")
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        view! { <polyline points=pts fill="none" stroke="var(--chart-line)" stroke-width="1.4"/> }
+    });
+
+    let weight_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
+        let p600 = weight_panel_point(inner, line_m, 600.0);
+        let p800 = weight_panel_point(inner, line_m, 800.0);
+        view! {
+            <line
+                x1=p600.0 y1=p600.1 x2=p800.0 y2=p800.1
+                stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"
+            />
+        }
+    });
+
+    let wind_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
+        let (wf, _) = da20_core::rev29::engine::weight_factor(inner, kg);
+        let after = line_m * wf;
+        let (p0, p1) = wind_panel_segment(inner, after, 20.0);
+        view! {
+            <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"/>
+        }
+    });
+
+    let obs_guides = inner.obs_lines.value.iter().take(6).map(|&g_m| {
+        let y0 = y_dist(g_m);
+        let y15 = y_dist(da20_core::rev29::engine::obstacle_add_m(inner, g_m, 15.0).0);
+        view! {
+            <line
+                x1=TAKEOFF_OBS.x y1=y0
+                x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=y15
+                stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"
+            />
+        }
+    });
+
+    let path_pts: String = path
+        .points
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    view! {
+        {panel_backgrounds()}
+        {grid_lines()}
+        {curve_paths.collect_view()}
+        {weight_guides.collect_view()}
+        {wind_guides.collect_view()}
+        {obs_guides.collect_view()}
+        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM stroke="var(--chart-guide)" stroke-width="2" stroke-dasharray="5 4"/>
+        <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM stroke="var(--chart-guide)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <polyline points=path_pts fill="none" stroke="var(--chart-guide)" stroke-width="3" stroke-linejoin="round"/>
+        {path.points.iter().map(|(x,y)| view! {
+            <circle cx=*x cy=*y r="5" fill="var(--chart-guide)" stroke="var(--chart-bg)" stroke-width="1.5"/>
+        }).collect_view()}
+        <text x="70" y="28" fill="var(--chart-label)" font-size="11">"Fig 5.4 · base "{format!("{base:.0}")}" m"</text>
+        <text x="520" y="28" fill="var(--chart-label)" font-size="11">"Wt "{format!("{kg:.0}")}" kg · HW "{format!("{hw:.1}")}" kt"</text>
+    }
+}
+
+fn render_climb_strip(data: PerformanceData, inputs: FlightInputs) -> impl IntoView {
+    let inner = data.inner();
+    let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Climb));
+    let path = climb_hand_path(inner, &inputs, pa);
+    let eq_curves = equivalent_altitude_curves(inner);
+    let eq_paths = eq_curves.iter().map(|pl| {
+        let pts: String = pl
+            .points
+            .iter()
+            .map(|(t, ea)| format!("{},{}", x_oat(*t), y_ea_ft(*ea)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        view! { <polyline points=pts fill="none" stroke="var(--chart-line)" stroke-width="1.4"/> }
+    });
+
+    let roc_pl = climb_roc_vs_ea(inner, inputs.climb_figure.roc_key());
+    let roc_pts: String = roc_pl
+        .points
+        .iter()
+        .map(|(ea, roc)| format!("{},{}", x_ea_ft(*ea), y_roc_fpm(*roc)))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let path_pts = path.as_ref().map(|p| {
+        p.points
+            .iter()
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    });
+
+    let oat_x = x_oat(inputs.oat_c);
+
+    let roc_label = match inputs.climb_figure {
+        da20_core::types::ClimbFigure::Fig55CruiseFlaps => "Fig 5.5 ROC",
+        da20_core::types::ClimbFigure::Fig56TakeoffFlaps => "Fig 5.6 ROC",
+        da20_core::types::ClimbFigure::Fig58BalkedLanding => "Fig 5.8 ROC",
+    };
+
+    view! {
+        <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x=CLIMB_ROC.x y=STRIP_TOP width=CLIMB_ROC.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <text x={CLIMB_EQ.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">"Fig 5.2 EA"</text>
+        <text x={CLIMB_ROC.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{roc_label}</text>
+        {eq_paths.collect_view()}
+        <polyline points=roc_pts fill="none" stroke="var(--chart-line)" stroke-width="1.6"/>
+        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM stroke="var(--chart-guide)" stroke-width="2" stroke-dasharray="5 4"/>
+        {path_pts.map(|pts| view! {
+            <polyline points=pts fill="none" stroke="var(--chart-guide)" stroke-width="3" stroke-linejoin="round"/>
+        })}
+        {path.map(|p| p.points.iter().map(|(x,y)| view! {
+            <circle cx=*x cy=*y r="5" fill="var(--chart-guide)"/>
+        }).collect_view())}
+    }
+}
+
+fn panel_backgrounds() -> impl IntoView {
+    view! {
+        <rect x=TAKEOFF_OAT.x y=STRIP_TOP width=TAKEOFF_OAT.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x=TAKEOFF_WEIGHT.x y=STRIP_TOP width=TAKEOFF_WEIGHT.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x=TAKEOFF_WIND.x y=STRIP_TOP width=TAKEOFF_WIND.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"OAT / PA"</text>
+        <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"Weight"</text>
+        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"HW kt"</text>
+        <text x=TAKEOFF_OBS.x+TAKEOFF_OBS.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"Obstacle"</text>
+    }
+}
+
+fn grid_lines() -> impl IntoView {
+    view! {
+        {(0..=8).map(|i| {
+            let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
+            let y = y_dist(m);
+            view! {
+                <line x1=TAKEOFF_OAT.x y1=y x2=TAKEOFF_OBS.x+TAKEOFF_OBS.w y2=y stroke="var(--chart-grid)" stroke-width="0.8"/>
+            }
+        }).collect_view()}
+    }
+}
+
+fn apply_hit(
+    kind: StripKind,
+    sx: f64,
+    sy: f64,
+    data: PerformanceData,
+    inputs: RwSignal<FlightInputs>,
+) {
+    let inner = data.inner();
+    match kind {
+        StripKind::Takeoff => {
+            if (TAKEOFF_OAT.x..TAKEOFF_OAT.x + TAKEOFF_OAT.w).contains(&sx) {
+                let oat = (sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0;
+                let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
+                let pa = lerp_axis(&inner.to_pa.value, ny);
+                inputs.update(|i| {
+                    i.oat_c = oat;
+                    set_pa_override(i, pa, ChartPhase::Takeoff);
+                });
+            } else if (TAKEOFF_WEIGHT.x..TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w).contains(&sx) {
+                let kg = 600.0 + (sx - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w * 200.0;
+                inputs.update(|i| i.weight_lb = kg / 0.45359237);
+            } else if (TAKEOFF_WIND.x..TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
+                let hw = (sx - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
+                inputs.update(|i| {
+                    let rwy = i.runway.parse::<f64>().unwrap_or(0.0) * 10.0;
+                    let angle = (i.wind_dir_deg - rwy).to_radians();
+                    let cos = angle.cos();
+                    if cos > 0.05 {
+                        i.wind_speed_kt = (hw / cos).max(0.0);
+                    } else {
+                        i.wind_speed_kt = hw;
+                    }
+                });
+            } else if sx >= TAKEOFF_OBS.x {
+                let obs = (sx - TAKEOFF_OBS.x) / TAKEOFF_OBS.w * 15.0;
+                inputs.update(|i| i.obstacle_height_m = obs.clamp(0.0, 15.0));
+            }
+        }
+        StripKind::Climb => {
+            if (CLIMB_EQ.x..CLIMB_EQ.x + CLIMB_EQ.w).contains(&sx) {
+                let oat = (sx - CLIMB_EQ.x) / CLIMB_EQ.w * 75.0 - 20.0;
+                let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
+                let pa = lerp_axis(&inner.fan_pa.value, ny);
+                inputs.update(|i| {
+                    i.oat_c = oat;
+                    set_pa_override(i, pa, ChartPhase::Climb);
+                });
+            } else if sx >= CLIMB_ROC.x {
+                let _ea = (sx - CLIMB_ROC.x) / CLIMB_ROC.w * 14_000.0;
+                let _ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
+                let _roc = _ny * 1000.0;
+            }
+        }
+    }
+}
+
+fn lerp_axis(axis: &[f64], n: f64) -> f64 {
+    if axis.is_empty() {
+        return 0.0;
+    }
+    if axis.len() == 1 {
+        return axis[0];
+    }
+    let f = n.clamp(0.0, 1.0) * (axis.len() - 1) as f64;
+    let i = f.floor() as usize;
+    let j = (i + 1).min(axis.len() - 1);
+    axis[i] + (f - i as f64) * (axis[j] - axis[i])
+}
+
+fn svg_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
+    let target = ev
+        .current_target()?
+        .dyn_into::<web_sys::HtmlElement>()
+        .ok()?;
+    let rect = target.get_bounding_client_rect();
+    let nx = (ev.client_x() as f64 - rect.left()) / rect.width();
+    let ny = (ev.client_y() as f64 - rect.top()) / rect.height();
+    Some((nx * 1110.0, ny * 560.0))
+}
+
+fn capture_pointer(ev: &web_sys::PointerEvent) {
+    if let Some(el) = ev
+        .current_target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+    {
+        let _ = el.set_pointer_capture(ev.pointer_id());
+    }
+}
+
+fn release_pointer(ev: &web_sys::PointerEvent) {
+    if let Some(el) = ev
+        .current_target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+    {
+        let _ = el.release_pointer_capture(ev.pointer_id());
+    }
+}

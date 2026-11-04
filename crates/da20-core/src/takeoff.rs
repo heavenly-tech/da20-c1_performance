@@ -17,7 +17,7 @@ pub fn compute_takeoff(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<TakeoffResult, TakeoffError> {
-    let pa = effective_pressure_altitude_ft(inputs);
+    let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Takeoff));
     let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
     let angle = (inputs.wind_dir_deg - rwy).to_radians();
     let headwind = inputs.wind_speed_kt * angle.cos();
@@ -40,16 +40,8 @@ pub fn compute_takeoff(
     let wind_delta_ft = m_to_ft(dist.ground_roll_m - dist.after_weight_m);
 
     let mut warnings = dist.warnings;
-    warnings.push(CalculationWarning {
-        code: "TAKEOFF_OBSTACLE_BIAS".into(),
-        message: TAKEOFF_OBSTACLE_DIGITIZATION_NOTE.into(),
-    });
-    warnings.push(CalculationWarning {
-        code: "UNITS".into(),
-        message:
-            "Takeoff distances computed from digitized Fig 5.4 (meters) and displayed in feet."
-                .into(),
-    });
+    warnings.push(CalculationWarning::code_only("TAKEOFF_OBSTACLE_BIAS"));
+    warnings.push(CalculationWarning::code_only("UNITS"));
 
     Ok(TakeoffResult {
         provenance: provenance_for(data.inner(), data.takeoff_source()),

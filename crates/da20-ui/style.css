@@ -260,6 +260,12 @@ body {
   padding-left: 1.2rem;
 }
 
+.strip-svg {
+  min-height: 360px;
+  width: 100%;
+  touch-action: none;
+}
+
 .plot-svg {
   width: 100%;
   min-height: 280px;
@@ -356,4 +362,45 @@ body {
     margin-left: 0;
     width: 100%;
   }
+}
+
+.qnh-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.qnh-row input {
+  flex: 1;
+}
+
+.pa-deriv {
+  font-size: 0.85rem;
+  color: var(--mut);
+}
+
+.chip.pa-override {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.compare-table th,
+.compare-table td {
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.compare-picks {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
 }

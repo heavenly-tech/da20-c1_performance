@@ -2,6 +2,7 @@
 
 pub mod charts;
 pub mod engine;
+pub mod hand_plot;
 pub mod types;
 
 pub use charts::*;

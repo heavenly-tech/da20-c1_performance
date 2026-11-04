@@ -13,7 +13,10 @@ pub fn parse_wind(s: &str) -> Option<(f64, f64)> {
 }
 
 pub fn format_wind(dir_deg: f64, speed_kt: f64) -> String {
-    let dir = dir_deg.round().rem_euclid(360.0) as u32;
+    let mut dir = dir_deg.round().rem_euclid(360.0) as u32;
+    if dir == 0 {
+        dir = 360;
+    }
     let spd = speed_kt.round().max(0.0) as u32;
     format!("{dir:03} / {spd:02} kt")
 }
@@ -21,6 +24,12 @@ pub fn format_wind(dir_deg: f64, speed_kt: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn north_wind_shows_360() {
+        assert_eq!(format_wind(0.0, 5.0), "360 / 05 kt");
+        assert_eq!(format_wind(360.0, 5.0), "360 / 05 kt");
+    }
 
     #[test]
     fn pads_direction_and_speed() {

@@ -1,6 +1,6 @@
 use leptos::prelude::*;
 
-use crate::i18n::{copy, Locale};
+use crate::i18n::{copy, data_status_label, warn_text, Locale};
 use crate::phases::Phase;
 use crate::theme::ThemePreference;
 
@@ -77,12 +77,17 @@ fn tab_label(locale: Locale, p: Phase) -> &'static str {
 }
 
 #[component]
-pub fn ProvenanceLine(provenance: da20_core::types::ProvenanceBlock) -> impl IntoView {
+pub fn ProvenanceLine(
+    locale: Locale,
+    provenance: da20_core::types::ProvenanceBlock,
+) -> impl IntoView {
     let cite = provenance.citation.clone();
+    let rev = copy(locale).provenance_rev;
+    let status = data_status_label(locale, &provenance.data_status);
     view! {
         <p class="provenance">
             {provenance.afm_document_number}
-            " rev "
+            {rev}
             {provenance.afm_revision}
             " · "
             {cite.figure_or_table}
@@ -91,20 +96,26 @@ pub fn ProvenanceLine(provenance: da20_core::types::ProvenanceBlock) -> impl Int
                 None => String::new(),
             }}
             " · "
-            {provenance.data_status}
+            {status}
         </p>
     }
 }
 
 #[component]
-pub fn WarningsList(warnings: Vec<da20_core::types::CalculationWarning>) -> impl IntoView {
+pub fn WarningsList(
+    locale: Locale,
+    warnings: Vec<da20_core::types::CalculationWarning>,
+) -> impl IntoView {
     let empty = warnings.is_empty();
     view! {
         {(!empty).then(|| {
             view! {
                 <ul class="warnings">
-                    {warnings.into_iter().map(|w| view! {
-                        <li><code>{w.code}</code>" — "{w.message}</li>
+                    {warnings.into_iter().map(|w| {
+                        let text = warn_text(locale, &w);
+                        view! {
+                            <li><code>{w.code}</code>" — "{text}</li>
+                        }
                     }).collect_view()}
                 </ul>
             }

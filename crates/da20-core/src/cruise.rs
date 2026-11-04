@@ -11,7 +11,7 @@ pub enum CruiseError {
     NotFound,
 }
 
-fn isa_temp_c_at_pa(pa_ft: f64) -> f64 {
+pub fn isa_temp_c_at_pa(pa_ft: f64) -> f64 {
     15.0 - 0.0019812 * pa_ft
 }
 
@@ -88,12 +88,9 @@ pub fn compute_cruise(
     let pa = inputs.cruise_pressure_alt_ft;
     let rpm = inputs.cruise_rpm;
     let rows = &data.inner().cruise_table.value.rows;
-    let (tas, ff) = interpolate_cruise_at(rows, pa, rpm, inputs.oat_c)?;
+    let (tas, ff) = interpolate_cruise_at(rows, pa, rpm, inputs.cruise_oat_c)?;
 
-    let warnings = vec![CalculationWarning {
-        code: "TABLE3_GPH".into(),
-        message: CRUISE_TABLE3_GPH_NOTE.into(),
-    }];
+    let warnings = vec![CalculationWarning::code_only("TABLE3_GPH")];
 
     Ok(CruiseResult {
         provenance: provenance_for(data.inner(), data.cruise_source()),
@@ -118,14 +115,31 @@ mod tests {
     use crate::data::PerformanceData;
 
     #[test]
-    fn sctb_cruise_interpolates_at_6500ft() {
+    fn cruise_interpolates_at_6500ft() {
         let data = PerformanceData::production();
         let inputs = FlightInputs {
             cruise_pressure_alt_ft: 6500.0,
             cruise_rpm: 2600.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
             ..FlightInputs::default()
         };
         let r = compute_cruise(&data, &inputs).unwrap();
         assert!(r.tas_kt > 110.0);
+    }
+
+    #[test]
+    fn cruise_ignores_aerodrome_oat() {
+        let data = PerformanceData::production();
+        let mut inputs = FlightInputs {
+            oat_c: 40.0,
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_rpm: 2600.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
+            ..FlightInputs::default()
+        };
+        let r1 = compute_cruise(&data, &inputs).unwrap();
+        inputs.oat_c = -10.0;
+        let r2 = compute_cruise(&data, &inputs).unwrap();
+        assert!((r1.tas_kt - r2.tas_kt).abs() < 1e-9);
     }
 }

@@ -22,6 +22,10 @@ Versión en español del README principal. La interfaz usa **español por defect
 - Producción: `data/da20c1_ch5_data_rev29.json` (AFM DA202-C1 Rev 29, cap. 5).
 - No hay datos de **descenso** en Rev 29 → pestaña omitida.
 
+## Despliegue
+
+Host previsto: `da20-c1.heavenly.cl` detrás de **nginx-proxy** (`VIRTUAL_HOST` / `LETSENCRYPT_HOST`).
+
 ## Descargo
 
 No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. El AFM aprobado rige toda la planificación.

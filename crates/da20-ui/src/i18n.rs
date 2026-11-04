@@ -66,6 +66,7 @@ pub struct Copy {
     pub export_json: &'static str,
     pub field_elev: &'static str,
     pub qnh: &'static str,
+    pub qnh_dual: &'static str,
     pub oat: &'static str,
     pub runway: &'static str,
     pub wind: &'static str,
@@ -93,6 +94,21 @@ pub struct Copy {
     pub plot_hint: &'static str,
     pub plot_readout_chart: &'static str,
     pub plot_readout_core: &'static str,
+    pub pa_override_chip: &'static str,
+    pub pa_override_reset: &'static str,
+    pub readings_compare: &'static str,
+    pub compare_pick_a: &'static str,
+    pub compare_pick_b: &'static str,
+    pub axis_hw_kt: &'static str,
+    pub provenance_rev: &'static str,
+    pub cruise_oat: &'static str,
+    pub cruise_isa: &'static str,
+    pub cruise_disa_minus20: &'static str,
+    pub cruise_disa_plus10: &'static str,
+    pub obstacle_preset_afm: &'static str,
+    pub obstacle_preset_screen: &'static str,
+    pub takeoff_ground_roll: &'static str,
+    pub takeoff_over_obstacle: &'static str,
     pub manual_title: &'static str,
     pub manual_intro: &'static str,
     pub afm_link: &'static str,
@@ -130,7 +146,8 @@ const ES: Copy = Copy {
     export_csv: "Exportar CSV",
     export_json: "Exportar JSON",
     field_elev: "Elevación del aeródromo (ft)",
-    qnh: "QNH (hPa)",
+    qnh: "QNH",
+    qnh_dual: "QNH (hPa / inHg)",
     oat: "OAT (°C)",
     runway: "Pista",
     wind: "Viento (° / kt)",
@@ -158,6 +175,21 @@ const ES: Copy = Copy {
     plot_hint: "Arrastre el cursor sobre las curvas digitalizadas (no son copias del AFM). Compatible con puntero y táctil.",
     plot_readout_chart: "Lectura carta",
     plot_readout_core: "Resultado núcleo",
+    pa_override_chip: "PA carta",
+    pa_override_reset: "Restablecer PA",
+    readings_compare: "Comparar lecturas",
+    compare_pick_a: "Lectura A",
+    compare_pick_b: "Lectura B",
+    axis_hw_kt: "HW kt",
+    provenance_rev: " rev ",
+    cruise_oat: "OAT crucero (°C)",
+    cruise_isa: "ISA",
+    cruise_disa_minus20: "dISA −20",
+    cruise_disa_plus10: "dISA +10",
+    obstacle_preset_afm: "5 m / 16 ft (AFM)",
+    obstacle_preset_screen: "15 m / 50 ft",
+    takeoff_ground_roll: "Rodaje",
+    takeoff_over_obstacle: "Sobre obstáculo de",
     manual_title: "Manual de métodos",
     manual_intro: "Cada cálculo, fuente AFM, interpolación y limitaciones.",
     afm_link: "AFM oficial Rev 29",
@@ -188,7 +220,8 @@ const EN: Copy = Copy {
     export_csv: "Export CSV",
     export_json: "Export JSON",
     field_elev: "Field elevation (ft)",
-    qnh: "QNH (hPa)",
+    qnh: "QNH",
+    qnh_dual: "QNH (hPa / inHg)",
     oat: "OAT (°C)",
     runway: "Runway",
     wind: "Wind (° / kt)",
@@ -216,6 +249,21 @@ const EN: Copy = Copy {
     plot_hint: "Drag the cursor on digitized curves (not AFM scans). Pointer and touch supported.",
     plot_readout_chart: "Chart read",
     plot_readout_core: "Core result",
+    pa_override_chip: "Chart PA",
+    pa_override_reset: "Reset PA",
+    readings_compare: "Compare readings",
+    compare_pick_a: "Reading A",
+    compare_pick_b: "Reading B",
+    axis_hw_kt: "HW kt",
+    provenance_rev: " rev ",
+    cruise_oat: "Cruise OAT (°C)",
+    cruise_isa: "ISA",
+    cruise_disa_minus20: "dISA −20",
+    cruise_disa_plus10: "dISA +10",
+    obstacle_preset_afm: "5 m / 16 ft (AFM)",
+    obstacle_preset_screen: "15 m / 50 ft",
+    takeoff_ground_roll: "Ground roll",
+    takeoff_over_obstacle: "Over obstacle",
     manual_title: "Methods manual",
     manual_intro: "Each calculation path, AFM source, interpolation, and limitations.",
     afm_link: "Official AFM Rev 29",
@@ -276,10 +324,10 @@ const ES_METHODS: [MethodCopy; 8] = [
     },
     MethodCopy {
         title: "Autonomía y alcance (derivado)",
-        afm: "AFM Sec. 1 (capacidad combustible) + Tabla 3 GPH",
+        afm: "AFM §1.8, §5.3.10 (duración máxima) + Tabla 3 GPH",
         summary: "(Combustible utilizable − reserva) / caudal Tabla 3; alcance = autonomía × TAS.",
         interpolation: "Usa crucero interpolado de Tabla 3.",
-        limitations: "Derivado, no carta AFM. Combustible utilizable 23,5 US gal (AFM Rev 29 Sec. 1).",
+        limitations: "Derivado, no carta AFM. Combustible utilizable 24,0 US gal (total 24,5; AFM §1.8). Placas: 21,3 / 19,8 gal. Ver AFM §5.3.10 duración máxima.",
     },
 ];
 
@@ -337,9 +385,97 @@ const EN_METHODS: [MethodCopy; 8] = [
     },
     MethodCopy {
         title: "Endurance & range (derived)",
-        afm: "AFM Section 1 (fuel capacity) + Table 3 GPH",
+        afm: "AFM §1.8, §5.3.10 (Maximum Flight Duration) + Table 3 GPH",
         summary: "(Usable fuel − reserve) / Table 3 flow; range = endurance × TAS.",
         interpolation: "Uses interpolated Table 3 cruise.",
-        limitations: "Derived, not an AFM chart. Usable fuel 23.5 US gal (AFM Rev 29 Sec. 1).",
+        limitations: "Derived, not an AFM chart. Usable fuel 24.0 US gal (24.5 total per AFM §1.8). Placards: 21.3 / 19.8 gal. See AFM §5.3.10.",
     },
 ];
+
+pub fn format_obstacle_over(locale: Locale, height_m: f64) -> String {
+    let c = copy(locale);
+    let ft = height_m * 3.280839895;
+    format!(
+        "{} {:.1} m / {:.0} ft",
+        c.takeoff_over_obstacle, height_m, ft
+    )
+}
+
+pub fn phase_slug_label(locale: Locale, slug: &str) -> String {
+    let c = copy(locale);
+    match slug {
+        "takeoff" => c.tab_takeoff.to_string(),
+        "climb" => c.tab_climb.to_string(),
+        "cruise" => c.tab_cruise.to_string(),
+        "endurance" => c.tab_endurance.to_string(),
+        "landing" => c.tab_landing.to_string(),
+        "readings" => c.tab_readings.to_string(),
+        "manual" => c.tab_manual.to_string(),
+        other => other.to_string(),
+    }
+}
+
+pub fn data_status_label(locale: Locale, status: &str) -> String {
+    match (locale, status) {
+        (Locale::Es, "production") => "Producción".into(),
+        (Locale::Es, "draft") => "Borrador".into(),
+        (Locale::En, "production") => "Production".into(),
+        (Locale::En, "draft") => "Draft".into(),
+        (_, other) => other.to_string(),
+    }
+}
+
+pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> String {
+    if !w.message.is_empty() {
+        return w.message.clone();
+    }
+    let c = copy(locale);
+    let ctx = w.args.first().map(String::as_str).unwrap_or("");
+    let a1 = w.args.get(1).map(String::as_str).unwrap_or("");
+    let a2 = w.args.get(2).map(String::as_str).unwrap_or("");
+    match w.code.as_str() {
+        "CLAMP_LOW" => format!("{ctx}: {a1} < min {a2} (clamp)"),
+        "CLAMP_HIGH" => format!("{ctx}: {a1} > max {a2} (clamp)"),
+        "EXTRAP_LOW" | "EXTRAP_HIGH" => format!("{ctx}: extrapolation ({a1})"),
+        "ENDURANCE_DERIVED" => c.derived_not_afm.to_string(),
+        "AFM_FUEL_CAPACITY" => match locale {
+            Locale::Es => {
+                "AFM §1.8: 24,5 gal total, 24,0 utilizable; placas 21,3 / 19,8 gal. §5.3.10.".into()
+            }
+            Locale::En => {
+                "AFM §1.8: 24.5 gal total, 24.0 usable; placards 21.3 / 19.8 gal. See §5.3.10."
+                    .into()
+            }
+        },
+        "LANDING_TABLE_50FT" => match locale {
+            Locale::Es => "Tabla 4: 1360 ft (≈415 m); texto AFM cita 414 m.".into(),
+            Locale::En => "Table 4: 1360 ft (≈415 m); AFM narrative cites 414 m.".into(),
+        },
+        "LANDING_NO_WIND" => c.landing_no_corr.to_string(),
+        "DERIVED_ESTIMATE" => match locale {
+            Locale::Es => "Estimación derivada de trepada (sin carta AFM).".into(),
+            Locale::En => "Derived climb estimate (no AFM chart).".into(),
+        },
+        "TAKEOFF_OBSTACLE_BIAS" => match locale {
+            Locale::Es => "Fig 5.4 ~2,7 % baja vs ejemplo Rev 29 (obstáculo 5 m).".into(),
+            Locale::En => "Fig 5.4 ~2.7% short vs Rev 29 example (5 m obstacle).".into(),
+        },
+        "UNITS" => match locale {
+            Locale::Es => "Despegue: carta en m, pantalla en ft.".into(),
+            Locale::En => "Takeoff: chart in m, display in ft.".into(),
+        },
+        "TABLE3_GPH" => match locale {
+            Locale::Es => "GPH Tabla 3 transcritos del AFM Rev 29.".into(),
+            Locale::En => "Table 3 GPH transcribed from AFM Rev 29.".into(),
+        },
+        "RUNWAY_HEADING" => match locale {
+            Locale::Es => format!("Pista '{ctx}' sin rumbo numérico — 0°."),
+            Locale::En => format!("Runway '{ctx}' has no numeric heading — 0°."),
+        },
+        "TAILWIND" => match locale {
+            Locale::Es => format!("Cola {a1} kt."),
+            Locale::En => format!("Tailwind {a1} kt."),
+        },
+        other => other.to_string(),
+    }
+}

@@ -69,6 +69,9 @@ fn bracket_index(axis: &[f64], q: f64) -> usize {
     i.min(axis.len().saturating_sub(2))
 }
 
+/// Relative tolerance before emitting clamp warnings (e.g. lb→kg rounding).
+const CLAMP_TOLERANCE: f64 = 0.2;
+
 fn clamp_or_extrapolate_query(
     axis: &[f64],
     query: f64,
@@ -81,17 +84,20 @@ fn clamp_or_extrapolate_query(
         return match policy {
             ExtrapolationPolicy::Strict => Err(InterpError::BelowMin { min }),
             ExtrapolationPolicy::Clamp => {
-                warnings.push(CalculationWarning {
-                    code: "CLAMP_LOW".into(),
-                    message: format!("Query {query} below axis min {min}; clamped."),
-                });
+                if min - query <= CLAMP_TOLERANCE {
+                    return Ok((min, false));
+                }
+                warnings.push(CalculationWarning::with_args(
+                    "CLAMP_LOW",
+                    vec![format!("{query}"), format!("{min}")],
+                ));
                 Ok((min, true))
             }
             ExtrapolationPolicy::AllowExtrapolate => {
-                warnings.push(CalculationWarning {
-                    code: "EXTRAP_LOW".into(),
-                    message: format!("Query {query} below axis min {min}; extrapolating."),
-                });
+                warnings.push(CalculationWarning::with_args(
+                    "EXTRAP_LOW",
+                    vec![format!("{query}"), format!("{min}")],
+                ));
                 Ok((query, true))
             }
         };
@@ -100,17 +106,20 @@ fn clamp_or_extrapolate_query(
         return match policy {
             ExtrapolationPolicy::Strict => Err(InterpError::AboveMax { max }),
             ExtrapolationPolicy::Clamp => {
-                warnings.push(CalculationWarning {
-                    code: "CLAMP_HIGH".into(),
-                    message: format!("Query {query} above axis max {max}; clamped."),
-                });
+                if query - max <= CLAMP_TOLERANCE {
+                    return Ok((max, false));
+                }
+                warnings.push(CalculationWarning::with_args(
+                    "CLAMP_HIGH",
+                    vec![format!("{query}"), format!("{max}")],
+                ));
                 Ok((max, true))
             }
             ExtrapolationPolicy::AllowExtrapolate => {
-                warnings.push(CalculationWarning {
-                    code: "EXTRAP_HIGH".into(),
-                    message: format!("Query {query} above axis max {max}; extrapolating."),
-                });
+                warnings.push(CalculationWarning::with_args(
+                    "EXTRAP_HIGH",
+                    vec![format!("{query}"), format!("{max}")],
+                ));
                 Ok((query, true))
             }
         };

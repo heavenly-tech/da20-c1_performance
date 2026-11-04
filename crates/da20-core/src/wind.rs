@@ -34,25 +34,19 @@ pub fn compute_wind(
     let rwy = match runway_heading_deg(&inputs.runway) {
         Some(h) => h,
         None => {
-            warnings.push(CalculationWarning {
-                code: "RUNWAY_HEADING".into(),
-                message: format!(
-                    "Runway '{}' has no numeric heading — using 0° for wind components.",
-                    inputs.runway
-                ),
-            });
+            warnings.push(CalculationWarning::with_args(
+                "RUNWAY_HEADING",
+                vec![inputs.runway.clone()],
+            ));
             0.0
         }
     };
     let components = wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy);
     if components.along_runway_headwind_kt < 0.0 {
-        warnings.push(CalculationWarning {
-            code: "TAILWIND".into(),
-            message: format!(
-                "Tailwind component {:.1} kt along runway (headwind negative).",
-                -components.along_runway_headwind_kt
-            ),
-        });
+        warnings.push(CalculationWarning::with_args(
+            "TAILWIND",
+            vec![format!("{:.1}", -components.along_runway_headwind_kt)],
+        ));
     }
     Ok(WindResult {
         provenance: provenance_for(data.inner(), data.wind_source()),

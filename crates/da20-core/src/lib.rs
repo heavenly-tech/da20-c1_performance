@@ -12,6 +12,7 @@ pub mod interpolation;
 pub mod landing;
 pub mod methods;
 pub mod poh_harness;
+pub mod pressure;
 pub mod provenance;
 pub mod rev29;
 pub mod takeoff;

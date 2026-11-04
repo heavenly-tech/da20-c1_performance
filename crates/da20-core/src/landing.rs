@@ -20,17 +20,11 @@ pub fn compute_landing(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<LandingResult, LandingError> {
-    let pa = effective_pressure_altitude_ft(inputs);
+    let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Landing));
     let (roll_ft, over_50_ft, mut warnings) = landing_lookup_ft(data.inner(), pa);
 
-    warnings.push(CalculationWarning {
-        code: "LANDING_TABLE_50FT".into(),
-        message: LANDING_TABLE_50FT_M_NOTE.into(),
-    });
-    warnings.push(CalculationWarning {
-        code: "LANDING_NO_WIND".into(),
-        message: LANDING_NO_CORRECTIONS_NOTE.into(),
-    });
+    warnings.push(CalculationWarning::code_only("LANDING_TABLE_50FT"));
+    warnings.push(CalculationWarning::code_only("LANDING_NO_WIND"));
 
     Ok(LandingResult {
         provenance: provenance_for(data.inner(), data.landing_source()),

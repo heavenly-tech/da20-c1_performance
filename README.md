@@ -21,7 +21,7 @@ Performance planning helper for the **Diamond DA20-C1 Eclipse**, implementing AF
 
 **UI:** Spanish default (EN toggle, `localStorage`). Phase tabs: Takeoff, Climb, Cruise, Endurance, Landing, Readings, Manual — no Descent tab (Rev 29 has no descent data). **Light theme by default** (dark navy + amber toggle); choice saved in `localStorage`. Wind display: `200 / 08 kt`. See [README.es.md](README.es.md).
 
-Intended host: `da20.heavenly.cl` behind **nginx-proxy** (`VIRTUAL_HOST`), no bundled nginx.
+Intended host: `da20-c1.heavenly.cl` behind **nginx-proxy** (`VIRTUAL_HOST` / `LETSENCRYPT_HOST`), no bundled nginx.
 
 ## Data
 
