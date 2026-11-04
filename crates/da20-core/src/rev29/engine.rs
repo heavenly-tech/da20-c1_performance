@@ -283,9 +283,6 @@ mod tests {
         let d = Rev29File::production();
         let t = takeoff_distances_m(&d, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
         let err_pct = (t.over_obstacle_m - 365.76) / 365.76 * 100.0;
-        assert!(
-            err_pct.abs() < 0.5,
-            "AFM worked example err {err_pct:.2}%"
-        );
+        assert!(err_pct.abs() < 0.5, "AFM worked example err {err_pct:.2}%");
     }
 }
