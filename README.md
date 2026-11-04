@@ -15,9 +15,11 @@ Performance planning helper for the **Diamond DA20-C1 Eclipse**, implementing AF
 | Layer | Technology |
 |-------|------------|
 | Core | Rust (`da20-core`) — Rev 29 JSON model + interpolation |
-| UI | Leptos → WASM (`da20-ui`) — numeric + hand-plot modes |
+| UI | Leptos → WASM (`da20-ui`) — phase tabs with inline inputs + interactive charts |
 | Server | Single binary (`da20-performance`) — Axum, embedded `dist/` assets |
-| Container | Multi-stage Alpine Dockerfile (optional `scratch` target) |
+| Container | `scratch` static musl binary; `VIRTUAL_HOST` in `docker-compose.yml` |
+
+**UI:** Spanish default (EN toggle, `localStorage`). Phase tabs: Takeoff, Climb, Cruise, Endurance, Landing, Readings, Manual — no Descent tab (Rev 29 has no descent data). Light/dark theme follows system unless overridden. Wind display: `200 / 08 kt`. See [README.es.md](README.es.md).
 
 Intended host: `da20.heavenly.cl` behind **nginx-proxy** (`VIRTUAL_HOST`), no bundled nginx.
 
