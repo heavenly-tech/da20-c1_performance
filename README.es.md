@@ -32,6 +32,8 @@ No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. El AFM aprobado 
 
 ## Capturas
 
-![Pestaña Despegue](docs/screenshots/takeoff-phase.png)
+![Pestaña Despegue (Fig 5.4)](docs/screenshots/takeoff-phase.png)
+
+![Pestaña Ascenso (Fig 5.2 → ROC)](docs/screenshots/climb-phase.png)
 
 ![Manual de métodos](docs/screenshots/manual-tab.png)

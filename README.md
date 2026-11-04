@@ -64,7 +64,8 @@ Run: `cargo test -p da20-core`
 
 | Phase | Capture |
 |-------|---------|
-| Takeoff (phase tab + chart) | ![Takeoff phase](docs/screenshots/takeoff-phase.png) |
+| Takeoff (Fig 5.4 strip) | ![Takeoff phase](docs/screenshots/takeoff-phase.png) |
+| Climb (Fig 5.2 → ROC strip) | ![Climb phase](docs/screenshots/climb-phase.png) |
 | Manual / methods | ![Manual tab](docs/screenshots/manual-tab.png) |
 
 ## Build
