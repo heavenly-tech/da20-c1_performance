@@ -229,7 +229,7 @@ const ES: Copy = Copy {
     takeoff_ground_roll: "Rodaje",
     takeoff_over_obstacle: "Sobre obstáculo de",
     takeoff_chart_reading: "Lectura carta (Fig 5.4)",
-    takeoff_afm_conservative: "AFM conservador (sig. 100 ft → m)",
+    takeoff_afm_conservative: "AFM conservador (sig. 50 ft → m)",
     manual_title: "Manual de métodos",
     manual_intro: "Cada cálculo, fuente AFM, interpolación y limitaciones.",
     afm_link: "AFM oficial Rev 29",

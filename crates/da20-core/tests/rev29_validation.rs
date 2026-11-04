@@ -21,7 +21,7 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
     assert_eq!(
         afm_conservative_distance_ft(raw_ft),
         1200.0,
-        "AFM conservative rounding to next 100 ft"
+        "AFM conservative rounding to next 50 ft"
     );
 
     let t65 = fahrenheit_to_celsius(65.0);

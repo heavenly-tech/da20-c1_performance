@@ -5,11 +5,11 @@ use crate::rev29::engine::{ft_to_m, lb_to_kg, m_to_ft, takeoff_distances_m};
 use crate::types::{CalculationWarning, FlightInputs, TakeoffResult};
 use crate::wind::runway_heading_deg;
 
-pub const TAKEOFF_AFM_ROUNDING_NOTE: &str = "AFM worked examples often round chart distances up to the next 100 ft. The planner shows the raw Fig 5.4 chain result and a conservative value (next 100 ft up, with meters converted from that ft value).";
+pub const TAKEOFF_AFM_ROUNDING_NOTE: &str = "AFM worked examples often round chart distances up to the next 50 ft. The planner shows the raw Fig 5.4 chain result and a conservative value (next 50 ft up, with meters converted from that ft value).";
 
-/// Round up to the next 100 ft (AFM-style conservative distance).
+/// Round up to the next 50 ft (AFM-style conservative distance).
 pub fn afm_conservative_distance_ft(raw_ft: f64) -> f64 {
-    (raw_ft / 100.0).ceil() * 100.0
+    (raw_ft / 50.0).ceil() * 50.0
 }
 
 /// Meters equivalent of the conservative ft value (no separate m rounding).
