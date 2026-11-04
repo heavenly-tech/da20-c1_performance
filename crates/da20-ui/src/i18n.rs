@@ -471,9 +471,9 @@ pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> 
         Locale::Es => format!(
             "Estimación conservadora (redondeo al alza al siguiente 50 ft): {ft_i} ft / {m_i} m"
         ),
-        Locale::En => format!(
-            "Conservative estimate (rounded up to next 50 ft): {ft_i} ft / {m_i} m"
-        ),
+        Locale::En => {
+            format!("Conservative estimate (rounded up to next 50 ft): {ft_i} ft / {m_i} m")
+        }
     }
 }
 

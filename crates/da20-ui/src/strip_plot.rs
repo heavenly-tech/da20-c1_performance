@@ -16,7 +16,9 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::i18n::{copy, format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale};
+use crate::i18n::{
+    copy, format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StripKind {
