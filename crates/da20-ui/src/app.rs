@@ -19,6 +19,20 @@ pub fn App() -> impl IntoView {
     let data = RwSignal::new(PerformanceData::synthetic_fixture());
     let store = RwSignal::new(ReadingsStore::load());
 
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            if let Ok(resp) = gloo_net::http::Request::get("/data/performance.json").send().await {
+                if let Ok(text) = resp.text().await {
+                    if let Ok(parsed) = PerformanceData::from_json_str(&text) {
+                        if parsed.meta.data_status == "production" {
+                            data.set(parsed);
+                        }
+                    }
+                }
+            }
+        });
+    });
+
     view! {
         <div class="app">
             <Disclaimer/>

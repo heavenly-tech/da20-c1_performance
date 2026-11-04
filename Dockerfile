@@ -15,6 +15,7 @@ FROM alpine:3.20 AS runtime
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /app/target/release/da20-performance /da20-performance
 ENV PORT=8080
+ENV VIRTUAL_HOST=da20.heavenly.cl
 EXPOSE 8080
 USER nobody
 ENTRYPOINT ["/da20-performance"]

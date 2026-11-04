@@ -349,6 +349,7 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "da20-core",
+ "gloo-net",
  "gloo-storage",
  "js-sys",
  "leptos",
