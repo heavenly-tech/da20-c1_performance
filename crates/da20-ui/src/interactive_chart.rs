@@ -15,6 +15,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{copy, Locale};
 use crate::inputs::set_chart_pa;
 
@@ -97,6 +98,9 @@ pub fn InteractiveChart(
         }
     };
     let on_pointer_up = move |ev: web_sys::PointerEvent| {
+        if dragging.get() {
+            inputs.update(round_after_chart_drag);
+        }
         dragging.set(false);
         if let Some(el) = ev
             .current_target()
@@ -121,7 +125,12 @@ pub fn InteractiveChart(
                 viewBox="0 0 400 300"
                 on:pointerdown=on_pointer_down
                 on:pointerup=on_pointer_up
-                on:pointerleave=move |_| dragging.set(false)
+                on:pointerleave=move |_| {
+                    if dragging.get() {
+                        inputs.update(round_after_chart_drag);
+                    }
+                    dragging.set(false);
+                }
                 on:pointermove=on_pointer_move
             >
                 {move || {
@@ -185,15 +194,10 @@ fn render_svg(
     );
 
     let paths = polylines.into_iter().enumerate().map(|(idx, pl)| {
-        let stroke = if Some(idx) == highlight_idx {
-            "var(--chart-highlight)"
+        let class = if Some(idx) == highlight_idx {
+            "chart-stroke-line-hi"
         } else {
-            "var(--chart-line)"
-        };
-        let sw = if Some(idx) == highlight_idx {
-            "2.4"
-        } else {
-            "1.6"
+            "chart-stroke-line"
         };
         let pts: String = pl
             .points
@@ -206,7 +210,7 @@ fn render_svg(
             .collect::<Vec<_>>()
             .join(" ");
         view! {
-            <polyline points=pts fill="none" stroke=stroke stroke-width=sw/>
+            <polyline points=pts class=class/>
         }
     });
 
@@ -217,12 +221,12 @@ fn render_svg(
     };
 
     view! {
-        <rect x="40" y="20" width="340" height="250" fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x="40" y="20" width="340" height="250" class="chart-panel"/>
         {paths.collect_view()}
-        <line x1=oat_sx y1="20" x2=oat_sx y2="270" stroke="var(--chart-guide)" stroke-width="2" stroke-dasharray="5 4"/>
-        <line x1=gx y1="20" x2=gx y2="270" stroke="var(--chart-grid)" stroke-dasharray="4 3"/>
-        <line x1="40" y1=gy x2="380" y2=gy stroke="var(--chart-grid)" stroke-dasharray="4 3"/>
-        <circle cx=gx cy=gy r="7" fill="var(--chart-guide)" stroke="var(--chart-bg)" stroke-width="2"/>
+        <line x1=oat_sx y1="20" x2=oat_sx y2="270" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+        <line x1=gx y1="20" x2=gx y2="270" class="chart-stroke-grid" stroke-dasharray="4 3"/>
+        <line x1="40" y1=gy x2="380" y2=gy class="chart-stroke-grid" stroke-dasharray="4 3"/>
+        <circle cx=gx cy=gy r="6" class="chart-marker"/>
         <text x="50" y="36" fill="var(--chart-label)" font-size="11">{x_label}</text>
         <text x="330" y="285" fill="var(--chart-label)" font-size="11">{y_label}</text>
         <text x="50" y="288" fill="var(--chart-label)" font-size="10">
@@ -253,8 +257,8 @@ fn takeoff_overlays(
     let wt_n = norm_axis(&inner.wt_kg.value, kg);
     let wt_x = 40.0 + wt_n * 340.0;
     view! {
-        <line x1=wt_x y1="20" x2=wt_x y2="270" stroke="var(--chart-guide)" stroke-width="1.5" stroke-dasharray="3 4" opacity="0.85"/>
-        <text x="250" y="36" fill="var(--chart-guide)" font-size="10" text-anchor="end">
+        <line x1=wt_x y1="20" x2=wt_x y2="270" class="chart-stroke-guide-active" stroke-dasharray="3 4" opacity="0.85"/>
+        <text x="250" y="36" fill="var(--chart-guide-active)" font-size="10" text-anchor="end">
             {format!("Wt {kg:.0} kg · HW {hw:.1} kt")}
         </text>
     }

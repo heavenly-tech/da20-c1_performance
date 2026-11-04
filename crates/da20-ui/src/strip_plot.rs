@@ -16,6 +16,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
     copy, format_strip_chart_roll_obs, format_takeoff_conservative_estimate,
     format_takeoff_over_obstacle_result, Locale,
@@ -44,6 +45,9 @@ pub fn StripHandPlot(
         capture_pointer(&ev);
     };
     let on_pointer_up = move |ev: web_sys::PointerEvent| {
+        if dragging.get() {
+            inputs.update(round_after_chart_drag);
+        }
         dragging.set(false);
         release_pointer(&ev);
     };
@@ -64,7 +68,12 @@ pub fn StripHandPlot(
                 viewBox="0 0 1110 560"
                 on:pointerdown=on_pointer_down
                 on:pointerup=on_pointer_up
-                on:pointerleave=move |_| dragging.set(false)
+                on:pointerleave=move |_| {
+                    if dragging.get() {
+                        inputs.update(round_after_chart_drag);
+                    }
+                    dragging.set(false);
+                }
                 on:pointermove=on_pointer_move
             >
                 {move || match kind {
@@ -178,7 +187,7 @@ fn render_takeoff_strip(
             })
             .collect::<Vec<_>>()
             .join(" ");
-        view! { <polyline points=pts fill="none" stroke="var(--chart-line)" stroke-width="1.4"/> }
+        view! { <polyline points=pts class="chart-stroke-line"/> }
     });
 
     let weight_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
@@ -188,10 +197,7 @@ fn render_takeoff_strip(
             .collect::<Vec<_>>()
             .join(" ");
         view! {
-            <polyline
-                points=pts fill="none"
-                stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"
-            />
+            <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
         }
     });
 
@@ -202,7 +208,7 @@ fn render_takeoff_strip(
         let after = line_m * wf / wf_chart;
         let (p0, p1) = wind_panel_segment(inner, after, 20.0);
         view! {
-            <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"/>
+            <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 class="chart-stroke-guide" opacity="0.7"/>
         }
     });
 
@@ -213,7 +219,7 @@ fn render_takeoff_strip(
             <line
                 x1=TAKEOFF_OBS.x y1=y0
                 x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=y15
-                stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"
+                class="chart-stroke-guide" opacity="0.7"
             />
         }
     });
@@ -232,11 +238,11 @@ fn render_takeoff_strip(
         {weight_guides.collect_view()}
         {wind_guides.collect_view()}
         {obs_guides.collect_view()}
-        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM stroke="var(--chart-guide)" stroke-width="2" stroke-dasharray="5 4"/>
-        <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM stroke="var(--chart-guide)" stroke-width="1.5" stroke-dasharray="4 3"/>
-        <polyline points=path_pts fill="none" stroke="var(--chart-guide)" stroke-width="3" stroke-linejoin="round"/>
+        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+        <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="4 3"/>
+        <polyline points=path_pts class="chart-stroke-user-path"/>
         {path.points.iter().map(|(x,y)| view! {
-            <circle cx=*x cy=*y r="5" fill="var(--chart-guide)" stroke="var(--chart-bg)" stroke-width="1.5"/>
+            <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view()}
         <text x="70" y="28" fill="var(--chart-label)" font-size="11">
             {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
@@ -264,7 +270,7 @@ fn render_climb_strip(
             .map(|(t, ea)| format!("{},{}", x_oat(*t), y_ea_ft(*ea)))
             .collect::<Vec<_>>()
             .join(" ");
-        view! { <polyline points=pts fill="none" stroke="var(--chart-line)" stroke-width="1.4"/> }
+        view! { <polyline points=pts class="chart-stroke-line"/> }
     });
 
     let roc_pl = climb_roc_vs_ea(inner, inputs.climb_figure.roc_key());
@@ -292,18 +298,18 @@ fn render_climb_strip(
     };
 
     view! {
-        <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
-        <rect x=CLIMB_ROC.x y=STRIP_TOP width=CLIMB_ROC.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
+        <rect x=CLIMB_ROC.x y=STRIP_TOP width=CLIMB_ROC.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <text x={CLIMB_EQ.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{c.strip_fig52_ea}</text>
         <text x={CLIMB_ROC.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{roc_label}</text>
         {eq_paths.collect_view()}
-        <polyline points=roc_pts fill="none" stroke="var(--chart-line)" stroke-width="1.6"/>
-        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM stroke="var(--chart-guide)" stroke-width="2" stroke-dasharray="5 4"/>
+        <polyline points=roc_pts class="chart-stroke-line"/>
+        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         {path_pts.map(|pts| view! {
-            <polyline points=pts fill="none" stroke="var(--chart-guide)" stroke-width="3" stroke-linejoin="round"/>
+            <polyline points=pts class="chart-stroke-user-path"/>
         })}
         {path.map(|p| p.points.iter().map(|(x,y)| view! {
-            <circle cx=*x cy=*y r="5" fill="var(--chart-guide)"/>
+            <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view())}
     }
 }
@@ -311,10 +317,10 @@ fn render_climb_strip(
 fn panel_backgrounds(locale: Locale) -> impl IntoView {
     let c = copy(locale);
     view! {
-        <rect x=TAKEOFF_OAT.x y=STRIP_TOP width=TAKEOFF_OAT.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
-        <rect x=TAKEOFF_WEIGHT.x y=STRIP_TOP width=TAKEOFF_WEIGHT.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
-        <rect x=TAKEOFF_WIND.x y=STRIP_TOP width=TAKEOFF_WIND.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
-        <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
+        <rect x=TAKEOFF_OAT.x y=STRIP_TOP width=TAKEOFF_OAT.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
+        <rect x=TAKEOFF_WEIGHT.x y=STRIP_TOP width=TAKEOFF_WEIGHT.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
+        <rect x=TAKEOFF_WIND.x y=STRIP_TOP width=TAKEOFF_WIND.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
+        <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_oat_pa}</text>
         <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_weight}</text>
         <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_hw}</text>
@@ -328,7 +334,7 @@ fn grid_lines() -> impl IntoView {
             let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
             let y = y_dist(m);
             view! {
-                <line x1=TAKEOFF_OAT.x y1=y x2=TAKEOFF_OBS.x+TAKEOFF_OBS.w y2=y stroke="var(--chart-grid)" stroke-width="0.8"/>
+                <line x1=TAKEOFF_OAT.x y1=y x2=TAKEOFF_OBS.x+TAKEOFF_OBS.w y2=y class="chart-stroke-grid"/>
             }
         }).collect_view()}
     }

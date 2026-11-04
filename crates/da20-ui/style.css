@@ -15,6 +15,9 @@
   --chart-highlight: #2563eb;
   --chart-label: #334155;
   --chart-guide: #ffb020;
+  --chart-guide-active: var(--chart-guide);
+  --chart-user-path: var(--chart-guide);
+  --chart-marker: var(--chart-guide);
   color-scheme: light;
 }
 
@@ -34,6 +37,9 @@
   --chart-highlight: #9fbbe8;
   --chart-label: #8ea0c2;
   --chart-guide: #ffb020;
+  --chart-guide-active: var(--chart-guide);
+  --chart-user-path: var(--chart-guide);
+  --chart-marker: var(--chart-guide);
   color-scheme: dark;
 }
 
@@ -140,6 +146,124 @@ body {
   cursor: pointer;
   font-weight: 600;
   font: inherit;
+}
+
+.palette-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.palette-picker-label {
+  font-weight: 600;
+}
+
+.palette-select {
+  background: var(--chart-bg);
+  color: var(--txt);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+  max-width: 12rem;
+}
+
+.plot-svg line,
+.plot-svg polyline,
+.plot-svg circle,
+.plot-svg rect.chart-panel,
+.strip-svg line,
+.strip-svg polyline,
+.strip-svg circle,
+.strip-svg rect.chart-panel {
+  vector-effect: non-scaling-stroke;
+}
+
+.plot-svg .chart-stroke-grid,
+.strip-svg .chart-stroke-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1px;
+  fill: none;
+}
+
+.plot-svg .chart-stroke-line,
+.strip-svg .chart-stroke-line {
+  stroke: var(--chart-line);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.plot-svg .chart-stroke-line-hi,
+.strip-svg .chart-stroke-line-hi {
+  stroke: var(--chart-highlight);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.plot-svg .chart-stroke-guide,
+.strip-svg .chart-stroke-guide {
+  stroke: var(--chart-guide);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.plot-svg .chart-stroke-guide-active,
+.strip-svg .chart-stroke-guide-active {
+  stroke: var(--chart-guide-active);
+  stroke-width: 2.5px;
+  fill: none;
+}
+
+.plot-svg .chart-stroke-user-path,
+.strip-svg .chart-stroke-user-path {
+  stroke: var(--chart-user-path);
+  stroke-width: 3.5px;
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.plot-svg .chart-marker,
+.strip-svg .chart-marker {
+  fill: var(--chart-marker);
+  stroke: var(--chart-bg);
+  stroke-width: 1.5px;
+}
+
+.plot-svg rect.chart-panel,
+.strip-svg rect.chart-panel {
+  fill: var(--chart-bg);
+  stroke: var(--chart-border);
+  stroke-width: 1px;
+}
+
+@media (max-width: 640px) {
+  .plot-svg .chart-stroke-grid,
+  .strip-svg .chart-stroke-grid {
+    stroke-width: 1.25px;
+  }
+  .plot-svg .chart-stroke-line,
+  .strip-svg .chart-stroke-line,
+  .plot-svg .chart-stroke-line-hi,
+  .strip-svg .chart-stroke-line-hi {
+    stroke-width: 2.25px;
+  }
+  .plot-svg .chart-stroke-guide,
+  .strip-svg .chart-stroke-guide {
+    stroke-width: 2.25px;
+  }
+  .plot-svg .chart-stroke-guide-active,
+  .strip-svg .chart-stroke-guide-active {
+    stroke-width: 2.75px;
+  }
+  .plot-svg .chart-stroke-user-path,
+  .strip-svg .chart-stroke-user-path {
+    stroke-width: 4px;
+  }
+  .plot-svg .chart-marker,
+  .strip-svg .chart-marker {
+    stroke-width: 2px;
+  }
 }
 
 .main {

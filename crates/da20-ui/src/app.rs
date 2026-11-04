@@ -3,20 +3,23 @@ use leptos::prelude::*;
 
 use crate::components::{Disclaimer, Nav};
 use crate::i18n::Locale;
+use crate::palette::{apply_palette, PaletteChoice, PaletteThemeEffect};
 use crate::phases::{Phase, PhaseShell};
 use crate::storage::ReadingsStore;
-use crate::theme::{apply_theme, ThemeEffect, ThemePreference};
+use crate::theme::ThemePreference;
 
 #[component]
 pub fn App() -> impl IntoView {
     let phase = RwSignal::new(Phase::Takeoff);
     let locale = RwSignal::new(Locale::load());
     let theme = RwSignal::new(ThemePreference::load());
+    let palette = RwSignal::new(PaletteChoice::load());
     let data = RwSignal::new(PerformanceData::production());
     let inputs = RwSignal::new(da20_core::types::FlightInputs::default());
     let store = RwSignal::new(ReadingsStore::load());
 
-    apply_theme(theme.get());
+    crate::theme::apply_theme(theme.get());
+    apply_palette(&palette.get(), theme.get());
 
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
@@ -36,13 +39,13 @@ pub fn App() -> impl IntoView {
     });
 
     view! {
-        <ThemeEffect theme=theme/>
+        <PaletteThemeEffect theme=theme palette=palette/>
         <div class="app">
             <Disclaimer locale=locale/>
             <header class="header">
                 <div class="logo">"DA20-C1 "<span>{move || crate::i18n::copy(locale.get()).logo_suffix}</span></div>
                 <p class="subtitle">{move || crate::i18n::copy(locale.get()).subtitle}</p>
-                <Nav phase=phase locale=locale theme=theme/>
+                <Nav phase=phase locale=locale theme=theme palette=palette/>
             </header>
             <main class="main">
                 <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store/>

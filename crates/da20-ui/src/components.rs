@@ -1,6 +1,8 @@
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 
 use crate::i18n::{copy, data_status_label, warn_text, Locale};
+use crate::palette::{apply_palette, PaletteChoice};
 use crate::phases::Phase;
 use crate::theme::ThemePreference;
 
@@ -19,6 +21,7 @@ pub fn Nav(
     phase: RwSignal<Phase>,
     locale: RwSignal<Locale>,
     theme: RwSignal<ThemePreference>,
+    palette: RwSignal<PaletteChoice>,
 ) -> impl IntoView {
     view! {
         <nav class="nav">
@@ -39,6 +42,7 @@ pub fn Nav(
                 theme.set(next);
                 next.save();
                 crate::theme::apply_theme(next);
+                apply_palette(&palette.get(), next);
             }>{move || format!(
                 "{} · {}",
                 copy(locale.get()).theme_toggle,
@@ -47,6 +51,31 @@ pub fn Nav(
                     ThemePreference::Dark => copy(locale.get()).theme_dark,
                 }
             )}</button>
+            <label class="palette-picker lang-btn">
+                <span class="palette-picker-label">{move || copy(locale.get()).palette_toggle}</span>
+                <select class="palette-select" prop:value=move || palette.get().id.clone()
+                    on:change=move |ev| {
+                        let id = ev
+                            .target()
+                            .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok())
+                            .map(|s| s.value())
+                            .unwrap_or_default();
+                        let choice = PaletteChoice { id: id.clone() };
+                        palette.set(choice.clone());
+                        choice.save();
+                        apply_palette(&choice, theme.get());
+                    }>
+                    {move || {
+                        PaletteChoice::menu_options().into_iter().map(|(id, en, es)| {
+                            let label = match locale.get() {
+                                Locale::Es => es,
+                                Locale::En => en,
+                            };
+                            view! { <option value=id.clone() selected={palette.get().id == id}>{label}</option> }
+                        }).collect_view()
+                    }}
+                </select>
+            </label>
         </nav>
     }
 }

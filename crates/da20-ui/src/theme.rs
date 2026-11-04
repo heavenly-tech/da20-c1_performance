@@ -42,6 +42,7 @@ pub fn apply_theme(pref: ThemePreference) {
     }
 }
 
+#[allow(dead_code)]
 #[component]
 pub fn ThemeEffect(theme: RwSignal<ThemePreference>) -> impl IntoView {
     Effect::new(move |_| {

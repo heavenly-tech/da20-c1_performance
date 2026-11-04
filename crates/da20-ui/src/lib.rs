@@ -1,10 +1,12 @@
 use leptos::prelude::*;
 
 mod app;
+mod chart_inputs;
 mod components;
 mod i18n;
 mod inputs;
 mod interactive_chart;
+mod palette;
 mod phases;
 mod qnh_unit;
 mod readings;
