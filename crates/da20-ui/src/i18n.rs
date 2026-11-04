@@ -219,7 +219,7 @@ const ES: Copy = Copy {
     strip_fig54_hw: "Viento de proa",
     strip_panel_oat_pa: "OAT / PA",
     strip_panel_weight: "Peso",
-    strip_panel_hw: "HW kt",
+    strip_panel_hw: "Viento de proa (kt)",
     strip_panel_obstacle: "Obstáculo",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
@@ -477,6 +477,17 @@ pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> 
         Locale::En => {
             format!("Conservative estimate (rounded up to next 50 ft): {ft_i} ft / {m_i} m")
         }
+    }
+}
+
+pub fn format_strip_chart_roll_obs(locale: Locale, roll_m: f64, obs_m: f64) -> String {
+    match locale {
+        Locale::Es => format!(
+            "{:.0} m rodaje / {:.0} m obst.",
+            roll_m.round(),
+            obs_m.round()
+        ),
+        Locale::En => format!("{:.0} m roll / {:.0} m obs", roll_m.round(), obs_m.round()),
     }
 }
 

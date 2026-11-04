@@ -17,7 +17,8 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::i18n::{
-    copy, format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
+    copy, format_strip_chart_roll_obs, format_takeoff_conservative_estimate,
+    format_takeoff_over_obstacle_result, Locale,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -117,9 +118,10 @@ fn readout_line(
                     )
                 })
                 .unwrap_or_else(|_| "—".into());
-            let chart = format!(
-                "{:.0} m roll / {:.0} m obs",
-                path.chart_ground_m, path.chart_over_obstacle_m
+            let chart = format_strip_chart_roll_obs(
+                locale,
+                path.chart_ground_m,
+                path.chart_over_obstacle_m,
             );
             format!("{}: {chart} | {core}", c.plot_readout_chart,)
         }
@@ -400,15 +402,34 @@ fn lerp_axis(axis: &[f64], n: f64) -> f64 {
     axis[i] + (f - i as f64) * (axis[j] - axis[i])
 }
 
+const STRIP_VIEWBOX_W: f64 = 1110.0;
+const STRIP_VIEWBOX_H: f64 = 560.0;
+
+/// Map pointer client coordinates within an element bounding box to strip SVG viewBox space.
+fn pointer_to_strip_viewbox(
+    client_x: f64,
+    client_y: f64,
+    rect_left: f64,
+    rect_top: f64,
+    rect_width: f64,
+    rect_height: f64,
+) -> (f64, f64) {
+    let nx = (client_x - rect_left) / rect_width;
+    let ny = (client_y - rect_top) / rect_height;
+    (nx * STRIP_VIEWBOX_W, ny * STRIP_VIEWBOX_H)
+}
+
 fn svg_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
-    let target = ev
-        .current_target()?
-        .dyn_into::<web_sys::HtmlElement>()
-        .ok()?;
+    let target = ev.current_target()?.dyn_into::<web_sys::Element>().ok()?;
     let rect = target.get_bounding_client_rect();
-    let nx = (ev.client_x() as f64 - rect.left()) / rect.width();
-    let ny = (ev.client_y() as f64 - rect.top()) / rect.height();
-    Some((nx * 1110.0, ny * 560.0))
+    Some(pointer_to_strip_viewbox(
+        ev.client_x() as f64,
+        ev.client_y() as f64,
+        rect.left(),
+        rect.top(),
+        rect.width(),
+        rect.height(),
+    ))
 }
 
 fn capture_pointer(ev: &web_sys::PointerEvent) {
@@ -426,5 +447,34 @@ fn release_pointer(ev: &web_sys::PointerEvent) {
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
     {
         let _ = el.release_pointer_capture(ev.pointer_id());
+    }
+}
+
+#[cfg(test)]
+mod strip_drag_tests {
+    use super::*;
+    use da20_core::types::defaults;
+
+    #[test]
+    fn pointer_to_viewbox_maps_element_center() {
+        let (sx, sy) = pointer_to_strip_viewbox(200.0, 90.0, 100.0, 40.0, 200.0, 100.0);
+        assert!((sx - 555.0).abs() < 0.01);
+        assert!((sy - 280.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_strip_hit_regions_map_oat_weight_wind() {
+        let sx_oat = TAKEOFF_OAT.x + TAKEOFF_OAT.w * 0.5;
+        let oat = (sx_oat - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0;
+        assert!((oat - 17.5).abs() < 0.01);
+
+        let kg_at_left = defaults::TAKEOFF_CHART_WEIGHT_KG
+            - (TAKEOFF_WEIGHT.x - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w
+                * (defaults::TAKEOFF_CHART_WEIGHT_KG - 600.0);
+        assert!((kg_at_left - 800.0).abs() < 0.01);
+
+        let sx_wind_mid = TAKEOFF_WIND.x + TAKEOFF_WIND.w * 0.5;
+        let hw = (sx_wind_mid - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
+        assert!((hw - 10.0).abs() < 0.01);
     }
 }

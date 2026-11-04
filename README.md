@@ -60,6 +60,8 @@ Rust tests port `validate_rev29.py` / `validation_rev29.txt`:
 
 Run: `cargo test -p da20-core`
 
+**Fig 5.4 strip drag (manual, browser):** `svg` pointer handlers require a real DOM (`Element`, not `HtmlElement`). After building the UI, open **Takeoff** → drag on the strip: **OAT/PA panel** should change OAT and PA override; **weight panel** should change weight; **headwind panel** should change wind speed. The strip readout and numeric fields must update while dragging. Automated coverage: `cargo test -p da20-ui strip_drag_tests` (viewBox mapping and panel math only; no headless WASM DOM in CI).
+
 ### Screenshots
 
 | Phase | Capture |
