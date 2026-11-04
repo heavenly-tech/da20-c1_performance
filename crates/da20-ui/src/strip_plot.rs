@@ -6,9 +6,9 @@ use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, take
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, takeoff_hand_path,
-    weight_guide_polyline, wind_panel_segment, x_ea_ft, x_oat, x_weight_kg,
-    y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM,
-    STRIP_TOP, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    weight_guide_polyline, wind_panel_segment, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft,
+    y_roc_fpm, CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT,
+    TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
