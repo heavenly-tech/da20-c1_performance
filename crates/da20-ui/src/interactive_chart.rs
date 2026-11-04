@@ -2,8 +2,8 @@
 
 use da20_core::altitude::effective_pressure_altitude_ft;
 use da20_core::rev29::charts::{
-    climb_roc_vs_ea, landing_table_curves, map_to_svg, takeoff_base_curves,
-    wind_headwind_vs_angle, Polyline,
+    climb_roc_vs_ea, landing_table_curves, map_to_svg, takeoff_base_curves, wind_headwind_vs_angle,
+    Polyline,
 };
 use da20_core::types::FlightInputs;
 use da20_core::PerformanceData;
