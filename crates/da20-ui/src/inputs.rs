@@ -136,7 +136,6 @@ pub fn QnhField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> imp
                                 next.save();
                             }>"inHg"</button>
                     </div>
-                    <p class="lab mono">{format_qnh_dual(hpa)}</p>
                 </div>
             }
         }}

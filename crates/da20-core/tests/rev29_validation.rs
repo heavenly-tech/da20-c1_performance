@@ -9,18 +9,17 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
     let data = PerformanceData::production();
     let inner = data.inner();
 
-    let d = takeoff_distances_m(
-        inner,
-        1000.0,
-        fahrenheit_to_celsius(72.0),
-        725.0,
-        4.0,
-        0.0,
-        5.0,
-    );
-    assert!((d.over_obstacle_m - 356.0).abs() < 0.5);
+    let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
     let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
-    assert!(err_pct > -5.0 && err_pct < 0.0);
+    assert!(
+        (d.over_obstacle_m - 360.9).abs() < 1.0,
+        "over-obstacle {:.2} m",
+        d.over_obstacle_m
+    );
+    assert!(
+        err_pct > -2.0 && err_pct < 0.0,
+        "AFM Rev 29 worked example err {err_pct:.2}%"
+    );
 
     let t65 = fahrenheit_to_celsius(65.0);
     let roc_55 = rate_of_climb_fpm(inner, "cruise_5_5", 2000.0, t65)

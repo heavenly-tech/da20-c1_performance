@@ -21,7 +21,7 @@ pub fn pressure_altitude_derivation(elev_ft: f64, qnh_hpa: f64) -> String {
     let delta = (ISA_SEA_LEVEL_PRESSURE_HPA - qnh_hpa) * HPA_TO_PA_FT;
     let pa = elev_ft + delta;
     format!(
-        "PA = {elev:.0} + (1013.25 − {qnh:.0}) × 30 = {pa:.1} ft",
+        "PA = {elev:.0} + (1013.25 − {qnh:.1}) × 30 = {pa:.1} ft",
         elev = elev_ft,
         qnh = qnh_hpa,
         pa = pa

@@ -90,30 +90,22 @@ pub fn headwind_and_tailwind(inputs: &FlightInputs) -> (f64, f64) {
     (hw.max(0.0), (-hw).max(0.0))
 }
 
-fn nearest_weight_guide_line(data: &Rev29File, base_m: f64, ref_kg: f64) -> f64 {
-    let (wf_ref, _) = weight_factor(data, ref_kg);
-    data.hw_lines
-        .value
-        .iter()
-        .copied()
-        .min_by(|a, b| {
-            ((*a * wf_ref) - base_m)
-                .abs()
-                .partial_cmp(&((*b * wf_ref) - base_m).abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .unwrap_or(data.hw_lines.value[0])
+fn weight_distance_m(data: &Rev29File, base_m: f64, weight_kg: f64) -> f64 {
+    let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
+    let (wf, _) = weight_factor(data, weight_kg);
+    let (wf_chart, _) = weight_factor(data, chart_kg);
+    base_m * wf / wf_chart
 }
 
-fn trace_weight_guide(data: &Rev29File, line_m: f64, from_kg: f64, to_kg: f64) -> Vec<(f64, f64)> {
+fn trace_weight_path(data: &Rev29File, base_m: f64, from_kg: f64, to_kg: f64) -> Vec<(f64, f64)> {
     let lo = from_kg.min(to_kg);
     let hi = from_kg.max(to_kg);
     let mut pts = Vec::with_capacity(PATH_STEPS + 1);
     for i in 0..=PATH_STEPS {
         let t = i as f64 / PATH_STEPS as f64;
         let kg = lo + t * (hi - lo);
-        let (wf, _) = weight_factor(data, kg);
-        pts.push((x_weight_kg(kg), y_dist(line_m * wf)));
+        let dist = weight_distance_m(data, base_m, kg);
+        pts.push((x_weight_kg(kg), y_dist(dist)));
     }
     if to_kg < from_kg {
         pts.reverse();
@@ -168,7 +160,7 @@ fn append_segment(points: &mut Vec<(f64, f64)>, segment: &[(f64, f64)]) {
 
 pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> TakeoffPath {
     let weight_kg = lb_to_kg(inputs.weight_lb);
-    let ref_kg = defaults::TAKEOFF_REF_WEIGHT_KG;
+    let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
     let (hw, tw) = headwind_and_tailwind(inputs);
     let obs_m = inputs
         .obstacle_height_m
@@ -177,25 +169,17 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
 
     let oat_x = x_oat(inputs.oat_c);
     let y_base = y_dist(core.base_m);
-    let guide_line = nearest_weight_guide_line(data, core.base_m, ref_kg);
+    let chart_x = x_weight_kg(chart_kg);
+    let after_wt_y = y_dist(core.after_weight_m);
 
-    let mut points = vec![(oat_x, STRIP_BOTTOM), (oat_x, y_base)];
+    let mut points = vec![(oat_x, STRIP_BOTTOM), (oat_x, y_base), (chart_x, y_base)];
 
-    let ref_x = x_weight_kg(ref_kg);
-    points.push((ref_x, y_base));
-
-    let along_weight = trace_weight_guide(data, guide_line, ref_kg, weight_kg);
+    let along_weight = trace_weight_path(data, core.base_m, chart_kg, weight_kg);
     append_segment(&mut points, &along_weight);
 
     let weight_exit_x = TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w;
-    let after_wt_y = y_dist(core.after_weight_m);
-    if let Some((lx, ly)) = points.last().copied() {
-        if (lx - weight_exit_x).abs() > 0.5 {
-            points.push((weight_exit_x, ly));
-        }
-        if (ly - after_wt_y).abs() > 0.5 {
-            points.push((weight_exit_x, after_wt_y));
-        }
+    if points.last().map(|(x, _)| (*x - weight_exit_x).abs() > 0.5) == Some(true) {
+        points.push((weight_exit_x, after_wt_y));
     }
 
     let wind_entry_x = if tw > 0.0 && hw <= 0.0 {
@@ -290,8 +274,10 @@ pub fn chart_read_wind_ground_m(data: &Rev29File, after_weight_m: f64, headwind_
 
 /// Weight-panel Y at guide line for distance row and weight kg.
 pub fn weight_panel_point(data: &Rev29File, line_m: f64, kg: f64) -> (f64, f64) {
+    let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
     let (wf, _) = weight_factor(data, kg);
-    (x_weight_kg(kg), y_dist(line_m * wf))
+    let (wf_chart, _) = weight_factor(data, chart_kg);
+    (x_weight_kg(kg), y_dist(line_m * wf / wf_chart))
 }
 
 /// Wind-panel guide segment endpoints at fixed base distance (after weight).
@@ -339,15 +325,7 @@ mod tests {
     #[test]
     fn afm_obstacle_example_near_1200_ft() {
         let data = Rev29File::production();
-        let d = takeoff_distances_m(
-            &data,
-            1000.0,
-            fahrenheit_to_celsius(72.0),
-            725.0,
-            4.0,
-            0.0,
-            5.0,
-        );
+        let d = takeoff_distances_m(&data, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
         let ft = m_to_ft(d.over_obstacle_m);
         assert!(
             (ft - 1200.0).abs() < 60.0,
@@ -359,20 +337,31 @@ mod tests {
     fn weight_panel_trace_moves_along_guide() {
         let data = Rev29File::production();
         let inputs = FlightInputs {
-            weight_lb: 1764.0,
+            weight_lb: 1598.0,
             ..Default::default()
         };
         let path = takeoff_hand_path(&data, &inputs, 2130.0);
-        let ref_x = x_weight_kg(defaults::TAKEOFF_REF_WEIGHT_KG);
+        let chart_x = x_weight_kg(defaults::TAKEOFF_CHART_WEIGHT_KG);
         let wt_x = x_weight_kg(lb_to_kg(inputs.weight_lb));
         let weight_pts: Vec<_> = path
             .points
             .iter()
-            .filter(|(x, _)| *x >= ref_x.min(wt_x) - 1.0 && *x <= ref_x.max(wt_x) + 1.0)
+            .filter(|(x, _)| *x >= chart_x.min(wt_x) - 1.0 && *x <= chart_x.max(wt_x) + 1.0)
             .collect();
         assert!(weight_pts.len() >= 3);
         let xs: Vec<f64> = weight_pts.iter().map(|(x, _)| *x).collect();
         assert!(xs.windows(2).any(|w| (w[1] - w[0]).abs() > 1.0));
+        let core = takeoff_distances_m(
+            &data,
+            2130.0,
+            inputs.oat_c,
+            lb_to_kg(inputs.weight_lb),
+            0.0,
+            0.0,
+            inputs.obstacle_height_m,
+        );
+        let last_in_panel = weight_pts.last().unwrap();
+        assert!((last_in_panel.1 - y_dist(core.after_weight_m)).abs() < 0.5);
     }
 
     #[test]

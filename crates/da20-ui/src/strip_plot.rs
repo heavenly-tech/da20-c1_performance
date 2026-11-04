@@ -11,8 +11,7 @@ use da20_core::rev29::hand_plot::{
     TAKEOFF_OBS, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
-use da20_core::types::ChartPhase;
-use da20_core::types::FlightInputs;
+use da20_core::types::{defaults, ChartPhase, FlightInputs};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -66,8 +65,12 @@ pub fn StripHandPlot(
                 on:pointermove=on_pointer_move
             >
                 {move || match kind {
-                    StripKind::Takeoff => render_takeoff_strip(data.get(), inputs.get()).into_any(),
-                    StripKind::Climb => render_climb_strip(data.get(), inputs.get()).into_any(),
+                    StripKind::Takeoff => {
+                        render_takeoff_strip(locale.get(), data.get(), inputs.get()).into_any()
+                    }
+                    StripKind::Climb => {
+                        render_climb_strip(locale.get(), data.get(), inputs.get()).into_any()
+                    }
                 }}
             </svg>
             <p class="cursor-readout mono">
@@ -139,7 +142,12 @@ fn readout_line(
     }
 }
 
-fn render_takeoff_strip(data: PerformanceData, inputs: FlightInputs) -> impl IntoView {
+fn render_takeoff_strip(
+    locale: Locale,
+    data: PerformanceData,
+    inputs: FlightInputs,
+) -> impl IntoView {
+    let c = copy(locale);
     let inner = data.inner();
     let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Takeoff));
     let path = takeoff_hand_path(inner, &inputs, pa);
@@ -175,8 +183,10 @@ fn render_takeoff_strip(data: PerformanceData, inputs: FlightInputs) -> impl Int
     });
 
     let wind_guides = inner.hw_lines.value.iter().take(8).map(|&line_m| {
+        let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
         let (wf, _) = da20_core::rev29::engine::weight_factor(inner, kg);
-        let after = line_m * wf;
+        let (wf_chart, _) = da20_core::rev29::engine::weight_factor(inner, chart_kg);
+        let after = line_m * wf / wf_chart;
         let (p0, p1) = wind_panel_segment(inner, after, 20.0);
         view! {
             <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 stroke="var(--chart-line)" stroke-width="1.1" opacity="0.7"/>
@@ -203,7 +213,7 @@ fn render_takeoff_strip(data: PerformanceData, inputs: FlightInputs) -> impl Int
         .join(" ");
 
     view! {
-        {panel_backgrounds()}
+        {panel_backgrounds(locale)}
         {grid_lines()}
         {curve_paths.collect_view()}
         {weight_guides.collect_view()}
@@ -215,12 +225,21 @@ fn render_takeoff_strip(data: PerformanceData, inputs: FlightInputs) -> impl Int
         {path.points.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="5" fill="var(--chart-guide)" stroke="var(--chart-bg)" stroke-width="1.5"/>
         }).collect_view()}
-        <text x="70" y="28" fill="var(--chart-label)" font-size="11">"Fig 5.4 · base "{format!("{base:.0}")}" m"</text>
-        <text x="520" y="28" fill="var(--chart-label)" font-size="11">"Wt "{format!("{kg:.0}")}" kg · HW "{format!("{hw:.1}")}" kt"</text>
+        <text x="70" y="28" fill="var(--chart-label)" font-size="11">
+            {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
+        </text>
+        <text x="520" y="28" fill="var(--chart-label)" font-size="11">
+            {c.strip_fig54_wt}" "{format!("{kg:.0}")}" kg · "{c.strip_fig54_hw}" "{format!("{hw:.1}")}" kt"
+        </text>
     }
 }
 
-fn render_climb_strip(data: PerformanceData, inputs: FlightInputs) -> impl IntoView {
+fn render_climb_strip(
+    locale: Locale,
+    data: PerformanceData,
+    inputs: FlightInputs,
+) -> impl IntoView {
+    let c = copy(locale);
     let inner = data.inner();
     let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Climb));
     let path = climb_hand_path(inner, &inputs, pa);
@@ -254,15 +273,15 @@ fn render_climb_strip(data: PerformanceData, inputs: FlightInputs) -> impl IntoV
     let oat_x = x_oat(inputs.oat_c);
 
     let roc_label = match inputs.climb_figure {
-        da20_core::types::ClimbFigure::Fig55CruiseFlaps => "Fig 5.5 ROC",
-        da20_core::types::ClimbFigure::Fig56TakeoffFlaps => "Fig 5.6 ROC",
-        da20_core::types::ClimbFigure::Fig58BalkedLanding => "Fig 5.8 ROC",
+        da20_core::types::ClimbFigure::Fig55CruiseFlaps => c.strip_fig55_roc,
+        da20_core::types::ClimbFigure::Fig56TakeoffFlaps => c.strip_fig56_roc,
+        da20_core::types::ClimbFigure::Fig58BalkedLanding => c.strip_fig58_roc,
     };
 
     view! {
         <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
         <rect x=CLIMB_ROC.x y=STRIP_TOP width=CLIMB_ROC.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
-        <text x={CLIMB_EQ.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">"Fig 5.2 EA"</text>
+        <text x={CLIMB_EQ.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{c.strip_fig52_ea}</text>
         <text x={CLIMB_ROC.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{roc_label}</text>
         {eq_paths.collect_view()}
         <polyline points=roc_pts fill="none" stroke="var(--chart-line)" stroke-width="1.6"/>
@@ -276,16 +295,17 @@ fn render_climb_strip(data: PerformanceData, inputs: FlightInputs) -> impl IntoV
     }
 }
 
-fn panel_backgrounds() -> impl IntoView {
+fn panel_backgrounds(locale: Locale) -> impl IntoView {
+    let c = copy(locale);
     view! {
         <rect x=TAKEOFF_OAT.x y=STRIP_TOP width=TAKEOFF_OAT.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
         <rect x=TAKEOFF_WEIGHT.x y=STRIP_TOP width=TAKEOFF_WEIGHT.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
         <rect x=TAKEOFF_WIND.x y=STRIP_TOP width=TAKEOFF_WIND.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
         <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP fill="var(--chart-bg)" stroke="var(--chart-border)"/>
-        <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"OAT / PA"</text>
-        <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"Weight"</text>
-        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"HW kt"</text>
-        <text x=TAKEOFF_OBS.x+TAKEOFF_OBS.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">"Obstacle"</text>
+        <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_oat_pa}</text>
+        <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_weight}</text>
+        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_hw}</text>
+        <text x=TAKEOFF_OBS.x+TAKEOFF_OBS.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_obstacle}</text>
     }
 }
 
@@ -325,13 +345,14 @@ fn apply_hit(
             } else if (TAKEOFF_WIND.x..TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
                 let hw = (sx - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
                 inputs.update(|i| {
-                    let rwy = i.runway.parse::<f64>().unwrap_or(0.0) * 10.0;
+                    let rwy = i.runway.parse::<f64>().map(|n| n * 10.0).unwrap_or(0.0);
                     let angle = (i.wind_dir_deg - rwy).to_radians();
                     let cos = angle.cos();
-                    if cos > 0.05 {
+                    if cos.abs() > 0.05 {
                         i.wind_speed_kt = (hw / cos).max(0.0);
                     } else {
-                        i.wind_speed_kt = hw;
+                        i.wind_dir_deg = rwy;
+                        i.wind_speed_kt = hw.max(0.0);
                     }
                 });
             } else if sx >= TAKEOFF_OBS.x {
@@ -348,10 +369,6 @@ fn apply_hit(
                     i.oat_c = oat;
                     set_pa_override(i, pa, ChartPhase::Climb);
                 });
-            } else if sx >= CLIMB_ROC.x {
-                let _ea = (sx - CLIMB_ROC.x) / CLIMB_ROC.w * 14_000.0;
-                let _ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
-                let _roc = _ny * 1000.0;
             }
         }
     }

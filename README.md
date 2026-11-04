@@ -52,7 +52,7 @@ Rust tests port `validate_rev29.py` / `validation_rev29.txt`:
 |-------|-----------|--------|
 | Wind components 11 kt @ 30° | ±0.1 kt | HW 9.5, XW 5.5 |
 | ROC Fig 5.5 / 5.6 / 5.8 | ±1% | Via Fig 5.2 EA |
-| Takeoff over 5 m obstacle (Rev 29 example) | ±5% | **Known ~2.7% short bias** vs 365.76 m — flagged in UI + methods manual |
+| Takeoff over 5 m obstacle (Rev 29 example) | ±5% | **Known ~1.3% short bias** vs 365.76 m (21 °C) — flagged in UI + methods manual |
 | Table 4 sea-level 50 ft distance | Exact | 1360 ft (≈415 m rounded; AFM text cites 414 m) |
 | Table 3 GPH | As printed | Known oddities noted in UI |
 

@@ -16,21 +16,13 @@ pub fn run_rev29_reference_checks(data: &PerformanceData) -> Vec<HarnessResult> 
     let mut out = Vec::new();
     let inner = data.inner();
 
-    let d = takeoff_distances_m(
-        inner,
-        1000.0,
-        fahrenheit_to_celsius(72.0),
-        725.0,
-        4.0,
-        0.0,
-        5.0,
-    );
+    let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
     let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
     out.push(HarnessResult {
         example_id: "takeoff_5_4_rev29".into(),
-        passed: err_pct > -5.0 && err_pct < 5.0,
+        passed: err_pct > -2.0 && err_pct < 0.0,
         message: format!(
-            "over-obstacle {:.1} m vs 365.76 m ({err_pct:.1}%, known ~2.7% short bias)",
+            "over-obstacle {:.1} m vs 365.76 m ({err_pct:.1}%, ~1.3% short after wind-panel correction)",
             d.over_obstacle_m
         ),
     });

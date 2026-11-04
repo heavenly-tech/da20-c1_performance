@@ -13,6 +13,8 @@ pub mod defaults {
     pub const CRUISE_RPM: f64 = 2600.0;
     /// Fig 5.4 weight panel reference (AFM worked example, kg).
     pub const TAKEOFF_REF_WEIGHT_KG: f64 = 725.0;
+    /// Fig 5.4 sheet 1 weight panel chart datum (kg), where wt_f = 1.0.
+    pub const TAKEOFF_CHART_WEIGHT_KG: f64 = 800.0;
     /// Obstacle panel x-axis (AFM Fig 5.4 sheet 2, p. 5-10).
     pub const OBSTACLE_HEIGHT_MAX_M: f64 = 15.0;
     pub const OBSTACLE_HEIGHT_DEFAULT_M: f64 = 15.0;
