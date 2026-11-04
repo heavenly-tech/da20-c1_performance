@@ -1,5 +1,10 @@
 //! Built-in methods manual entries (shown in UI).
 
+use crate::climb::CLIMB_DERIVED_ESTIMATE_NOTE;
+use crate::cruise::CRUISE_TABLE3_GPH_NOTE;
+use crate::landing::LANDING_TABLE_50FT_M_NOTE;
+use crate::takeoff::TAKEOFF_OBSTACLE_DIGITIZATION_NOTE;
+
 #[derive(Debug, Clone)]
 pub struct MethodEntry {
     pub id: &'static str,
@@ -15,66 +20,58 @@ pub fn all_methods() -> Vec<MethodEntry> {
         MethodEntry {
             id: "pressure_altitude",
             title: "Pressure altitude",
-            afm_reference: "AFM performance section — field elevation & altimeter setting",
-            summary: "PA (ft) = field elevation + (1013.25 − QNH_hPa) × 30. Used as the vertical axis for takeoff/landing chart entry.",
+            afm_reference: "AFM DA202-C1 Rev 29 — performance inputs",
+            summary: "PA (ft) = field elevation + (1013.25 − QNH_hPa) × 30. Used as the vertical axis for chart/table entry.",
             interpolation: "N/A — direct formula from inputs.",
-            limitations: "Uses standard approximate hPa→ft conversion; verify against AFM worked examples when data arrives.",
-        },
-        MethodEntry {
-            id: "density_altitude",
-            title: "Density altitude",
-            afm_reference: "Planning aid (not a separate AFM chart in Ch.5)",
-            summary: "DA (ft) = PA + 120 × (OAT − ISA_temperature_at_PA).",
-            interpolation: "N/A",
-            limitations: "Displayed for situational awareness; climb/cruise lookups use OAT and PA per AFM charts.",
+            limitations: "Approximate hPa→ft conversion; verify against AFM examples.",
         },
         MethodEntry {
             id: "equivalent_altitude",
             title: "Equivalent altitude (Fig 5.2)",
-            afm_reference: "DA202-C1 AFM Figure 5.2",
-            summary: "Bilinear interpolation on digitized PA × OAT grid to obtain equivalent altitude for climb chart entry.",
-            interpolation: "Bilinear with clamping at grid edges; extrapolation disabled by default.",
-            limitations: "Requires complete digitized Fig 5.2 grid from approved data file.",
+            afm_reference: "AFM page 5-6, Figure 5.2 (digitized grid Rev 27, unchanged Rev 29)",
+            summary: "Bilinear-style interpolation on digitized PA × OAT grid (fan_PA, fan_T, fan_EA).",
+            interpolation: "Linear on temperature per PA row, then linear on PA.",
+            limitations: "Requires complete digitized Fig 5.2 grid from Rev 29 JSON.",
         },
         MethodEntry {
             id: "takeoff",
             title: "Takeoff distance (Fig 5.4)",
-            afm_reference: "DA202-C1 AFM Figure 5.4",
-            summary: "Select chart at PA (interpolate between adjacent pressure-altitude curves if present). Enter at OAT for ground roll and 50 ft distance; add wind correction from Fig 5.3 model.",
-            interpolation: "1D on temperature per chart; PA chart selection via clamped index interpolation.",
-            limitations: "Weight must match chart note (1764 lb in standard data); corrections for other weights await AFM data.",
+            afm_reference: "AFM pages 5-9 / 5-10, Figure 5.4",
+            summary: "Chain: base ground roll (OAT×PA) → weight factor → Fig 5.4 wind panel (HW/TW) → obstacle slope from sheet 2. Distances in meters, displayed in feet.",
+            interpolation: "Linear on each panel axis (see validate_rev29 reference script).",
+            limitations: TAKEOFF_OBSTACLE_DIGITIZATION_NOTE,
         },
         MethodEntry {
             id: "climb",
-            title: "Climb performance (Fig 5.5 / 5.6 / 5.8)",
-            afm_reference: "DA202-C1 AFM Figures 5.5, 5.6, 5.8 via Fig 5.2",
-            summary: "Compute equivalent altitude from Fig 5.2 at departure PA/OAT; read ROC from 5.5; time/fuel/distance from 5.8 to target equivalent altitude.",
-            interpolation: "1D on equivalent altitude axes with clamping.",
-            limitations: "Segment availability depends on digitized curves in JSON data file.",
+            title: "Climb ROC (Fig 5.5 / 5.6 / 5.8 via Fig 5.2)",
+            afm_reference: "AFM pages 5-11, 5-12, 5-16",
+            summary: "ROC (fpm) = a + b × EA_ft from digitized linear fits (roc.*). Planner shows Fig 5.5 (cruise flaps) ROC by default.",
+            interpolation: "Linear EA from Fig 5.2; ROC coefficients fixed per figure.",
+            limitations: CLIMB_DERIVED_ESTIMATE_NOTE,
         },
         MethodEntry {
             id: "cruise",
             title: "Cruise performance (Table 3)",
-            afm_reference: "DA202-C1 AFM Table 3",
-            summary: "Lookup TAS and fuel flow by pressure altitude, RPM, and OAT.",
-            interpolation: "Bilinear on PA × OAT per RPM column, then RPM interpolation when multiple RPM columns exist.",
-            limitations: "Table structure must match AFM layout in production data file.",
+            afm_reference: "AFM pages 5-14 / 5-15, Table 3",
+            summary: "Exact row match on PA and RPM; OAT band selects dISA−20 / ISA / dISA+10 column group.",
+            interpolation: "Band selection by OAT−ISA at PA (no cross-band interpolation).",
+            limitations: CRUISE_TABLE3_GPH_NOTE,
         },
         MethodEntry {
             id: "landing",
             title: "Landing distance (Table 4)",
-            afm_reference: "DA202-C1 AFM Table 4",
-            summary: "Bilinear interpolation on PA × OAT for ground roll and 50 ft distance; wind correction from Fig 5.3 model.",
-            interpolation: "Bilinear with clamping.",
-            limitations: "Dry, paved, zero slope assumptions per AFM; see limitations in approved AFM.",
+            afm_reference: "AFM page 5-17, Table 4",
+            summary: "Linear interpolation on pressure altitude for ground roll and 50 ft distances (table values in ft). Optional wind panel correction.",
+            interpolation: "1D on land_alt axes.",
+            limitations: LANDING_TABLE_50FT_M_NOTE,
         },
         MethodEntry {
             id: "wind",
-            title: "Wind components & correction (Fig 5.3)",
-            afm_reference: "DA202-C1 AFM Figure 5.3",
-            summary: "Resolve wind into headwind/crosswind along runway heading; apply headwind component to distance correction grid from data file.",
-            interpolation: "1D clamped on headwind component axis.",
-            limitations: "Runway heading derived from runway number × 10°; verify with actual magnetic direction for operation.",
+            title: "Wind components (Fig 5.3)",
+            afm_reference: "AFM page 5-8, Figure 5.3",
+            summary: "Headwind/crosswind from wind direction, speed, and runway heading (trigonometric). Takeoff/landing distance wind panels use Fig 5.4 sheet 1.",
+            interpolation: "N/A for components; panel interpolation for distance corrections.",
+            limitations: "Runway heading = runway number × 10° unless overridden.",
         },
     ]
 }

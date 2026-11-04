@@ -1,92 +1,128 @@
 use crate::data::PerformanceData;
-use crate::interpolation::{interpolate_1d, interpolate_2d, ExtrapolationPolicy};
+use crate::interpolation::lerp;
 use crate::provenance::provenance_for;
 use crate::types::{CalculationWarning, CruiseResult, FlightInputs};
 
+pub const CRUISE_TABLE3_GPH_NOTE: &str = "Table 3 GPH values are transcribed as printed in AFM Rev 29 (includes known oddities, e.g. 2000 ft / 2700 RPM ISA 6.8 GPH vs −20 °C 7.7 GPH; 4000 ft / 2800 RPM +10 °C 6.8 GPH).";
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum CruiseError {
-    #[error("interpolation: {0}")]
-    Interp(#[from] crate::interpolation::InterpError),
+    #[error("cruise row not found")]
+    NotFound,
+}
+
+fn isa_temp_c_at_pa(pa_ft: f64) -> f64 {
+    15.0 - 0.0019812 * pa_ft
+}
+
+#[derive(Clone, Copy)]
+enum TempBand {
+    DisaMinus20,
+    Isa,
+    DisaPlus10,
+}
+
+fn select_band(oat_c: f64, pa_ft: f64) -> TempBand {
+    let isa = isa_temp_c_at_pa(pa_ft);
+    let d = oat_c - isa;
+    if d <= -10.0 {
+        TempBand::DisaMinus20
+    } else if d >= 5.0 {
+        TempBand::DisaPlus10
+    } else {
+        TempBand::Isa
+    }
+}
+
+fn band_columns(band: TempBand) -> (usize, usize, usize) {
+    match band {
+        TempBand::DisaMinus20 => (2, 3, 4),
+        TempBand::Isa => (5, 6, 7),
+        TempBand::DisaPlus10 => (8, 9, 10),
+    }
+}
+
+fn row_matches_rpm(row: &[f64], rpm: f64) -> bool {
+    row.len() >= 11 && (row[1] - rpm).abs() < 0.5
+}
+
+fn interpolate_cruise_at(
+    rows: &[Vec<f64>],
+    pa: f64,
+    rpm: f64,
+    oat_c: f64,
+) -> Result<(f64, f64), CruiseError> {
+    let band = select_band(oat_c, pa);
+    let (_, tas_idx, gph_idx) = band_columns(band);
+
+    let mut at_rpm: Vec<&Vec<f64>> = rows.iter().filter(|r| row_matches_rpm(r, rpm)).collect();
+    if at_rpm.is_empty() {
+        return Err(CruiseError::NotFound);
+    }
+    at_rpm.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap());
+
+    if at_rpm.len() == 1 || pa <= at_rpm[0][0] {
+        let row = at_rpm[0];
+        return Ok((row[tas_idx], row[gph_idx]));
+    }
+    if pa >= at_rpm[at_rpm.len() - 1][0] {
+        let row = at_rpm[at_rpm.len() - 1];
+        return Ok((row[tas_idx], row[gph_idx]));
+    }
+
+    let mut upper = 1usize;
+    while upper < at_rpm.len() && at_rpm[upper][0] < pa {
+        upper += 1;
+    }
+    let lower = at_rpm[upper - 1];
+    let upper = at_rpm[upper];
+    let tas = lerp(lower[0], lower[tas_idx], upper[0], upper[tas_idx], pa);
+    let gph = lerp(lower[0], lower[gph_idx], upper[0], upper[gph_idx], pa);
+    Ok((tas, gph))
 }
 
 pub fn compute_cruise(data: &PerformanceData, inputs: &FlightInputs) -> Result<CruiseResult, CruiseError> {
-    let table = &data.cruise.table;
-    let y_axis: Vec<f64> = table.rows.iter().map(|r| r.oat_c).collect();
-
-    let n_pa = table.pressure_altitude_ft.len();
-    let n_rpm = table.rpm.len();
-    let mut tas_grid = Vec::with_capacity(y_axis.len());
-    let mut ff_grid = Vec::with_capacity(y_axis.len());
-    for row in &table.rows {
-        let mut tas_row = Vec::with_capacity(n_pa);
-        let mut ff_row = Vec::with_capacity(n_pa);
-        for pa_idx in 0..n_pa {
-            let base = pa_idx * n_rpm;
-            tas_row.push(row.tas_kt.get(base).copied().unwrap_or(0.0));
-            ff_row.push(row.fuel_flow_us_gal_h.get(base).copied().unwrap_or(0.0));
-        }
-        tas_grid.push(tas_row);
-        ff_grid.push(ff_row);
-    }
-
     let pa = inputs.cruise_pressure_alt_ft;
     let rpm = inputs.cruise_rpm;
-    let oat = inputs.oat_c;
+    let rows = &data.inner().cruise_table.value.rows;
+    let (tas, ff) = interpolate_cruise_at(rows, pa, rpm, inputs.oat_c)?;
 
-    let (tas, mut warnings) = interpolate_2d(
-        &table.pressure_altitude_ft,
-        &y_axis,
-        &tas_grid,
-        pa,
-        oat,
-        ExtrapolationPolicy::Clamp,
-    )?;
-
-    let rpm_axis = &table.rpm;
-    let tas_at_rpm: Vec<f64> = (0..y_axis.len())
-        .map(|yi| {
-            interpolate_1d(rpm_axis, &tas_grid[yi], rpm, ExtrapolationPolicy::Clamp)
-                .map(|(v, _)| v)
-                .unwrap_or(tas_grid[yi][0])
-        })
-        .collect();
-    let (tas_final, w2) = interpolate_1d(&y_axis, &tas_at_rpm, oat, ExtrapolationPolicy::Clamp)?;
-    warnings.extend(w2);
-
-    let ff_at_rpm: Vec<f64> = (0..y_axis.len())
-        .map(|yi| {
-            interpolate_1d(rpm_axis, &ff_grid[yi], rpm, ExtrapolationPolicy::Clamp)
-                .map(|(v, _)| v)
-                .unwrap_or(ff_grid[yi][0])
-        })
-        .collect();
-    let (ff, w3) = interpolate_1d(&y_axis, &ff_at_rpm, oat, ExtrapolationPolicy::Clamp)?;
-    warnings.extend(w3);
-
-    let _ = tas;
-    if data.meta.is_synthetic() {
-        warnings.push(CalculationWarning {
-            code: "SYNTHETIC_DATA".into(),
-            message: "Cruise values from SYNTHETIC fixture — not for flight use.".into(),
-        });
-    }
+    let warnings = vec![CalculationWarning {
+        code: "TABLE3_GPH".into(),
+        message: CRUISE_TABLE3_GPH_NOTE.into(),
+    }];
 
     Ok(CruiseResult {
-        provenance: provenance_for(data, &data.cruise.citation),
-        tas_kt: tas_final,
+        provenance: provenance_for(data.inner(), data.cruise_source()),
+        tas_kt: tas,
         fuel_flow_us_gal_h: ff,
         warnings,
     })
 }
 
+pub fn lookup_cruise_row(data: &PerformanceData, pa: f64, rpm: f64) -> Option<&Vec<f64>> {
+    data.inner()
+        .cruise_table
+        .value
+        .rows
+        .iter()
+        .find(|r| r.len() >= 11 && (r[0] - pa).abs() < 0.5 && (r[1] - rpm).abs() < 0.5)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::PerformanceData;
 
     #[test]
-    fn synthetic_cruise() {
-        let data = PerformanceData::synthetic_fixture();
-        let r = compute_cruise(&data, &FlightInputs::default()).unwrap();
-        assert!(r.tas_kt > 0.0);
+    fn sctb_cruise_interpolates_at_6500ft() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_rpm: 2600.0,
+            ..FlightInputs::default()
+        };
+        let r = compute_cruise(&data, &inputs).unwrap();
+        assert!(r.tas_kt > 110.0);
     }
 }

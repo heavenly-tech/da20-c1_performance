@@ -1,17 +1,10 @@
 use da20_core::data::PerformanceData;
-use da20_core::poh_harness::run_worked_examples;
+use da20_core::poh_harness::run_rev29_reference_checks;
 
 #[test]
-fn integration_harness_waits_for_production_examples() {
-    let mut data = PerformanceData::synthetic_fixture();
-    data.validation.worked_examples.push(da20_core::data::WorkedExample {
-        id: "poh-example-1".into(),
-        description: Some("TODO".into()),
-        inputs: serde_json::json!({}),
-        expected: serde_json::json!({}),
-        tolerance_key: Some("takeoff_ground_roll_ft".into()),
-    });
-    let results = run_worked_examples(&data);
-    assert_eq!(results.len(), 1);
-    assert!(!results[0].passed);
+fn rev29_harness_integration() {
+    let data = PerformanceData::production();
+    let results = run_rev29_reference_checks(&data);
+    assert!(results.len() >= 7);
+    assert!(results.iter().all(|r| r.passed));
 }

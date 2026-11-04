@@ -154,3 +154,9 @@ select {
 .error {
   color: var(--danger);
 }
+
+.derived {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+}

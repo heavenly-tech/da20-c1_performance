@@ -1,194 +1,69 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
+use crate::rev29::types::Rev29File;
 use crate::types::Citation;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Runtime performance dataset (AFM DA202-C1 Rev 29 Chapter 5 JSON).
+#[derive(Debug, Clone, Deserialize)]
 pub struct PerformanceData {
-    pub meta: Meta,
-    pub equivalent_altitude: EquivalentAltitudeSection,
-    pub takeoff: TakeoffSection,
-    pub climb: ClimbSection,
-    pub cruise: CruiseSection,
-    pub landing: LandingSection,
-    pub wind: WindSection,
-    #[serde(default)]
-    pub validation: ValidationSection,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Meta {
-    pub afm_document_number: String,
-    pub afm_revision: String,
-    pub afm_date: String,
-    pub data_status: String,
-    pub afm_official_url: String,
-    pub amm_official_url: String,
-    #[serde(default)]
-    pub notes: Option<String>,
-}
-
-impl Meta {
-    pub fn is_synthetic(&self) -> bool {
-        self.data_status == "synthetic_fixture"
-            || self.afm_document_number.starts_with("SYNTHETIC")
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct EquivalentAltitudeSection {
-    pub citation: Citation,
-    pub grid: AltitudeGrid,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct AltitudeGrid {
-    pub pressure_altitude_ft: Vec<f64>,
-    pub rows: Vec<EquivalentAltitudeRow>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct EquivalentAltitudeRow {
-    pub oat_c: f64,
-    pub equivalent_altitude_ft: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TakeoffSection {
-    pub citation: Citation,
-    pub weight_lb: f64,
-    pub charts: Vec<TakeoffChart>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TakeoffChart {
-    pub pressure_altitude_ft: f64,
-    pub temperature_c: Vec<f64>,
-    pub ground_roll_ft: Vec<f64>,
-    pub distance_50ft_ft: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ClimbSection {
-    pub citations: ClimbCitations,
-    pub segments: Vec<ClimbSegment>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ClimbCitations {
-    pub figure_5_5: Citation,
-    pub figure_5_6: Citation,
-    pub figure_5_8: Citation,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ClimbSegment {
-    pub figure: String,
-    pub equivalent_altitude_ft: Vec<f64>,
-    #[serde(default)]
-    pub rate_of_climb_fpm: Vec<f64>,
-    #[serde(default)]
-    pub time_min: Vec<f64>,
-    #[serde(default)]
-    pub fuel_us_gal: Vec<f64>,
-    #[serde(default)]
-    pub distance_nm: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CruiseSection {
-    pub citation: Citation,
-    pub table: CruiseTable,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CruiseTable {
-    pub pressure_altitude_ft: Vec<f64>,
-    pub rpm: Vec<f64>,
-    pub rows: Vec<CruiseRow>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct CruiseRow {
-    pub oat_c: f64,
-    pub tas_kt: Vec<f64>,
-    pub fuel_flow_us_gal_h: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LandingSection {
-    pub citation: Citation,
-    pub table: LandingTable,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LandingTable {
-    pub pressure_altitude_ft: Vec<f64>,
-    pub rows: Vec<LandingRow>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LandingRow {
-    pub oat_c: f64,
-    pub ground_roll_ft: Vec<f64>,
-    pub distance_50ft_ft: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct WindSection {
-    pub citation: Citation,
-    pub correction_model: WindCorrectionModel,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct WindCorrectionModel {
-    pub kind: String,
-    #[serde(default)]
-    pub grid: Option<WindGrid>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct WindGrid {
-    pub headwind_component_kt: Vec<f64>,
-    pub correction_ft: Vec<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct ValidationSection {
-    #[serde(default)]
-    pub tolerances: std::collections::HashMap<String, f64>,
-    #[serde(default)]
-    pub worked_examples: Vec<WorkedExample>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct WorkedExample {
-    pub id: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub inputs: serde_json::Value,
-    pub expected: serde_json::Value,
-    #[serde(default)]
-    pub tolerance_key: Option<String>,
+    #[serde(flatten)]
+    inner: Rev29File,
 }
 
 impl PerformanceData {
     pub fn from_json_str(s: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(s)
+        Ok(Self {
+            inner: Rev29File::from_json_str(s)?,
+        })
+    }
+
+    pub fn production() -> Self {
+        Self {
+            inner: Rev29File::production(),
+        }
     }
 
     pub fn synthetic_fixture() -> Self {
-        let s = include_str!("../../../data/fixtures/SYNTHETIC_performance_data.json");
-        Self::from_json_str(s).expect("embedded SYNTHETIC fixture must parse")
+        Self::production()
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    pub fn inner(&self) -> &Rev29File {
+        &self.inner
+    }
 
-    #[test]
-    fn synthetic_fixture_loads() {
-        let d = PerformanceData::synthetic_fixture();
-        assert!(d.meta.is_synthetic());
+    pub fn meta(&self) -> &crate::rev29::types::Rev29Meta {
+        &self.inner.meta
+    }
+
+    pub fn is_synthetic(&self) -> bool {
+        false
+    }
+
+    pub fn takeoff_source(&self) -> &crate::rev29::types::SourceMeta {
+        &self.inner.to_base_m.source
+    }
+
+    pub fn climb_roc_source(&self) -> &crate::rev29::types::SourceMeta {
+        &self.inner.roc.source
+    }
+
+    pub fn cruise_source(&self) -> &crate::rev29::types::SourceMeta {
+        &self.inner.cruise_table.source
+    }
+
+    pub fn landing_source(&self) -> &crate::rev29::types::SourceMeta {
+        &self.inner.land_roll.source
+    }
+
+    pub fn wind_source(&self) -> &crate::rev29::types::SourceMeta {
+        &self.inner.hw_m.source
+    }
+
+    pub fn equivalent_altitude_source(&self) -> &crate::rev29::types::SourceMeta {
+        &self.inner.fan_ea.source
+    }
+
+    pub fn takeoff_citation(&self) -> Citation {
+        crate::provenance::citation_from_source(&self.inner.to_base_m.source)
     }
 }

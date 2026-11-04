@@ -9,10 +9,9 @@ pub fn Disclaimer() -> impl IntoView {
             <strong>"Not for operational use."</strong>
             " This tool is "
             <em>"not"</em>
-            " an official Diamond Aircraft or DGAC-approved source. Values are digitized approximations when data is present; "
-            "currently development uses "
-            <code>"SYNTHETIC"</code>
-            " fixtures only. The approved Aircraft Flight Manual (AFM) in the aircraft always governs."
+            " Values follow AFM DA202-C1 Rev 29 digitized Chapter 5 data (approximate). "
+            "Takeoff over obstacle distances read ~2.7% short vs the AFM worked example — see Methods. "
+            "The approved Aircraft Flight Manual (AFM) in the aircraft always governs."
         </aside>
     }
 }

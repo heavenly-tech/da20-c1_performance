@@ -1,0 +1,1285 @@
+{
+ "_meta": {
+  "doc": "DA202-C1",
+  "revision": 29,
+  "revision_date": "2021-06-30",
+  "source_url": "https://partners.diamondaircraft.com/s/technical-publications (Aircraft Publications > DA20-C1 > Airplane Flight Manual > Basic Manual)",
+  "file": "/workspace/poh5/latest/afm_rev29.pdf",
+  "pdf_page_offset": "AFM page 5-n = PDF page 136+n",
+  "previous_data_file": "da20c1_ch5_data.json",
+  "previous_data_true_revision": "Rev 28 (28-Feb-2014) - the file labelled Rev 26 is byte-identical to AFM Rev 28 (md5 e603677a...)",
+  "units": "distances m unless noted; altitudes ft; temps C",
+  "data_status": "production",
+  "technical_publications_url": "https://partners.diamondaircraft.com/s/technical-publications",
+  "afm_official_url": "https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000001DbNmIAK?operationContext=S1",
+  "amm_official_url": "https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000003HViPIAW?operationContext=S1"
+ },
+ "worked_examples": {
+  "takeoff_5_4": {
+   "PA_ft": 1000,
+   "OAT": "72F (21C)",
+   "weight": "1600 lb (725 kg)",
+   "wind": "4 kt HW",
+   "obstacle": "16 ft (5 m)",
+   "result_rev29": "1200 ft (365.76 m)",
+   "result_rev28": "1122 ft (341 m)",
+   "pages": "5-9/5-10"
+  },
+  "climb_5_5": {
+   "PA_ft": 2000,
+   "OAT_F": 65,
+   "result_fpm": 800,
+   "page": "5-11"
+  },
+  "climb_5_6": {
+   "PA_ft": 2000,
+   "OAT_F": 65,
+   "result_fpm": 744,
+   "page": "5-12"
+  },
+  "climb_5_8": {
+   "PA_ft": 2000,
+   "OAT_F": 70,
+   "result_fpm": 374,
+   "page": "5-16"
+  },
+  "wind_5_3": {
+   "wind_kt": 11,
+   "angle_deg": 30,
+   "hw_kt": 9.5,
+   "xw_kt": 5.5,
+   "page": "5-8"
+  },
+  "cruise_5_7": {
+   "PA_ft": 6000,
+   "OAT_F": 70,
+   "power": "65%",
+   "TAS_kt": 121,
+   "page": "5-13",
+   "note": "Fig 5.7 not digitized"
+  }
+ },
+ "fan_T": {
+  "value": [
+   -20,
+   -10,
+   0,
+   10,
+   20,
+   30,
+   40,
+   50,
+   60
+  ],
+  "source": {
+   "afm_page": "5-6",
+   "pdf_page": [
+    142
+   ],
+   "figure": "Figure 5.2 Equivalent Altitude Chart",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29
+  }
+ },
+ "fan_PA": {
+  "value": [
+   0,
+   2000,
+   4000,
+   6000,
+   8000,
+   10000,
+   12000,
+   14000,
+   16000
+  ],
+  "source": {
+   "afm_page": "5-6",
+   "pdf_page": [
+    142
+   ],
+   "figure": "Figure 5.2",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29
+  }
+ },
+ "fan_EA": {
+  "value": [
+   [
+    -1624,
+    -1140,
+    -670,
+    -213,
+    229,
+    657,
+    1071,
+    1470,
+    1856
+   ],
+   [
+    543,
+    1022,
+    1485,
+    1931,
+    2360,
+    2772,
+    3168,
+    3547,
+    3910
+   ],
+   [
+    2721,
+    3220,
+    3695,
+    4146,
+    4572,
+    4973,
+    5351,
+    5703,
+    6032
+   ],
+   [
+    5002,
+    5454,
+    5888,
+    6304,
+    6703,
+    7083,
+    7446,
+    7791,
+    8119
+   ],
+   [
+    7179,
+    7629,
+    8062,
+    8476,
+    8873,
+    9252,
+    9613,
+    9957,
+    10283
+   ],
+   [
+    9341,
+    9806,
+    10247,
+    10666,
+    11061,
+    11433,
+    11782,
+    12107,
+    12409
+   ],
+   [
+    11490,
+    11966,
+    12413,
+    12831,
+    13221,
+    13583,
+    13916,
+    14220,
+    14496
+   ],
+   [
+    13674,
+    14133,
+    14566,
+    14974,
+    15356,
+    15712,
+    16044,
+    16351,
+    16631
+   ],
+   [
+    15811,
+    16269,
+    16699,
+    17102,
+    17478,
+    17827,
+    18148,
+    18443,
+    18710
+   ]
+  ],
+  "source": {
+   "afm_page": "5-6",
+   "pdf_page": [
+    142
+   ],
+   "figure": "Figure 5.2",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29,
+   "note": "digitized grid, unchanged in Rev 29"
+  }
+ },
+ "roc": {
+  "value": {
+   "cruise_5_5": [
+    926.4,
+    -0.05346
+   ],
+   "takeoff_5_6": [
+    852.9,
+    -0.04556
+   ],
+   "balked_5_8": [
+    439.0,
+    -0.02624
+   ]
+  },
+  "source": {
+   "afm_page": "5-11/5-12/5-16",
+   "pdf_page": [
+    147,
+    148,
+    152
+   ],
+   "figure": "Figures 5.5 (cruise flaps), 5.6 (T/O flaps), 5.8 (balked landing); ROC = a + b*EA_ft",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29
+  }
+ },
+ "to_T": {
+  "value": [
+   -20,
+   -15,
+   -10,
+   -5,
+   0,
+   5,
+   10,
+   15,
+   20,
+   25,
+   30,
+   35,
+   40,
+   45,
+   50,
+   55
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, OAT panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29,
+   "note": "curves unchanged vs Rev 27/28; only worked example redrawn"
+  }
+ },
+ "to_PA": {
+  "value": [
+   0,
+   2000,
+   4000,
+   6000,
+   8000,
+   10000
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "to_base_m": {
+  "value": [
+   [
+    271,
+    288,
+    302,
+    321,
+    339,
+    357,
+    376,
+    396,
+    416,
+    436,
+    458,
+    481,
+    503,
+    527,
+    552,
+    570
+   ],
+   [
+    323,
+    342,
+    362,
+    382,
+    403,
+    425,
+    448,
+    471,
+    495,
+    520,
+    546,
+    572,
+    601,
+    628,
+    658,
+    679
+   ],
+   [
+    386,
+    408,
+    432,
+    456,
+    481,
+    507,
+    534,
+    562,
+    591,
+    621,
+    652,
+    683,
+    716,
+    750,
+    785,
+    811
+   ],
+   [
+    462,
+    489,
+    517,
+    546,
+    576,
+    608,
+    639,
+    673,
+    708,
+    743,
+    780,
+    818,
+    857,
+    898,
+    939,
+    970
+   ],
+   [
+    554,
+    587,
+    621,
+    655,
+    691,
+    729,
+    768,
+    806,
+    849,
+    891,
+    936,
+    981,
+    null,
+    null,
+    null,
+    null
+   ],
+   [
+    666,
+    704,
+    746,
+    788,
+    831,
+    876,
+    923,
+    971,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, OAT panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29,
+   "note": "curves verified pixel-overlay identical to Rev 28"
+  }
+ },
+ "wt_kg": {
+  "value": [
+   600,
+   610,
+   630,
+   650,
+   670,
+   690,
+   710,
+   730,
+   750,
+   770,
+   790,
+   800
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, weight panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "wt_f": {
+  "value": [
+   0.505,
+   0.522,
+   0.565,
+   0.608,
+   0.654,
+   0.702,
+   0.752,
+   0.804,
+   0.858,
+   0.913,
+   0.972,
+   1
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, weight panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "hw_lines": {
+  "value": [
+   300,
+   400,
+   500,
+   600,
+   700,
+   800,
+   900,
+   1000
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, wind panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "hw_kt": {
+  "value": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   6,
+   9,
+   11,
+   12,
+   13,
+   14,
+   16,
+   17,
+   18,
+   19,
+   20
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, wind panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "hw_m": {
+  "value": [
+   [
+    300,
+    400,
+    500,
+    600,
+    700,
+    800,
+    900,
+    1000
+   ],
+   [
+    291,
+    389,
+    487,
+    585,
+    684,
+    782,
+    879,
+    978
+   ],
+   [
+    281,
+    377,
+    472,
+    568,
+    665,
+    761,
+    856,
+    952
+   ],
+   [
+    272,
+    366,
+    459,
+    552,
+    647,
+    741,
+    834,
+    929
+   ],
+   [
+    264,
+    355,
+    445,
+    537,
+    629,
+    722,
+    813,
+    905
+   ],
+   [
+    248,
+    334,
+    420,
+    508,
+    596,
+    684,
+    773,
+    862
+   ],
+   [
+    228,
+    306,
+    388,
+    469,
+    552,
+    635,
+    718,
+    803
+   ],
+   [
+    215,
+    291,
+    368,
+    446,
+    526,
+    604,
+    686,
+    768
+   ],
+   [
+    209,
+    282,
+    359,
+    435,
+    514,
+    591,
+    671,
+    751
+   ],
+   [
+    200,
+    275,
+    349,
+    425,
+    501,
+    578,
+    655,
+    733
+   ],
+   [
+    202,
+    269,
+    341,
+    415,
+    490,
+    564,
+    641,
+    718
+   ],
+   [
+    192,
+    256,
+    325,
+    396,
+    468,
+    540,
+    614,
+    688
+   ],
+   [
+    187,
+    249,
+    318,
+    386,
+    458,
+    528,
+    600,
+    674
+   ],
+   [
+    183,
+    244,
+    310,
+    378,
+    448,
+    517,
+    588,
+    660
+   ],
+   [
+    178,
+    238,
+    302,
+    369,
+    438,
+    506,
+    576,
+    647
+   ],
+   [
+    174,
+    232,
+    298,
+    362,
+    429,
+    498,
+    565,
+    635
+   ]
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, wind panel (headwind)",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "tw_lines": {
+  "value": [
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, wind panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "tw_kt": {
+  "value": [
+   0,
+   0.76,
+   1.81,
+   2.85,
+   3.9,
+   4.84
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, wind panel (tailwind)",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "tw_m": {
+  "value": [
+   [
+    200,
+    203,
+    213,
+    222,
+    231,
+    239
+   ],
+   [
+    300,
+    308,
+    319,
+    331,
+    344,
+    356
+   ],
+   [
+    400,
+    410,
+    424,
+    439,
+    456,
+    469
+   ],
+   [
+    500,
+    512,
+    529,
+    547,
+    566,
+    583
+   ],
+   [
+    600,
+    614,
+    634,
+    654,
+    676,
+    698
+   ],
+   [
+    700,
+    717,
+    739,
+    762,
+    786,
+    809
+   ],
+   [
+    800,
+    819,
+    843,
+    869,
+    895,
+    920
+   ]
+  ],
+  "source": {
+   "afm_page": "5-9",
+   "pdf_page": [
+    145
+   ],
+   "figure": "Figure 5.4 sheet 1, wind panel (tailwind)",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "obs_lines": {
+  "value": [
+   200,
+   300,
+   400,
+   500,
+   600,
+   700,
+   800
+  ],
+  "source": {
+   "afm_page": "5-10",
+   "pdf_page": [
+    146
+   ],
+   "figure": "Figure 5.4 sheet 2, obstacle panel",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29,
+   "note": "guide lines unchanged; example path revised"
+  }
+ },
+ "obs_slope_m_per_m": {
+  "value": [
+   4.07,
+   5.47,
+   7.47,
+   10.13,
+   14.2,
+   20.3,
+   30.5
+  ],
+  "source": {
+   "afm_page": "5-10",
+   "pdf_page": [
+    146
+   ],
+   "figure": "Figure 5.4 sheet 2",
+   "page_revision": "Rev 29 (30-Jun-21)",
+   "manual_revision": 29
+  }
+ },
+ "land_alt": {
+  "value": [
+   0,
+   1000,
+   2000,
+   3000,
+   4000,
+   5000,
+   6000,
+   7000
+  ],
+  "source": {
+   "afm_page": "5-17",
+   "pdf_page": [
+    153
+   ],
+   "figure": "Table 4 Landing and Rolling Distances",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29
+  }
+ },
+ "land_50ft": {
+  "value": [
+   1360,
+   1387,
+   1417,
+   1447,
+   1478,
+   1511,
+   1545,
+   1580
+  ],
+  "source": {
+   "afm_page": "5-17",
+   "pdf_page": [
+    153
+   ],
+   "figure": "Table 4",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29,
+   "note": "ft"
+  }
+ },
+ "land_roll": {
+  "value": [
+   661,
+   680,
+   701,
+   722,
+   744,
+   767,
+   791,
+   815
+  ],
+  "source": {
+   "afm_page": "5-17",
+   "pdf_page": [
+    153
+   ],
+   "figure": "Table 4",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29,
+   "note": "ft"
+  }
+ },
+ "cruise_table": {
+  "value": {
+   "cols": [
+    "PA",
+    "RPM",
+    "dISA-20_%bhp",
+    "KTAS",
+    "GPH",
+    "ISA_%bhp",
+    "KTAS",
+    "GPH",
+    "dISA+10_%bhp",
+    "KTAS",
+    "GPH"
+   ],
+   "rows": [
+    [
+     2000,
+     2800,
+     87,
+     128,
+     8.8,
+     83,
+     129,
+     8.7,
+     80,
+     130,
+     8.6
+    ],
+    [
+     2000,
+     2700,
+     78,
+     123,
+     7.7,
+     74,
+     124,
+     6.8,
+     72,
+     125,
+     6.6
+    ],
+    [
+     2000,
+     2600,
+     69,
+     118,
+     6.4,
+     66,
+     119,
+     6.2,
+     64,
+     120,
+     6.1
+    ],
+    [
+     2000,
+     2500,
+     61,
+     113,
+     5.9,
+     59,
+     113,
+     5.7,
+     57,
+     114,
+     5.6
+    ],
+    [
+     2000,
+     2400,
+     54,
+     107,
+     5.3,
+     52,
+     108,
+     5.2,
+     50,
+     109,
+     5.1
+    ],
+    [
+     4000,
+     2800,
+     79,
+     126,
+     8.6,
+     76,
+     127,
+     8.6,
+     74,
+     129,
+     6.8
+    ],
+    [
+     4000,
+     2700,
+     71,
+     121,
+     6.6,
+     68,
+     122,
+     6.4,
+     66,
+     123,
+     6.2
+    ],
+    [
+     4000,
+     2600,
+     63,
+     116,
+     6,
+     61,
+     117,
+     5.9,
+     59,
+     118,
+     5.7
+    ],
+    [
+     4000,
+     2500,
+     56,
+     111,
+     5.5,
+     55,
+     112,
+     5.4,
+     53,
+     113,
+     5.3
+    ],
+    [
+     4000,
+     2450,
+     53,
+     108,
+     5.3,
+     51,
+     109,
+     5.1,
+     50,
+     110,
+     5.1
+    ],
+    [
+     6000,
+     2800,
+     73,
+     125,
+     6.7,
+     70,
+     126,
+     6.5,
+     69,
+     128,
+     6.4
+    ],
+    [
+     6000,
+     2700,
+     66,
+     120,
+     6.2,
+     64,
+     121,
+     6,
+     62,
+     123,
+     5.9
+    ],
+    [
+     6000,
+     2600,
+     59,
+     115,
+     5.7,
+     57,
+     116,
+     5.6,
+     56,
+     117,
+     5.5
+    ],
+    [
+     6000,
+     2500,
+     53,
+     110,
+     5.2,
+     51,
+     111,
+     5.1,
+     50,
+     112,
+     5
+    ],
+    [
+     8000,
+     2800,
+     68,
+     124,
+     6.4,
+     66,
+     125,
+     6.2,
+     65,
+     127,
+     6.1
+    ],
+    [
+     8000,
+     2700,
+     61,
+     119,
+     5.9,
+     60,
+     121,
+     5.8,
+     59,
+     122,
+     5.7
+    ],
+    [
+     8000,
+     2600,
+     55,
+     114,
+     5.4,
+     54,
+     116,
+     5.3,
+     53,
+     117,
+     5.3
+    ],
+    [
+     8000,
+     2550,
+     53,
+     112,
+     5.2,
+     51,
+     113,
+     5.1,
+     50,
+     114,
+     5.1
+    ],
+    [
+     10000,
+     2800,
+     64,
+     123,
+     6.1,
+     63,
+     125,
+     6,
+     61,
+     127,
+     5.9
+    ],
+    [
+     10000,
+     2750,
+     61,
+     121,
+     5.9,
+     60,
+     123,
+     5.8,
+     59,
+     124,
+     5.7
+    ],
+    [
+     10000,
+     2700,
+     58,
+     119,
+     5.6,
+     57,
+     120,
+     5.5,
+     56,
+     122,
+     5.5
+    ],
+    [
+     10000,
+     2650,
+     55,
+     116,
+     5.4,
+     54,
+     118,
+     5.3,
+     53,
+     119,
+     5.3
+    ],
+    [
+     10000,
+     2600,
+     53,
+     114,
+     5.2,
+     51,
+     115,
+     5.1,
+     51,
+     117,
+     5.1
+    ],
+    [
+     12000,
+     2800,
+     61,
+     123,
+     5.8,
+     60,
+     125,
+     5.8,
+     59,
+     127,
+     5.7
+    ],
+    [
+     12000,
+     2750,
+     58,
+     121,
+     5.6,
+     57,
+     123,
+     5.6,
+     56,
+     124,
+     5.5
+    ],
+    [
+     12000,
+     2700,
+     55,
+     118,
+     5.4,
+     54,
+     120,
+     5.4,
+     53,
+     122,
+     5.3
+    ],
+    [
+     12000,
+     2650,
+     53,
+     116,
+     5.2,
+     52,
+     118,
+     5.2,
+     51,
+     119,
+     5.1
+    ]
+   ]
+  },
+  "source": {
+   "afm_page": "5-14/5-15",
+   "pdf_page": [
+    150,
+    151
+   ],
+   "figure": "Table 3 Cruise Performance Table",
+   "page_revision": "Rev 27 (12-Feb-13)",
+   "manual_revision": 29,
+   "note": "values transcribed as printed; AFM itself has suspicious GPH entries e.g. 2000ft/2700 ISA 6.8 vs -20C 7.7; 4000ft/2800 +10 6.8"
+  }
+ }
+}

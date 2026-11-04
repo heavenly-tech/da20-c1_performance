@@ -91,6 +91,8 @@ fn NumericForm(inputs: RwSignal<da20_core::types::FlightInputs>) -> impl IntoVie
                 set=move |v| inputs.update(|i| i.cruise_pressure_alt_ft = v)/>
             <NumField label="Cruise RPM" get=move || inputs.get().cruise_rpm
                 set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+            <NumField label="Obstacle height (m)" get=move || inputs.get().obstacle_height_m
+                set=move |v| inputs.update(|i| i.obstacle_height_m = v)/>
         </form>
     }
 }
@@ -121,7 +123,7 @@ fn TakeoffCard(takeoff: Option<da20_core::types::TakeoffResult>) -> impl IntoVie
             {match takeoff {
                 Some(t) => view! {
                     <ProvenanceLine provenance=t.provenance.clone()/>
-                    <p>"PA "{t.pressure_altitude_ft.round()} " ft · Ground "{t.ground_roll_ft.round()} " ft · 50 ft "{t.distance_over_50ft_ft.round()} " ft"</p>
+                    <p>"PA "{t.pressure_altitude_ft.round()} " ft · Ground "{t.ground_roll_ft.round()} " ft · obstacle distance "{t.distance_over_50ft_ft.round()} " ft"</p>
                     <WarningsList warnings=t.warnings/>
                 }.into_any(),
                 None => view! { <p class="error">"Unavailable"</p> }.into_any(),
@@ -138,7 +140,10 @@ fn ClimbCard(climb: Option<da20_core::types::ClimbResult>) -> impl IntoView {
             {match climb {
                 Some(c) => view! {
                     <ProvenanceLine provenance=c.provenance.clone()/>
-                    <p>"Eq alt "{c.equivalent_altitude_ft.round()} " ft · ROC "{c.rate_of_climb_fpm.round()} " fpm"</p>
+                    <p>"Eq alt "{c.equivalent_altitude_ft.round()} " ft · ROC "{c.rate_of_climb_fpm.round()} " fpm (Fig 5.5)"</p>
+                    {c.time_to_altitude_min.map(|t| view! {
+                        <p class="derived">"Time to alt (derived estimate, no AFM chart): "{t.round()} " min"</p>
+                    })}
                     <WarningsList warnings=c.warnings/>
                 }.into_any(),
                 None => view! { <p class="error">"Unavailable"</p> }.into_any(),

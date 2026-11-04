@@ -1,50 +1,70 @@
 # DA20-C1 Eclipse Performance Planner
 
-**Disclaimer:** This application is **not** an official Diamond Aircraft or DGAC-approved source. It is **not** approved for operational flight planning. Digitized values are approximate when present; during early development the app uses **`SYNTHETIC`** fixture data only. The approved Aircraft Flight Manual (AFM) aboard the aircraft always governs.
+**Disclaimer:** This application is **not** an official Diamond Aircraft or DGAC-approved source. It is **not** approved for operational flight planning. Values come from digitized **AFM DA202-C1 Rev 29 (30 Jun 2021)** Chapter 5 data; interpolation and known digitization biases apply. The approved Aircraft Flight Manual (AFM) aboard the aircraft always governs.
 
-Performance planning helper for the **Diamond DA20-C1 Eclipse**, implementing AFM **DA202-C1 Chapter 5** architecture:
+Performance planning helper for the **Diamond DA20-C1 Eclipse**, implementing AFM **DA202-C1 Chapter 5**:
 
-- Takeoff (Figure 5.4)
-- Climb (Figures 5.5 / 5.6 / 5.8 via Figure 5.2 equivalent altitude)
+- Takeoff (Figure 5.4 — base × weight × wind panel × obstacle slope)
+- Climb ROC (Figures 5.5 / 5.6 / 5.8 via Figure 5.2 equivalent altitude)
 - Cruise (Table 3)
 - Landing (Table 4)
-- Wind components and corrections (Figure 5.3)
+- Wind components (Figure 5.3); takeoff/landing wind panels from Fig 5.4 sheet 1
 
 ## Stack
 
 | Layer | Technology |
 |-------|------------|
-| Core | Rust (`da20-core`) — interpolation, altitudes, performance lookups |
+| Core | Rust (`da20-core`) — Rev 29 JSON model + interpolation |
 | UI | Leptos → WASM (`da20-ui`) — numeric + hand-plot modes |
 | Server | Single binary (`da20-performance`) — Axum, embedded `dist/` assets |
 | Container | Multi-stage Alpine Dockerfile (optional `scratch` target) |
 
 Intended host: `da20.heavenly.cl` behind **nginx-proxy** (`VIRTUAL_HOST`), no bundled nginx.
 
-## Data files
+## Data
 
 | Path | Purpose |
 |------|---------|
-| `data/schema/performance-data.schema.json` | Documented JSON schema with citation fields |
-| `data/fixtures/SYNTHETIC_performance_data.json` | **SYNTHETIC — NOT FOR FLIGHT USE** (tests & dev) |
-| `data/TODO_performance_data.json` | **Placeholder** for production digitized AFM data |
+| `data/da20c1_ch5_data_rev29.json` | **Production** digitized AFM Ch.5 (Rev 29) with per-field `source` citations |
+| `data/schema/performance-data.schema.json` | Legacy/generic schema (documentation) |
+| `data/fixtures/SYNTHETIC_performance_data.json` | Retained for reference only — **not used at runtime** |
 
-Official Diamond AFM/AMM download URLs will be wired when provided (`TODO` in meta).
+Official publications (Diamond partners portal):
+
+- [Technical publications](https://partners.diamondaircraft.com/s/technical-publications)
+- [AFM DA202-C1 Rev 29 PDF](https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000001DbNmIAK?operationContext=S1)
+- [AMM DA201-C1 Rev 25 (2023-03-14)](https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000003HViPIAW?operationContext=S1)
 
 ## SCTB defaults
 
 - Field elevation 2130 ft, QNH 1013 hPa, OAT 20 °C  
 - Runway 19, wind 200° / 8 kt  
-- Weight 1764 lb, cruise 6500 ft PA @ 2600 RPM  
+- Weight 1764 lb, cruise **6500 ft PA** @ 2600 RPM (Table 3 interpolated between 6000 and 8000 ft rows)  
+- Obstacle height **5 m** (16 ft — AFM Fig 5.4 worked example)
 
-## Modes
+## Validation
 
-1. **Numeric entry** — direct inputs, core calculations in WASM  
-2. **Hand plot** — vector-redrawn charts (not AFM scans) with draggable crosshair and guide lines  
+Rust tests port `validate_rev29.py` / `validation_rev29.txt`:
 
-Both modes share `da20-core`. Saved readings: unlimited entries in **localStorage**, list / compare / delete, export **CSV** or **JSON**.
+| Check | Tolerance | Notes |
+|-------|-----------|--------|
+| Wind components 11 kt @ 30° | ±0.1 kt | HW 9.5, XW 5.5 |
+| ROC Fig 5.5 / 5.6 / 5.8 | ±1% | Via Fig 5.2 EA |
+| Takeoff over 5 m obstacle (Rev 29 example) | ±5% | **Known ~2.7% short bias** vs 365.76 m — flagged in UI + methods manual |
+| Table 4 sea-level 50 ft distance | Exact | 1360 ft (≈415 m rounded; AFM text cites 414 m) |
+| Table 3 GPH | As printed | Known oddities noted in UI |
 
-## Build & run locally
+**Gap:** Figure 5.7 cruise chart (65% / 121 kt example) is **not digitized** — Table 3 only.
+
+Run: `cargo test -p da20-core`
+
+### Screenshot placeholders
+
+<!-- TODO: planner numeric mode -->
+<!-- TODO: hand-plot mode -->
+<!-- TODO: methods manual / bias callouts -->
+
+## Build
 
 ```bash
 rustup target add wasm32-unknown-unknown
@@ -52,35 +72,8 @@ cargo install trunk --locked
 cd crates/da20-ui && trunk build --release
 cd ../..
 cargo run -p da20-server
-# open http://127.0.0.1:8080
 ```
-
-Docker:
-
-```bash
-docker build -t da20-performance .
-docker run --rm -e VIRTUAL_HOST=da20.heavenly.cl -p 8080:8080 da20-performance
-```
-
-## How it was validated
-
-| Stage | Status |
-|-------|--------|
-| Unit tests (interpolation, altitudes, wind components) | Implemented — `cargo test -p da20-core` |
-| Integration against **SYNTHETIC** fixture | Implemented — smoke paths only |
-| POH worked-example regression | **Harness ready** — `crates/da20-core/tests/poh_harness.rs` awaits `validation.worked_examples` + tolerances in production JSON |
-| Cross-check vs approved AFM | **Blocked** — digitized chart data not yet available |
-
-### Screenshot placeholders
-
-<!-- TODO: add planner numeric mode screenshot -->
-<!-- TODO: add hand-plot mode screenshot -->
-<!-- TODO: add provenance / methods manual screenshot -->
-
-## Provenance in the UI
-
-Every result shows AFM document number, revision, date, and per-output figure/table citation (from the data file). A built-in **methods manual** documents formulas, interpolation, clamping, and limitations.
 
 ## License
 
-MIT — see repository license. **Do not commit AFM/AMM PDFs or chart scans.**
+MIT — **Do not commit AFM/AMM PDFs or chart scans.**

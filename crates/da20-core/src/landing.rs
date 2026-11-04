@@ -1,74 +1,69 @@
 use crate::altitude::pressure_altitude_ft;
 use crate::data::PerformanceData;
-use crate::interpolation::{interpolate_2d, ExtrapolationPolicy};
 use crate::provenance::provenance_for;
-use crate::types::{FlightInputs, LandingResult};
-use crate::wind::compute_wind;
+use crate::rev29::engine::{landing_lookup_ft, m_to_ft, wind_panel_hw_m, wind_panel_tw_m};
+use crate::types::{CalculationWarning, FlightInputs, LandingResult};
+use crate::wind::runway_heading_deg;
+
+pub const LANDING_TABLE_50FT_M_NOTE: &str =
+    "Table 4 lists 1360 ft (≈415 m rounded) at sea level; AFM narrative text cites 414 m for the same condition.";
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum LandingError {
-    #[error("interpolation: {0}")]
-    Interp(#[from] crate::interpolation::InterpError),
+    #[error("landing lookup failed")]
+    Failed,
 }
 
 pub fn compute_landing(data: &PerformanceData, inputs: &FlightInputs) -> Result<LandingResult, LandingError> {
-    let table = &data.landing.table;
     let pa = pressure_altitude_ft(inputs.field_elevation_ft, inputs.qnh_hpa);
-    let y_axis: Vec<f64> = table.rows.iter().map(|r| r.oat_c).collect();
-    let mut ground_grid = Vec::with_capacity(y_axis.len());
-    let mut dist_grid = Vec::with_capacity(y_axis.len());
-    for row in &table.rows {
-        ground_grid.push(row.ground_roll_ft.clone());
-        dist_grid.push(row.distance_50ft_ft.clone());
+    let (roll_ft, over_50_ft) = landing_lookup_ft(data.inner(), pa);
+
+    let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
+    let angle = (inputs.wind_dir_deg - rwy).to_radians();
+    let headwind = inputs.wind_speed_kt * angle.cos();
+    let headwind_kt = headwind.max(0.0);
+    let tailwind_kt = (-headwind).max(0.0);
+
+    // Wind correction via Fig 5.4 wind panels applied to table ground roll baseline (meters).
+    let base_m = roll_ft / 3.280839895;
+    let mut corrected_m = base_m;
+    if headwind_kt > 0.0 {
+        corrected_m = wind_panel_hw_m(data.inner(), base_m, headwind_kt);
+    } else if tailwind_kt > 0.0 {
+        corrected_m = wind_panel_tw_m(data.inner(), base_m, tailwind_kt);
     }
+    let wind_delta_ft = m_to_ft(corrected_m - base_m);
+    let ground_ft = roll_ft + wind_delta_ft;
+    let dist_ft = over_50_ft + wind_delta_ft;
 
-    let (ground, mut warnings) = interpolate_2d(
-        &table.pressure_altitude_ft,
-        &y_axis,
-        &ground_grid,
-        pa,
-        inputs.oat_c,
-        ExtrapolationPolicy::Clamp,
-    )?;
-    let (dist50, w2) = interpolate_2d(
-        &table.pressure_altitude_ft,
-        &y_axis,
-        &dist_grid,
-        pa,
-        inputs.oat_c,
-        ExtrapolationPolicy::Clamp,
-    )?;
-    warnings.extend(w2);
-
-    let wind = compute_wind(data, inputs).map_err(LandingError::Interp)?;
-    warnings.extend(wind.warnings);
-    let ground_adj = ground + wind.takeoff_landing_correction_ft;
-    let dist_adj = dist50 + wind.takeoff_landing_correction_ft;
-
-    if data.meta.is_synthetic() {
-        warnings.push(crate::types::CalculationWarning {
-            code: "SYNTHETIC_DATA".into(),
-            message: "Landing distances from SYNTHETIC fixture — not for flight use.".into(),
-        });
-    }
+    let warnings = vec![CalculationWarning {
+        code: "LANDING_TABLE_50FT".into(),
+        message: LANDING_TABLE_50FT_M_NOTE.into(),
+    }];
 
     Ok(LandingResult {
-        provenance: provenance_for(data, &data.landing.citation),
-        ground_roll_ft: ground_adj,
-        distance_over_50ft_ft: dist_adj,
-        wind_correction_ft: wind.takeoff_landing_correction_ft,
+        provenance: provenance_for(data.inner(), data.landing_source()),
+        ground_roll_ft: ground_ft,
+        distance_over_50ft_ft: dist_ft,
+        wind_correction_ft: wind_delta_ft,
         warnings,
     })
+}
+
+pub fn table_landing_50ft_ft(data: &PerformanceData, pa_ft: f64) -> f64 {
+    landing_lookup_ft(data.inner(), pa_ft).1
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::PerformanceData;
 
     #[test]
-    fn synthetic_landing() {
-        let data = PerformanceData::synthetic_fixture();
-        let r = compute_landing(&data, &FlightInputs::default()).unwrap();
-        assert!(r.ground_roll_ft > 0.0);
+    fn table4_sea_level_exact_lookup() {
+        let data = PerformanceData::production();
+        assert_eq!(table_landing_50ft_ft(&data, 0.0), 1360.0);
+        let m = 1360.0 * 0.3048;
+        assert!((m - 414.528_f64).abs() < 0.01);
     }
 }

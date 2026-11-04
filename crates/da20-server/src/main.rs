@@ -23,7 +23,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
-        .route("/data/performance.json", get(serve_performance_placeholder))
+        .route("/data/performance.json", get(serve_performance_data))
         .fallback(static_handler)
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -40,11 +40,11 @@ async fn main() {
     axum::serve(listener, app).await.expect("serve");
 }
 
-async fn serve_performance_placeholder() -> impl IntoResponse {
+async fn serve_performance_data() -> impl IntoResponse {
     (
         StatusCode::OK,
         [(header::CONTENT_TYPE, "application/json")],
-        include_str!("../../../data/TODO_performance_data.json"),
+        include_str!("../../../data/da20c1_ch5_data_rev29.json"),
     )
 }
 

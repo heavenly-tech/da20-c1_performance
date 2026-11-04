@@ -12,6 +12,7 @@ pub mod landing;
 pub mod methods;
 pub mod poh_harness;
 pub mod provenance;
+pub mod rev29;
 pub mod takeoff;
 pub mod types;
 pub mod wind;

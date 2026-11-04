@@ -16,7 +16,7 @@ pub enum Route {
 #[component]
 pub fn App() -> impl IntoView {
     let route = RwSignal::new(Route::Planner);
-    let data = RwSignal::new(PerformanceData::synthetic_fixture());
+    let data = RwSignal::new(PerformanceData::production());
     let store = RwSignal::new(ReadingsStore::load());
 
     Effect::new(move |_| {
@@ -24,7 +24,7 @@ pub fn App() -> impl IntoView {
             if let Ok(resp) = gloo_net::http::Request::get("/data/performance.json").send().await {
                 if let Ok(text) = resp.text().await {
                     if let Ok(parsed) = PerformanceData::from_json_str(&text) {
-                        if parsed.meta.data_status == "production" {
+                        if parsed.meta().data_status.as_deref() == Some("production") {
                             data.set(parsed);
                         }
                     }
@@ -38,7 +38,7 @@ pub fn App() -> impl IntoView {
             <Disclaimer/>
             <header class="header">
                 <h1>"DA20-C1 Eclipse Performance Planner"</h1>
-                <p class="subtitle">"AFM DA202-C1 Chapter 5 — architecture preview (data TBD)"</p>
+                <p class="subtitle">"AFM DA202-C1 Rev 29 (30 Jun 2021) — Chapter 5 digitized data"</p>
                 <Nav route=route/>
             </header>
             <main class="main">
@@ -50,16 +50,18 @@ pub fn App() -> impl IntoView {
             </main>
             <footer class="footer">
                 <p>
-                    "AFM: "
-                    {move || data.get().meta.afm_document_number.clone()}
+                    "AFM "
+                    {move || data.get().meta().doc.clone()}
                     " rev "
-                    {move || data.get().meta.afm_revision.clone()}
+                    {move || data.get().meta().revision.to_string()}
                     " ("
-                    {move || data.get().meta.afm_date.clone()}
+                    {move || data.get().meta().revision_date.clone()}
                     ") — "
-                    <a href=move || data.get().meta.afm_official_url.clone()>"Official AFM (URL TBD)"</a>
+                    <a href=move || data.get().meta().afm_official_url.clone().unwrap_or_default()>"Official AFM Rev 29"</a>
                     " · "
-                    <a href=move || data.get().meta.amm_official_url.clone()>"Official AMM (URL TBD)"</a>
+                    <a href=move || data.get().meta().technical_publications_url.clone().unwrap_or_default()>"Technical publications"</a>
+                    " · "
+                    <a href=move || data.get().meta().amm_official_url.clone().unwrap_or_default()>"AMM DA201-C1 Rev 25"</a>
                 </p>
             </footer>
         </div>

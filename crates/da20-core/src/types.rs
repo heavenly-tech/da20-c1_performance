@@ -24,6 +24,13 @@ pub struct FlightInputs {
     pub weight_lb: f64,
     pub cruise_pressure_alt_ft: f64,
     pub cruise_rpm: f64,
+    /// Obstacle height for Fig 5.4 sheet 2 (AFM example uses 5 m / 16 ft).
+    #[serde(default = "default_obstacle_m")]
+    pub obstacle_height_m: f64,
+}
+
+fn default_obstacle_m() -> f64 {
+    5.0
 }
 
 impl Default for FlightInputs {
@@ -38,6 +45,7 @@ impl Default for FlightInputs {
             weight_lb: defaults::WEIGHT_LB,
             cruise_pressure_alt_ft: defaults::CRUISE_PRESSURE_ALT_FT,
             cruise_rpm: defaults::CRUISE_RPM,
+            obstacle_height_m: 5.0,
         }
     }
 }
