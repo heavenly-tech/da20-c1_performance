@@ -241,7 +241,7 @@ fn render_takeoff_strip(
         <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="4 3"/>
         <polyline points=path_pts class="chart-stroke-user-path"/>
-        {path.points.iter().map(|(x,y)| view! {
+        {path.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view()}
         <text x="70" y="28" fill="var(--chart-label)" font-size="11">
@@ -308,7 +308,7 @@ fn render_climb_strip(
         {path_pts.map(|pts| view! {
             <polyline points=pts class="chart-stroke-user-path"/>
         })}
-        {path.map(|p| p.points.iter().map(|(x,y)| view! {
+        {path.map(|p| p.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view())}
     }

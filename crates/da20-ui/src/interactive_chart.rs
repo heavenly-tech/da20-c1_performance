@@ -226,7 +226,7 @@ fn render_svg(
         <line x1=oat_sx y1="20" x2=oat_sx y2="270" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         <line x1=gx y1="20" x2=gx y2="270" class="chart-stroke-grid" stroke-dasharray="4 3"/>
         <line x1="40" y1=gy x2="380" y2=gy class="chart-stroke-grid" stroke-dasharray="4 3"/>
-        <circle cx=gx cy=gy r="6" class="chart-marker"/>
+        <circle cx=gx cy=gy r="6" class="chart-handle"/>
         <text x="50" y="36" fill="var(--chart-label)" font-size="11">{x_label}</text>
         <text x="330" y="285" fill="var(--chart-label)" font-size="11">{y_label}</text>
         <text x="50" y="288" fill="var(--chart-label)" font-size="10">

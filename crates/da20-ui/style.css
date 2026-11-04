@@ -230,6 +230,13 @@ body {
   stroke-width: 1.5px;
 }
 
+.plot-svg .chart-handle,
+.strip-svg .chart-handle {
+  fill: var(--chart-marker);
+  stroke: var(--chart-bg);
+  stroke-width: 1.5px;
+}
+
 .plot-svg rect.chart-panel,
 .strip-svg rect.chart-panel {
   fill: var(--chart-bg);

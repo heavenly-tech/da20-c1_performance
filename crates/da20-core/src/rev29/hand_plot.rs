@@ -84,6 +84,8 @@ pub fn y_roc_fpm(roc: f64) -> f64 {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TakeoffPath {
     pub points: Vec<(f64, f64)>,
+    /// Panel / turn markers only (not sampled along curved guide segments).
+    pub markers: Vec<(f64, f64)>,
     pub chart_ground_m: f64,
     pub chart_over_obstacle_m: f64,
     pub core_ground_m: f64,
@@ -165,6 +167,16 @@ fn append_segment(points: &mut Vec<(f64, f64)>, segment: &[(f64, f64)]) {
     }
 }
 
+fn push_turn_marker(markers: &mut Vec<(f64, f64)>, p: (f64, f64)) {
+    const EPS: f64 = 0.6;
+    if markers
+        .iter()
+        .all(|m| (m.0 - p.0).abs() >= EPS || (m.1 - p.1).abs() >= EPS)
+    {
+        markers.push(p);
+    }
+}
+
 pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> TakeoffPath {
     let weight_kg = lb_to_kg(inputs.weight_lb);
     let (hw, tw) = headwind_and_tailwind(inputs);
@@ -178,6 +190,11 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let weight_ref_x = TAKEOFF_WEIGHT.x;
     let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
     let after_wt_y = y_dist(core.after_weight_m);
+
+    let mut markers = Vec::with_capacity(8);
+    push_turn_marker(&mut markers, (oat_x, STRIP_BOTTOM));
+    push_turn_marker(&mut markers, (oat_x, y_on_pa_curve));
+    push_turn_marker(&mut markers, (weight_ref_x, y_on_pa_curve));
 
     // (1) OAT vertical to PA curve; (2) horizontal to weight-panel reference (800 kg, left edge);
     // (3) weight guides to aircraft weight; (4) horizontal to wind panel, then wind guides.
@@ -203,6 +220,7 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
             points.push((wind_panel_left, after_wt_y));
         }
     }
+    push_turn_marker(&mut markers, (wind_panel_left, after_wt_y));
 
     let wind_trace = if hw > 0.0 {
         trace_headwind_guide(data, core.after_weight_m, hw)
@@ -212,16 +230,23 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
         vec![(x_headwind_kt(0.0), y_dist(core.after_weight_m))]
     };
     append_segment(&mut points, &wind_trace);
+    if let Some(wind_exit) = points.last().copied() {
+        push_turn_marker(&mut markers, wind_exit);
+    }
 
     let obs_entry_x = x_obstacle_m(0.0);
     if let Some((_, yg)) = points.last().copied() {
         if (points.last().unwrap().0 - obs_entry_x).abs() > 0.5 {
             points.push((obs_entry_x, yg));
+            push_turn_marker(&mut markers, (obs_entry_x, yg));
         }
     }
 
     let obs_trace = trace_obstacle_guide(data, core.ground_roll_m, obs_m);
     append_segment(&mut points, &obs_trace);
+    if let Some(final_pt) = points.last().copied() {
+        push_turn_marker(&mut markers, final_pt);
+    }
 
     let chart_ground = if hw > 0.0 {
         wind_panel_hw_m(data, core.after_weight_m, hw).0
@@ -233,6 +258,7 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
 
     TakeoffPath {
         points,
+        markers,
         chart_ground_m: chart_ground,
         chart_over_obstacle_m: core.over_obstacle_m,
         core_ground_m: core.ground_roll_m,
@@ -243,6 +269,7 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClimbPath {
     pub points: Vec<(f64, f64)>,
+    pub markers: Vec<(f64, f64)>,
     pub chart_ea_ft: f64,
     pub chart_roc_fpm: f64,
     pub core_roc_fpm: f64,
@@ -266,9 +293,11 @@ pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> O
         (ea_x, y_ea),
         (ea_x, y_roc),
     ];
+    let markers = points.clone();
 
     Some(ClimbPath {
         points,
+        markers,
         chart_ea_ft: ea,
         chart_roc_fpm: chart_roc,
         core_roc_fpm: core_roc,
@@ -561,5 +590,53 @@ mod tests {
                 .unwrap_or(2130.0);
             panel_y_continuity(&data, inputs, pa);
         }
+    }
+
+    #[test]
+    fn takeoff_markers_only_at_turn_points() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
+            oat_c: 35.0,
+            weight_lb: 1500.0,
+            wind_dir_deg: 270.0,
+            wind_speed_kt: 12.0,
+            runway: "36".into(),
+            obstacle_height_m: 8.0,
+            ..Default::default()
+        };
+        let path = takeoff_hand_path(&data, &inputs, 2500.0);
+        assert!(
+            path.points.len() > path.markers.len(),
+            "sampled polyline {} pts vs {} turn markers",
+            path.points.len(),
+            path.markers.len()
+        );
+        assert!(
+            path.markers.len() >= 5 && path.markers.len() <= 8,
+            "unexpected marker count {}",
+            path.markers.len()
+        );
+    }
+
+    #[test]
+    fn climb_markers_match_turn_points() {
+        let data = Rev29File::production();
+        let path = climb_hand_path(
+            &data,
+            &FlightInputs {
+                pa_override: Some(crate::types::PaOverride {
+                    pa_ft: 2000.0,
+                    phase: crate::types::ChartPhase::Climb,
+                }),
+                ..Default::default()
+            },
+            2000.0,
+        )
+        .expect("climb");
+        assert_eq!(path.markers.len(), path.points.len());
     }
 }
