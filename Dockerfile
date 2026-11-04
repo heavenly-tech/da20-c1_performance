@@ -5,7 +5,10 @@ RUN apk add --no-cache musl-dev openssl-dev pkgconfig git nodejs npm curl bash
 WORKDIR /app
 COPY . .
 RUN rustup target add x86_64-unknown-linux-musl wasm32-unknown-unknown
-RUN cargo install trunk --locked
+# Trunk downloads glibc wasm-bindgen binaries that fail on Alpine (ENOENT). Install musl-native CLI.
+RUN cargo install trunk --locked \
+    && cargo install wasm-bindgen-cli --version 0.2.130 --locked
+ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /app/crates/da20-ui
 RUN trunk build --release
 WORKDIR /app

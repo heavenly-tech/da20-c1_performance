@@ -7,7 +7,7 @@ use crate::rev29::engine::{
 use crate::rev29::types::Rev29File;
 use crate::types::defaults;
 use crate::types::FlightInputs;
-use crate::wind::runway_heading_deg;
+use crate::wind::{headwind_tailwind_kt, runway_heading_deg, wind_components};
 
 /// Mockup-aligned strip layout (1110×560 viewBox).
 pub const STRIP_TOP: f64 = 40.0;
@@ -94,9 +94,8 @@ pub struct TakeoffPath {
 
 pub fn headwind_and_tailwind(inputs: &FlightInputs) -> (f64, f64) {
     let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
-    let angle = (inputs.wind_dir_deg - rwy).to_radians();
-    let hw = inputs.wind_speed_kt * angle.cos();
-    (hw.max(0.0), (-hw).max(0.0))
+    let c = wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy);
+    headwind_tailwind_kt(&c)
 }
 
 fn weight_distance_m(data: &Rev29File, base_m: f64, weight_kg: f64) -> f64 {

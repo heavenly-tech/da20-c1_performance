@@ -3,5 +3,9 @@ target = "index.html"
 dist = "../../dist"
 public_url = "/"
 
+# Pin to Cargo.lock; use system `wasm-bindgen` from PATH (required on Alpine Docker).
+[tools]
+wasm_bindgen = "0.2.130"
+
 [watch]
 ignore = ["../../dist"]

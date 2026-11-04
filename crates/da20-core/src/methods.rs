@@ -71,7 +71,7 @@ pub fn all_methods() -> Vec<MethodEntry> {
             afm_reference: "AFM page 5-8, Figure 5.3",
             summary: "Headwind/crosswind from wind direction, speed, and runway heading (trigonometric). Takeoff/landing distance wind panels use Fig 5.4 sheet 1.",
             interpolation: "N/A for components; panel interpolation for distance corrections.",
-            limitations: "Runway heading = runway number × 10° unless overridden.",
+            limitations: "Runway: 1–2 digits (optional L/R/C) × 10°, or 3-digit magnetic heading.",
         },
     ]
 }

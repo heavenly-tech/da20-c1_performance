@@ -157,7 +157,7 @@ pub fn InteractiveChart(
 }
 
 fn wind_angle_from_inputs(i: &FlightInputs) -> f64 {
-    let rwy = i.runway.parse::<f64>().unwrap_or(0.0) * 10.0;
+    let rwy = runway_heading_deg(&i.runway).unwrap_or(0.0);
     (i.wind_dir_deg - rwy).rem_euclid(360.0).min(90.0)
 }
 

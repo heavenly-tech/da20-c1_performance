@@ -5,6 +5,7 @@ use da20_core::pressure::{
 };
 use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
+use da20_core::wind::{headwind_tailwind_kt, runway_heading_deg, wind_components};
 use da20_core::wind_format::{format_wind, parse_wind};
 use leptos::prelude::*;
 
@@ -244,6 +245,27 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                     }
                 }
             />
+            {move || {
+                let c = copy(locale.get());
+                let i = inputs.get();
+                let rwy = runway_heading_deg(&i.runway).unwrap_or(0.0);
+                let comp = wind_components(i.wind_dir_deg, i.wind_speed_kt, rwy);
+                let (hw, tw) = headwind_tailwind_kt(&comp);
+                let xw = comp.crosswind_kt;
+                view! {
+                    <p class="lab mono wind-components">
+                        {c.wind_head} " "
+                        {hw.round() as i64}
+                        " kt · "
+                        {c.wind_tail} " "
+                        {tw.round() as i64}
+                        " kt · "
+                        {c.wind_cross} " "
+                        {xw.round() as i64}
+                        " kt"
+                    </p>
+                }
+            }}
         </div>
     }
 }

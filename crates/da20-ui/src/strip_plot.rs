@@ -367,14 +367,10 @@ fn apply_hit(
                 let hw = (sx - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
                 inputs.update(|i| {
                     let rwy = da20_core::wind::runway_heading_deg(&i.runway).unwrap_or(0.0);
-                    let angle = (i.wind_dir_deg - rwy).to_radians();
-                    let cos = angle.cos();
-                    if cos.abs() > 0.05 {
-                        i.wind_speed_kt = (hw / cos).max(0.0);
-                    } else {
-                        i.wind_dir_deg = rwy;
-                        i.wind_speed_kt = hw.max(0.0);
-                    }
+                    let (dir, speed, _clamp) =
+                        da20_core::wind::back_solve_wind_for_headwind(i.wind_dir_deg, rwy, hw);
+                    i.wind_dir_deg = dir;
+                    i.wind_speed_kt = speed;
                 });
             } else if sx >= TAKEOFF_OBS.x {
                 let obs = (sx - TAKEOFF_OBS.x) / TAKEOFF_OBS.w * 15.0;
