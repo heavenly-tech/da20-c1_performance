@@ -266,9 +266,12 @@ body {
   }
 }
 
-[data-theme="dark"][data-palette="vfr_chart"] .chart-stroke-user-path,
-[data-theme="dark"][data-palette="vfr_chart"] .chart-marker {
+[data-theme="dark"][data-palette="vfr_chart"] .chart-stroke-user-path {
   stroke-width: 5px;
+}
+
+[data-theme="dark"][data-palette="vfr_chart"] .chart-marker {
+  stroke-width: 2px;
 }
 
 [data-theme="dark"][data-palette="vfr_chart"] .chart-stroke-guide,
