@@ -262,6 +262,10 @@ pub fn m_to_ft(m: f64) -> f64 {
     m * M_TO_FT
 }
 
+pub fn ft_to_m(ft: f64) -> f64 {
+    ft / M_TO_FT
+}
+
 pub fn fahrenheit_to_celsius(f: f64) -> f64 {
     (f - 32.0) / 1.8
 }

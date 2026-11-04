@@ -1,20 +1,20 @@
 use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
-use crate::rev29::engine::{lb_to_kg, m_to_ft, takeoff_distances_m};
+use crate::rev29::engine::{ft_to_m, lb_to_kg, m_to_ft, takeoff_distances_m};
 use crate::types::{CalculationWarning, FlightInputs, TakeoffResult};
 use crate::wind::runway_heading_deg;
 
-pub const TAKEOFF_AFM_ROUNDING_NOTE: &str = "AFM worked examples often round chart distances up to the next 50 ft (or next 15 m). The planner shows the raw Fig 5.4 chain result and a separate conservative rounded value for planning.";
+pub const TAKEOFF_AFM_ROUNDING_NOTE: &str = "AFM worked examples often round chart distances up to the next 100 ft. The planner shows the raw Fig 5.4 chain result and a conservative value (next 100 ft up, with meters converted from that ft value).";
 
-/// Round up to the next 50 ft (AFM-style conservative distance).
+/// Round up to the next 100 ft (AFM-style conservative distance).
 pub fn afm_conservative_distance_ft(raw_ft: f64) -> f64 {
-    (raw_ft / 50.0).ceil() * 50.0
+    (raw_ft / 100.0).ceil() * 100.0
 }
 
-/// Round up to the next 15 m (metric conservative distance).
-pub fn afm_conservative_distance_m(raw_m: f64) -> f64 {
-    (raw_m / 15.0).ceil() * 15.0
+/// Meters equivalent of the conservative ft value (no separate m rounding).
+pub fn afm_conservative_distance_m_from_ft(conservative_ft: f64) -> f64 {
+    ft_to_m(conservative_ft)
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -49,7 +49,7 @@ pub fn compute_takeoff(
     let over_raw_m = dist.over_obstacle_m;
     let over_raw_ft = m_to_ft(over_raw_m);
     let over_conservative_ft = afm_conservative_distance_ft(over_raw_ft);
-    let over_conservative_m = afm_conservative_distance_m(over_raw_m);
+    let over_conservative_m = afm_conservative_distance_m_from_ft(over_conservative_ft);
     let wind_delta_ft = m_to_ft(dist.ground_roll_m - dist.after_weight_m);
 
     let mut warnings = dist.warnings;
@@ -85,6 +85,7 @@ mod tests {
             "raw {raw_ft:.1} ft"
         );
         assert_eq!(afm_conservative_distance_ft(raw_ft), 1200.0);
+        assert!((afm_conservative_distance_m_from_ft(1200.0) - 365.76).abs() < 0.01);
 
         let t = compute_takeoff(
             &data,
@@ -105,5 +106,6 @@ mod tests {
         .expect("takeoff");
         assert!((t.distance_over_obstacle_raw_ft - raw_ft).abs() < 0.01);
         assert_eq!(t.distance_over_obstacle_conservative_ft, 1200.0);
+        assert!((t.distance_over_obstacle_conservative_m - 365.76).abs() < 0.05);
     }
 }

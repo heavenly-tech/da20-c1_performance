@@ -248,7 +248,7 @@ fn phase_results(
                         <p class="lab mono">
                             {c.takeoff_afm_conservative}": "
                             {t.distance_over_obstacle_conservative_ft.round() as i64}" ft / "
-                            {t.distance_over_obstacle_conservative_m.round() as i64}" m"
+                            {format!("{:.1}", t.distance_over_obstacle_conservative_m)}" m"
                         </p>
                         <p class="lab">{format_obstacle_over(locale, inputs.obstacle_height_m)}</p>
                         <WarningsList locale=locale warnings=t.warnings.clone()/>
