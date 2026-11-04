@@ -167,8 +167,14 @@ mod tests {
             );
             assert!(runway_heading_deg(bad).is_none(), "{bad}");
         }
-        assert_eq!(runway_heading_status("19"), RunwayHeadingStatus::AmbiguousShort);
-        assert_eq!(runway_heading_status("9"), RunwayHeadingStatus::AmbiguousShort);
+        assert_eq!(
+            runway_heading_status("19"),
+            RunwayHeadingStatus::AmbiguousShort
+        );
+        assert_eq!(
+            runway_heading_status("9"),
+            RunwayHeadingStatus::AmbiguousShort
+        );
         assert_eq!(runway_heading_status("000"), RunwayHeadingStatus::Invalid);
         assert_eq!(runway_heading_status("09L"), RunwayHeadingStatus::Invalid);
     }
