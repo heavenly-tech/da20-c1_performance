@@ -38,11 +38,14 @@ pub fn Nav(
                 next.save();
             }>{move || format!("{} · {}", copy(locale.get()).lang_toggle, locale.get().label())}</button>
             <button class="lang-btn" type="button" on:click=move |_| {
-                let next = theme.get().toggle();
+                let current = theme.get();
+                let next = current.toggle();
                 theme.set(next);
                 next.save();
                 crate::theme::apply_theme(next);
-                apply_palette(&palette.get(), next);
+                let p = PaletteChoice::for_theme(next);
+                palette.set(p.clone());
+                apply_palette(&p, next);
             }>{move || format!(
                 "{} · {}",
                 copy(locale.get()).theme_toggle,
@@ -62,7 +65,7 @@ pub fn Nav(
                             .unwrap_or_default();
                         let choice = PaletteChoice { id: id.clone() };
                         palette.set(choice.clone());
-                        choice.save();
+                        choice.save_for_theme(theme.get());
                         apply_palette(&choice, theme.get());
                     }>
                     {move || {

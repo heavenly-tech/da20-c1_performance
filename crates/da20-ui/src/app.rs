@@ -13,7 +13,7 @@ pub fn App() -> impl IntoView {
     let phase = RwSignal::new(Phase::Takeoff);
     let locale = RwSignal::new(Locale::load());
     let theme = RwSignal::new(ThemePreference::load());
-    let palette = RwSignal::new(PaletteChoice::load());
+    let palette = RwSignal::new(PaletteChoice::for_theme(theme.get_untracked()));
     let data = RwSignal::new(PerformanceData::production());
     let inputs = RwSignal::new(da20_core::types::FlightInputs::default());
     let store = RwSignal::new(ReadingsStore::load());

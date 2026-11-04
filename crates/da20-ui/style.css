@@ -266,6 +266,16 @@ body {
   }
 }
 
+[data-theme="dark"][data-palette="vfr_chart"] .chart-stroke-user-path,
+[data-theme="dark"][data-palette="vfr_chart"] .chart-marker {
+  stroke-width: 5px;
+}
+
+[data-theme="dark"][data-palette="vfr_chart"] .chart-stroke-guide,
+[data-theme="dark"][data-palette="vfr_chart"] .chart-stroke-guide-active {
+  stroke-width: 2px;
+}
+
 .main {
   padding: 18px;
   max-width: 1400px;

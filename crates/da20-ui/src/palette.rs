@@ -2,21 +2,19 @@ use std::collections::HashMap;
 
 use gloo_storage::{LocalStorage, Storage};
 use leptos::prelude::*;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsCast;
 
 use crate::i18n::{copy, Locale};
 use crate::theme::ThemePreference;
 
-const PALETTE_KEY: &str = "da20_palette_v1";
-pub const BUILTIN_PALETTE_ID: &str = "default";
+const PALETTE_STORE_KEY: &str = "da20_palette_v2";
 const PALETTES_JSON: &str = include_str!("../../../data/palettes.json");
 
-/// Pilot can change the shipped default in one place (code constant mirrors CSS fallbacks).
-pub fn default_palette_id() -> &'static str {
-    BUILTIN_PALETTE_ID
-}
+pub const DEFAULT_LIGHT_PALETTE: &str = "mono_amber";
+pub const DEFAULT_DARK_PALETTE: &str = "vfr_chart";
+/// Brighter hand-path / markers on VFR dark (colour-blind vs blue guides).
+const VFR_DARK_USER_PATH: &str = "#ffc8f5";
 
 const PALETTE_ORDER: &[&str] = &["okabe_ito", "vfr_chart", "mono_amber", "cividis"];
 
@@ -49,59 +47,87 @@ fn file() -> &'static PalettesFile {
     FILE.get_or_init(|| serde_json::from_str(PALETTES_JSON).expect("data/palettes.json must parse"))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub fn default_palette_id(theme: ThemePreference) -> &'static str {
+    match theme {
+        ThemePreference::Light => DEFAULT_LIGHT_PALETTE,
+        ThemePreference::Dark => DEFAULT_DARK_PALETTE,
+    }
+}
+
+fn normalize_palette_id(id: &str, theme: ThemePreference) -> String {
+    if file().contains_key(id) {
+        id.to_string()
+    } else {
+        default_palette_id(theme).to_string()
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct PerThemePalettes {
+    light: Option<String>,
+    dark: Option<String>,
+}
+
+impl PerThemePalettes {
+    fn load() -> Self {
+        LocalStorage::get(PALETTE_STORE_KEY).unwrap_or_default()
+    }
+
+    fn save(&self) {
+        let _ = LocalStorage::set(PALETTE_STORE_KEY, self);
+    }
+
+    fn choice_for(&self, theme: ThemePreference) -> PaletteChoice {
+        let stored = match theme {
+            ThemePreference::Light => self.light.as_deref(),
+            ThemePreference::Dark => self.dark.as_deref(),
+        };
+        PaletteChoice {
+            id: normalize_palette_id(stored.unwrap_or(default_palette_id(theme)), theme),
+        }
+    }
+
+    fn set(&mut self, theme: ThemePreference, id: String) {
+        let id = normalize_palette_id(&id, theme);
+        match theme {
+            ThemePreference::Light => self.light = Some(id),
+            ThemePreference::Dark => self.dark = Some(id),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaletteChoice {
     pub id: String,
 }
 
 impl PaletteChoice {
-    pub fn load() -> Self {
-        LocalStorage::get(PALETTE_KEY).unwrap_or_else(|_| Self::default_choice())
+    pub fn for_theme(theme: ThemePreference) -> Self {
+        PerThemePalettes::load().choice_for(theme)
     }
 
-    pub fn default_choice() -> Self {
-        Self {
-            id: default_palette_id().to_string(),
-        }
-    }
-
-    pub fn save(&self) {
-        let _ = LocalStorage::set(PALETTE_KEY, self);
+    pub fn save_for_theme(&self, theme: ThemePreference) {
+        let mut store = PerThemePalettes::load();
+        store.set(theme, self.id.clone());
+        store.save();
     }
 
     pub fn menu_options(locale: Locale) -> Vec<(String, String)> {
-        let c = copy(locale);
-        let mut out = vec![(
-            BUILTIN_PALETTE_ID.to_string(),
-            c.palette_builtin_default.to_string(),
-        )];
-        for &id in PALETTE_ORDER {
-            if let Some(entry) = file().get(id) {
-                out.push((
-                    id.to_string(),
-                    palette_display_name(locale, id, &entry.name),
-                ));
-            }
-        }
-        out
+        PALETTE_ORDER
+            .iter()
+            .filter_map(|&id| {
+                file().get(id).map(|entry| {
+                    (
+                        id.to_string(),
+                        palette_display_name(locale, id, &entry.name),
+                    )
+                })
+            })
+            .collect()
     }
 
     fn entry(&self) -> Option<&PaletteEntry> {
-        if self.id == BUILTIN_PALETTE_ID {
-            return None;
-        }
         file().get(&self.id)
-    }
-
-    #[allow(dead_code)]
-    pub fn label(&self, locale: Locale) -> String {
-        if self.id == BUILTIN_PALETTE_ID {
-            return copy(locale).palette_builtin_default.to_string();
-        }
-        file()
-            .get(&self.id)
-            .map(|e| palette_display_name(locale, &self.id, &e.name))
-            .unwrap_or_else(|| self.id.clone())
     }
 }
 
@@ -116,35 +142,8 @@ fn palette_display_name(locale: Locale, id: &str, json_name: &str) -> String {
     }
 }
 
-const PALETTE_CSS_VARS: &[&str] = &[
-    "--chart-bg",
-    "--chart-grid",
-    "--chart-label",
-    "--chart-line",
-    "--chart-highlight",
-    "--chart-guide",
-    "--chart-guide-active",
-    "--chart-user-path",
-    "--chart-marker",
-    "--chart-border",
-    "--ok",
-    "--warn",
-    "--bg",
-    "--panel",
-    "--line",
-    "--txt",
-    "--mut",
-    "--amb",
-];
-
 fn set_var(html: &web_sys::HtmlElement, name: &str, value: &str) {
     let _ = html.style().set_property(name, value);
-}
-
-fn clear_palette_vars(html: &web_sys::HtmlElement) {
-    for name in PALETTE_CSS_VARS {
-        let _ = html.style().remove_property(name);
-    }
 }
 
 fn apply_palette_colors(html: &web_sys::HtmlElement, c: &PaletteColors) {
@@ -179,12 +178,7 @@ pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
         return;
     };
     let _ = html.set_attribute("data-palette", &palette.id);
-    if palette.id == BUILTIN_PALETTE_ID {
-        clear_palette_vars(&html);
-        return;
-    }
     let Some(entry) = palette.entry() else {
-        clear_palette_vars(&html);
         return;
     };
     let c = match theme {
@@ -192,6 +186,10 @@ pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
         ThemePreference::Dark => &entry.dark,
     };
     apply_palette_colors(&html, c);
+    if palette.id == "vfr_chart" && theme == ThemePreference::Dark {
+        set_var(&html, "--chart-user-path", VFR_DARK_USER_PATH);
+        set_var(&html, "--chart-marker", VFR_DARK_USER_PATH);
+    }
 }
 
 #[component]
@@ -212,9 +210,22 @@ mod tests {
 
     #[test]
     fn palettes_json_loads() {
-        assert_eq!(default_palette_id(), "default");
         assert_eq!(file().len(), 4);
         assert!(file().contains_key("okabe_ito"));
-        assert!(PaletteChoice::menu_options(Locale::En).len() == 5);
+        assert_eq!(default_palette_id(ThemePreference::Light), "mono_amber");
+        assert_eq!(default_palette_id(ThemePreference::Dark), "vfr_chart");
+        assert_eq!(PaletteChoice::menu_options(Locale::En).len(), 4);
+    }
+
+    #[test]
+    fn per_theme_defaults() {
+        assert_eq!(
+            normalize_palette_id("unknown", ThemePreference::Light),
+            "mono_amber"
+        );
+        assert_eq!(
+            normalize_palette_id("unknown", ThemePreference::Dark),
+            "vfr_chart"
+        );
     }
 }
