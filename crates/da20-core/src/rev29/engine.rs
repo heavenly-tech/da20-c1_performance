@@ -152,7 +152,7 @@ fn wind_panel(
     lines: &[f64],
     wind_kt: &[f64],
     grid: &[Vec<f64>],
-    base_distance_m: f64,
+    entry_distance_m: f64,
     wind_component_kt: f64,
     label: &str,
 ) -> (f64, Vec<CalculationWarning>) {
@@ -160,14 +160,23 @@ fn wind_panel(
     let at_wind: Vec<f64> = grid
         .iter()
         .map(|row| {
-            let (v, w) = linear_interp(lines, row, base_distance_m, label);
+            let (v, w) = linear_interp(lines, row, entry_distance_m, label);
             warnings.extend(w);
             v
         })
         .collect();
-    let (v, w) = linear_interp(wind_kt, &at_wind, wind_component_kt, label);
-    warnings.extend(w);
-    (v, warnings)
+    let sample_at_kt = |kt: f64| -> (f64, Vec<CalculationWarning>) {
+        let (v, w) = linear_interp(wind_kt, &at_wind, kt, label);
+        (v, w)
+    };
+    if wind_component_kt <= 0.0 {
+        return (entry_distance_m, warnings);
+    }
+    let (v0, w0) = sample_at_kt(0.0);
+    warnings.extend(w0);
+    let (v_hw, w_hw) = sample_at_kt(wind_component_kt);
+    warnings.extend(w_hw);
+    (entry_distance_m + (v_hw - v0), warnings)
 }
 
 pub fn obstacle_add_m(
@@ -175,6 +184,9 @@ pub fn obstacle_add_m(
     ground_after_wind_m: f64,
     obstacle_m: f64,
 ) -> (f64, Vec<CalculationWarning>) {
+    if obstacle_m <= 0.0 {
+        return (ground_after_wind_m, vec![]);
+    }
     let (slope, w) = linear_interp(
         &data.obs_lines.value,
         &data.obs_slope_m_per_m.value,
@@ -289,5 +301,15 @@ mod tests {
             "raw chart {raw_ft:.0} ft"
         );
         assert_eq!((raw_ft / 50.0).ceil() as i64 * 50, 1200);
+    }
+
+    #[test]
+    fn wind_panel_anchors_at_entry_distance() {
+        let d = Rev29File::production();
+        let entry = 296.0;
+        let (d0, _) = wind_panel_hw_m(&d, entry, 0.0);
+        assert!((d0 - entry).abs() < f64::EPSILON);
+        let (d4, _) = wind_panel_hw_m(&d, entry, 4.0);
+        assert!(d4.is_finite() && d4 > 0.0);
     }
 }

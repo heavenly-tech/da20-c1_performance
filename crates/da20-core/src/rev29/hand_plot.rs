@@ -456,4 +456,110 @@ mod tests {
     fn y_dist_monotonic() {
         assert!(y_dist(200.0) > y_dist(800.0));
     }
+
+    fn panel_y_continuity(data: &Rev29File, inputs: FlightInputs, pa_ft: f64) {
+        let (hw, tw) = headwind_and_tailwind(&inputs);
+        let weight_kg = lb_to_kg(inputs.weight_lb);
+        let obs_m = inputs
+            .obstacle_height_m
+            .clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
+        let core = takeoff_distances_m(data, pa_ft, inputs.oat_c, weight_kg, hw, tw, obs_m);
+        let path = takeoff_hand_path(data, &inputs, pa_ft);
+
+        let wt_exit_y = y_dist(core.after_weight_m);
+        let wind_x = if tw > 0.0 && hw <= 0.0 {
+            x_tailwind_kt(0.0)
+        } else {
+            TAKEOFF_WIND.x
+        };
+        let wind_entry = path
+            .points
+            .iter()
+            .find(|(x, _)| (*x - wind_x).abs() < 1.5)
+            .unwrap_or_else(|| panic!("no wind entry for {inputs:?}"));
+        assert!(
+            (wind_entry.1 - wt_exit_y).abs() < 0.6,
+            "wind entry y {} vs weight exit y {wt_exit_y}",
+            wind_entry.1
+        );
+
+        let ground_y = y_dist(core.ground_roll_m);
+        let obs_entry = path
+            .points
+            .iter()
+            .find(|(x, _)| *x >= TAKEOFF_OBS.x - 0.5)
+            .unwrap_or_else(|| panic!("no obstacle entry"));
+        assert!(
+            (obs_entry.1 - ground_y).abs() < 0.6,
+            "obstacle entry y {} vs wind exit y {ground_y}",
+            obs_entry.1
+        );
+    }
+
+    #[test]
+    fn takeoff_path_wind_and_obstacle_entries_match_exits() {
+        let data = Rev29File::production();
+        let cases = [
+            FlightInputs {
+                oat_c: 35.0,
+                weight_lb: 1500.0,
+                wind_dir_deg: 270.0,
+                wind_speed_kt: 12.0,
+                runway: "36".into(),
+                obstacle_height_m: 8.0,
+                pa_override: Some(crate::types::PaOverride {
+                    pa_ft: 2500.0,
+                    phase: crate::types::ChartPhase::Takeoff,
+                }),
+                ..Default::default()
+            },
+            FlightInputs {
+                oat_c: 5.0,
+                weight_lb: 1800.0,
+                wind_dir_deg: 90.0,
+                wind_speed_kt: 6.0,
+                runway: "19".into(),
+                obstacle_height_m: 12.0,
+                pa_override: Some(crate::types::PaOverride {
+                    pa_ft: 500.0,
+                    phase: crate::types::ChartPhase::Takeoff,
+                }),
+                ..Default::default()
+            },
+            FlightInputs {
+                oat_c: 21.0,
+                weight_lb: 1598.0,
+                wind_dir_deg: 180.0,
+                wind_speed_kt: 8.0,
+                runway: "36".into(),
+                obstacle_height_m: 5.0,
+                pa_override: Some(crate::types::PaOverride {
+                    pa_ft: 1000.0,
+                    phase: crate::types::ChartPhase::Takeoff,
+                }),
+                ..Default::default()
+            },
+            FlightInputs {
+                oat_c: 28.0,
+                weight_lb: 1650.0,
+                wind_dir_deg: 360.0,
+                wind_speed_kt: 3.0,
+                runway: "09".into(),
+                obstacle_height_m: 0.0,
+                pa_override: Some(crate::types::PaOverride {
+                    pa_ft: 3500.0,
+                    phase: crate::types::ChartPhase::Takeoff,
+                }),
+                ..Default::default()
+            },
+        ];
+        for inputs in cases {
+            let pa = inputs
+                .pa_override
+                .as_ref()
+                .map(|o| o.pa_ft)
+                .unwrap_or(2130.0);
+            panel_y_continuity(&data, inputs, pa);
+        }
+    }
 }
