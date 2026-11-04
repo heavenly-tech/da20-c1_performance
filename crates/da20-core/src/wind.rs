@@ -2,49 +2,47 @@ use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::types::{CalculationWarning, FlightInputs, WindComponents, WindResult};
 
-/// Parse runway orientation: designator (1–2 digits, optional L/R/C) × 10°, or 3-digit magnetic heading.
-pub fn runway_heading_deg(runway: &str) -> Option<f64> {
+/// Validation state for the runway heading field (3-digit magnetic only, 001–360).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunwayHeadingStatus {
+    Empty,
+    Valid,
+    /// One or two digits only (e.g. `19` — could mean 019°).
+    AmbiguousShort,
+    Invalid,
+}
+
+/// Classify runway heading input without parsing a degree value.
+pub fn runway_heading_status(runway: &str) -> RunwayHeadingStatus {
     let s = runway.trim();
     if s.is_empty() {
+        return RunwayHeadingStatus::Empty;
+    }
+    if s.chars().all(|c| c.is_ascii_digit()) {
+        match s.len() {
+            1 | 2 => RunwayHeadingStatus::AmbiguousShort,
+            3 => {
+                let deg: u32 = s.parse().unwrap_or(0);
+                if (1..=360).contains(&deg) {
+                    RunwayHeadingStatus::Valid
+                } else {
+                    RunwayHeadingStatus::Invalid
+                }
+            }
+            _ => RunwayHeadingStatus::Invalid,
+        }
+    } else {
+        RunwayHeadingStatus::Invalid
+    }
+}
+
+/// Magnetic runway heading in degrees (001–360), or `None` if not exactly three valid digits.
+pub fn runway_heading_deg(runway: &str) -> Option<f64> {
+    let s = runway.trim();
+    if runway_heading_status(s) != RunwayHeadingStatus::Valid {
         return None;
     }
-    let upper: String = s
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphabetic() {
-                c.to_ascii_uppercase()
-            } else {
-                c
-            }
-        })
-        .collect();
-    let designator = upper.trim_end_matches(['L', 'R', 'C']);
-    let digits: String = designator
-        .chars()
-        .filter(|c| c.is_ascii_digit())
-        .collect();
-    if digits.is_empty() {
-        return None;
-    }
-    match digits.len() {
-        3 => {
-            let deg: f64 = digits.parse().ok()?;
-            if (0.0..=360.0).contains(&deg) {
-                Some(deg)
-            } else {
-                None
-            }
-        }
-        1 | 2 => {
-            let n: f64 = digits.parse().ok()?;
-            if (0.0..=36.0).contains(&n) {
-                Some(n * 10.0)
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
+    s.parse().ok()
 }
 
 pub fn wind_components(
@@ -98,9 +96,17 @@ pub fn compute_wind(
     inputs: &FlightInputs,
 ) -> Result<WindResult, WindError> {
     let mut warnings = Vec::new();
-    let rwy = match runway_heading_deg(&inputs.runway) {
-        Some(h) => h,
-        None => {
+    let status = runway_heading_status(&inputs.runway);
+    let rwy = match status {
+        RunwayHeadingStatus::Valid => runway_heading_deg(&inputs.runway).unwrap_or(0.0),
+        RunwayHeadingStatus::AmbiguousShort => {
+            warnings.push(CalculationWarning::with_args(
+                "RUNWAY_HEADING_AMBIGUOUS",
+                vec![inputs.runway.clone()],
+            ));
+            0.0
+        }
+        RunwayHeadingStatus::Empty | RunwayHeadingStatus::Invalid => {
             warnings.push(CalculationWarning::with_args(
                 "RUNWAY_HEADING",
                 vec![inputs.runway.clone()],
@@ -141,12 +147,30 @@ mod tests {
     }
 
     #[test]
-    fn runway_designator_and_magnetic_heading() {
-        assert_eq!(runway_heading_deg("19"), Some(190.0));
-        assert_eq!(runway_heading_deg("193"), Some(193.0));
-        assert_eq!(runway_heading_deg("09L"), Some(90.0));
-        assert_eq!(runway_heading_deg(" 19R "), Some(190.0));
-        assert!((runway_heading_deg("193").unwrap() - runway_heading_deg("19").unwrap()).abs() > 0.5);
+    fn runway_heading_three_digit_magnetic_only() {
+        for ok in ["190", "193", "019", "360", "001", " 360 "] {
+            assert_eq!(
+                runway_heading_status(ok),
+                RunwayHeadingStatus::Valid,
+                "{ok}"
+            );
+            assert!(runway_heading_deg(ok).is_some(), "{ok}");
+        }
+        assert_eq!(runway_heading_deg("019").unwrap(), 19.0);
+        assert_eq!(runway_heading_deg("360").unwrap(), 360.0);
+
+        for bad in ["19", "9", "000", "361", "09L", "abc"] {
+            assert_ne!(
+                runway_heading_status(bad),
+                RunwayHeadingStatus::Valid,
+                "{bad}"
+            );
+            assert!(runway_heading_deg(bad).is_none(), "{bad}");
+        }
+        assert_eq!(runway_heading_status("19"), RunwayHeadingStatus::AmbiguousShort);
+        assert_eq!(runway_heading_status("9"), RunwayHeadingStatus::AmbiguousShort);
+        assert_eq!(runway_heading_status("000"), RunwayHeadingStatus::Invalid);
+        assert_eq!(runway_heading_status("09L"), RunwayHeadingStatus::Invalid);
     }
 
     #[test]

@@ -98,7 +98,7 @@ mod tests {
                 weight_lb: 725.0 / 0.45359237,
                 wind_dir_deg: 0.0,
                 wind_speed_kt: 4.0,
-                runway: "36".into(),
+                runway: "360".into(),
                 obstacle_height_m: 5.0,
                 ..Default::default()
             },

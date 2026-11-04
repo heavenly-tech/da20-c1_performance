@@ -359,7 +359,7 @@ mod tests {
             weight_lb: 1600.0,
             wind_dir_deg: 0.0,
             wind_speed_kt: 4.0,
-            runway: "36".into(),
+            runway: "360".into(),
             obstacle_height_m: 5.0,
             pa_override: Some(crate::types::PaOverride {
                 pa_ft: 1000.0,
@@ -533,7 +533,7 @@ mod tests {
                 weight_lb: 1500.0,
                 wind_dir_deg: 270.0,
                 wind_speed_kt: 12.0,
-                runway: "36".into(),
+                runway: "360".into(),
                 obstacle_height_m: 8.0,
                 pa_override: Some(crate::types::PaOverride {
                     pa_ft: 2500.0,
@@ -546,7 +546,7 @@ mod tests {
                 weight_lb: 1800.0,
                 wind_dir_deg: 90.0,
                 wind_speed_kt: 6.0,
-                runway: "19".into(),
+                runway: "190".into(),
                 obstacle_height_m: 12.0,
                 pa_override: Some(crate::types::PaOverride {
                     pa_ft: 500.0,
@@ -559,7 +559,7 @@ mod tests {
                 weight_lb: 1598.0,
                 wind_dir_deg: 180.0,
                 wind_speed_kt: 8.0,
-                runway: "36".into(),
+                runway: "360".into(),
                 obstacle_height_m: 5.0,
                 pa_override: Some(crate::types::PaOverride {
                     pa_ft: 1000.0,
@@ -572,7 +572,7 @@ mod tests {
                 weight_lb: 1650.0,
                 wind_dir_deg: 360.0,
                 wind_speed_kt: 3.0,
-                runway: "09".into(),
+                runway: "090".into(),
                 obstacle_height_m: 0.0,
                 pa_override: Some(crate::types::PaOverride {
                     pa_ft: 3500.0,
@@ -603,7 +603,7 @@ mod tests {
             weight_lb: 1500.0,
             wind_dir_deg: 270.0,
             wind_speed_kt: 12.0,
-            runway: "36".into(),
+            runway: "360".into(),
             obstacle_height_m: 8.0,
             ..Default::default()
         };

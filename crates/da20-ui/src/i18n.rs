@@ -74,6 +74,8 @@ pub struct Copy {
     pub qnh_dual: &'static str,
     pub oat: &'static str,
     pub runway: &'static str,
+    pub runway_heading_ambiguous: &'static str,
+    pub runway_heading_invalid: &'static str,
     pub wind: &'static str,
     pub wind_head: &'static str,
     pub wind_tail: &'static str,
@@ -182,6 +184,9 @@ const ES: Copy = Copy {
     qnh_dual: "QNH (hPa / inHg)",
     oat: "OAT (°C)",
     runway: "Orientación pista",
+    runway_heading_ambiguous:
+        "Use 3 dígitos magnéticos (001–360). «19» es ambiguo (¿019?).",
+    runway_heading_invalid: "Rumbo inválido: ingrese 001–360 (3 dígitos).",
     wind: "Viento (° / kt)",
     wind_head: "Viento de frente",
     wind_tail: "Viento de cola",
@@ -283,6 +288,9 @@ const EN: Copy = Copy {
     qnh_dual: "QNH (hPa / inHg)",
     oat: "OAT (°C)",
     runway: "Runway heading",
+    runway_heading_ambiguous:
+        "Use a 3-digit magnetic heading (001–360). “19” is ambiguous (019?).",
+    runway_heading_invalid: "Invalid heading: enter 001–360 as three digits.",
     wind: "Wind (° / kt)",
     wind_head: "Headwind",
     wind_tail: "Tailwind",
@@ -462,7 +470,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-8, Figure 5.3",
         summary: "Headwind/crosswind by trigonometry; display 200 / 08 kt.",
         interpolation: "N/A for components.",
-        limitations: "Runway: 1–2 digits (optional L/R/C) × 10°, or 3-digit magnetic heading; warning if invalid.",
+        limitations: "Runway heading: three-digit magnetic 001–360 only; 1–2 digits flagged as ambiguous.",
     },
     MethodCopy {
         title: "Endurance & range (derived)",
@@ -579,8 +587,20 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             Locale::En => "Table 3 GPH transcribed from AFM Rev 29.".into(),
         },
         "RUNWAY_HEADING" => match locale {
-            Locale::Es => format!("Pista '{ctx}' sin rumbo numérico — 0°."),
-            Locale::En => format!("Runway '{ctx}' has no numeric heading — 0°."),
+            Locale::Es => format!(
+                "Rumbo de pista «{ctx}» inválido — use 001–360 (3 dígitos); cálculo con 0°."
+            ),
+            Locale::En => format!(
+                "Runway heading «{ctx}» invalid — use 001–360 (3 digits); calculation uses 0°."
+            ),
+        },
+        "RUNWAY_HEADING_AMBIGUOUS" => match locale {
+            Locale::Es => format!(
+                "Rumbo «{ctx}» ambiguo — use 3 dígitos (p. ej. 019, no 19); cálculo con 0°."
+            ),
+            Locale::En => format!(
+                "Heading «{ctx}» ambiguous — use 3 digits (e.g. 019, not 19); calculation uses 0°."
+            ),
         },
         "TAILWIND" => match locale {
             Locale::Es => format!("Cola {a1} kt."),

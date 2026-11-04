@@ -5,7 +5,7 @@ pub mod defaults {
     pub const FIELD_ELEVATION_FT: f64 = 2130.0;
     pub const QNH_HPA: f64 = 1013.0;
     pub const OAT_C: f64 = 20.0;
-    pub const RUNWAY: &str = "19";
+    pub const RUNWAY: &str = "190";
     pub const WIND_DIR_DEG: f64 = 200.0;
     pub const WIND_SPEED_KT: f64 = 8.0;
     pub const WEIGHT_LB: f64 = 1764.0;

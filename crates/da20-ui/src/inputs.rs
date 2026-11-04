@@ -5,7 +5,10 @@ use da20_core::pressure::{
 };
 use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
-use da20_core::wind::{headwind_tailwind_kt, runway_heading_deg, wind_components};
+use da20_core::wind::{
+    headwind_tailwind_kt, runway_heading_deg, runway_heading_status, wind_components,
+    RunwayHeadingStatus,
+};
 use da20_core::wind_format::{format_wind, parse_wind};
 use leptos::prelude::*;
 
@@ -62,8 +65,21 @@ pub fn SharedAirfieldInputs(
                     set=move |v| inputs.update(|i| i.oat_c = v)/>
                 <div class="f">
                     <label>{c.runway}</label>
-                    <input prop:value=move || inputs.get().runway.clone()
+                    <input class="mono" maxlength="3"
+                        prop:value=move || inputs.get().runway.clone()
                         on:input=move |ev| inputs.update(|i| i.runway = input_value(&ev))/>
+                    {move || {
+                        let c = copy(locale.get());
+                        match runway_heading_status(&inputs.get().runway) {
+                            RunwayHeadingStatus::AmbiguousShort => view! {
+                                <p class="lab field-error">{c.runway_heading_ambiguous}</p>
+                            }.into_any(),
+                            RunwayHeadingStatus::Invalid => view! {
+                                <p class="lab field-error">{c.runway_heading_invalid}</p>
+                            }.into_any(),
+                            _ => ().into_any(),
+                        }
+                    }}
                 </div>
                 <WindField locale=locale inputs=inputs/>
                 {(!override_active).then(|| {
@@ -248,6 +264,9 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
             {move || {
                 let c = copy(locale.get());
                 let i = inputs.get();
+                if runway_heading_status(&i.runway) != RunwayHeadingStatus::Valid {
+                    return ().into_any();
+                }
                 let rwy = runway_heading_deg(&i.runway).unwrap_or(0.0);
                 let comp = wind_components(i.wind_dir_deg, i.wind_speed_kt, rwy);
                 let (hw, tw) = headwind_tailwind_kt(&comp);
@@ -265,6 +284,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                         " kt"
                     </p>
                 }
+                .into_any()
             }}
         </div>
     }
