@@ -127,7 +127,7 @@ pub fn InteractiveChart(
                 {move || {
                     let d = data.get();
                     let i = inputs.get();
-                    render_svg(kind, &d, &i, cursor_x.get(), cursor_y.get())
+                    render_svg(kind, locale.get(), &d, &i, cursor_x.get(), cursor_y.get())
                 }}
             </svg>
             <p class="cursor-readout mono">
@@ -166,14 +166,15 @@ fn norm_axis(axis: &[f64], value: f64) -> f64 {
 
 fn render_svg(
     kind: ChartKind,
+    locale: Locale,
     data: &PerformanceData,
     inputs: &FlightInputs,
     cx: f64,
     cy: f64,
 ) -> impl IntoView {
     let inner = data.inner();
-    let (polylines, x_label, y_label, x_min, x_max, y_min, y_max, highlight_idx) =
-        chart_spec(kind, inner, inputs);
+    let (x_label, y_label) = chart_axis_labels(locale, kind);
+    let (polylines, x_min, x_max, y_min, y_max, highlight_idx) = chart_spec(kind, inner, inputs);
 
     let phase = chart_phase(kind);
     let pa = effective_pressure_altitude_ft(inputs, phase);
@@ -309,32 +310,31 @@ fn readout_pair(
     (chart, core)
 }
 
+fn chart_axis_labels(locale: Locale, kind: ChartKind) -> (&'static str, &'static str) {
+    let c = copy(locale);
+    match kind {
+        ChartKind::Takeoff => (c.axis_oat_c, c.axis_base_roll_m),
+        ChartKind::Climb => (c.axis_ea_ft, c.axis_roc_fpm),
+        ChartKind::Landing => (c.axis_pa_ft, c.axis_dist_ft),
+        ChartKind::Wind => (c.axis_angle_deg, c.axis_hw_kt),
+    }
+}
+
 fn chart_spec(
     kind: ChartKind,
     inner: &da20_core::rev29::types::Rev29File,
     inputs: &FlightInputs,
-) -> (
-    Vec<Polyline>,
-    &'static str,
-    &'static str,
-    f64,
-    f64,
-    f64,
-    f64,
-    Option<usize>,
-) {
+) -> (Vec<Polyline>, f64, f64, f64, f64, Option<usize>) {
     let phase = chart_phase(kind);
     let pa = effective_pressure_altitude_ft(inputs, phase);
     match kind {
         ChartKind::Takeoff => {
             let pl = takeoff_base_curves(inner);
             let hi = nearest_pa_index(&inner.to_pa.value, pa);
-            (pl, "OAT °C", "Base roll m", -20.0, 55.0, 150.0, 1000.0, hi)
+            (pl, -20.0, 55.0, 150.0, 1000.0, hi)
         }
         ChartKind::Climb => (
             vec![climb_roc_vs_ea(inner, inputs.climb_figure.roc_key())],
-            "EA ft",
-            "ROC fpm",
             0.0,
             14_000.0,
             0.0,
@@ -343,21 +343,10 @@ fn chart_spec(
         ),
         ChartKind::Landing => {
             let (roll, dist) = landing_table_curves(inner);
-            (
-                vec![roll, dist],
-                "PA ft",
-                "ft",
-                0.0,
-                7000.0,
-                600.0,
-                1600.0,
-                None,
-            )
+            (vec![roll, dist], 0.0, 7000.0, 600.0, 1600.0, None)
         }
         ChartKind::Wind => (
             vec![wind_headwind_vs_angle(inputs.wind_speed_kt.max(1.0))],
-            "Angle °",
-            "HW kt",
             0.0,
             90.0,
             0.0,
