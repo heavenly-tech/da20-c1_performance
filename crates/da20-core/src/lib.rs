@@ -6,6 +6,7 @@ pub mod altitude;
 pub mod climb;
 pub mod cruise;
 pub mod data;
+pub mod endurance;
 pub mod equivalent_altitude;
 pub mod interpolation;
 pub mod landing;
@@ -16,6 +17,7 @@ pub mod rev29;
 pub mod takeoff;
 pub mod types;
 pub mod wind;
+pub mod wind_format;
 
 pub use data::PerformanceData;
 pub use types::*;

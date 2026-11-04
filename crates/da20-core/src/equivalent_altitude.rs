@@ -7,8 +7,7 @@ pub fn equivalent_altitude_ft(
     pressure_altitude_ft: f64,
     oat_c: f64,
 ) -> (f64, Vec<CalculationWarning>) {
-    let eq = crate::rev29::engine::equivalent_altitude_ft(data.inner(), pressure_altitude_ft, oat_c);
-    (eq, vec![])
+    crate::rev29::engine::equivalent_altitude_ft(data.inner(), pressure_altitude_ft, oat_c)
 }
 
 pub fn equivalent_altitude_with_provenance(
@@ -24,14 +23,17 @@ pub fn equivalent_altitude_with_provenance(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::altitude::pressure_altitude_ft;
+    use crate::altitude::{effective_pressure_altitude_ft, pressure_altitude_ft};
     use crate::data::PerformanceData;
 
     #[test]
     fn sctb_equivalent_altitude_finite() {
         let data = PerformanceData::production();
-        let pa = pressure_altitude_ft(2130.0, 1013.0);
+        let inputs = crate::types::FlightInputs::default();
+        let pa = effective_pressure_altitude_ft(&inputs);
         let (eq, _) = equivalent_altitude_ft(&data, pa, 20.0);
         assert!(eq.is_finite());
+        let pa2 = pressure_altitude_ft(2130.0, 1013.0);
+        assert!((pa - pa2).abs() < 1.0);
     }
 }

@@ -2,10 +2,13 @@ use leptos::prelude::*;
 
 mod app;
 mod components;
-mod hand_plot;
-mod planner;
+mod i18n;
+mod inputs;
+mod interactive_chart;
+mod phases;
 mod readings;
 mod storage;
+mod theme;
 
 use app::App;
 

@@ -188,16 +188,26 @@ mod tests {
 
     #[test]
     fn interpolate_1d_interior() {
-        let (v, w) = interpolate_1d(&[0.0, 10.0], &[0.0, 100.0], 5.0, ExtrapolationPolicy::Strict)
-            .unwrap();
+        let (v, w) = interpolate_1d(
+            &[0.0, 10.0],
+            &[0.0, 100.0],
+            5.0,
+            ExtrapolationPolicy::Strict,
+        )
+        .unwrap();
         assert!((v - 50.0).abs() < 1e-9);
         assert!(w.is_empty());
     }
 
     #[test]
     fn interpolate_1d_clamp_warns() {
-        let (v, w) =
-            interpolate_1d(&[0.0, 10.0], &[0.0, 100.0], -5.0, ExtrapolationPolicy::Clamp).unwrap();
+        let (v, w) = interpolate_1d(
+            &[0.0, 10.0],
+            &[0.0, 100.0],
+            -5.0,
+            ExtrapolationPolicy::Clamp,
+        )
+        .unwrap();
         assert!((v - 0.0).abs() < 1e-9);
         assert_eq!(w.len(), 1);
     }

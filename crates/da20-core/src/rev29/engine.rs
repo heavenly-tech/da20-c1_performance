@@ -1,38 +1,61 @@
 use crate::interpolation::{interpolate_1d, ExtrapolationPolicy};
 use crate::rev29::types::Rev29File;
+use crate::types::CalculationWarning;
 
 const M_TO_FT: f64 = 3.280839895;
 
-pub fn linear_interp(axis: &[f64], values: &[f64], x: f64) -> f64 {
-    interpolate_1d(axis, values, x, ExtrapolationPolicy::AllowExtrapolate)
-        .map(|(v, _)| v)
-        .unwrap_or_else(|_| {
+pub fn linear_interp(
+    axis: &[f64],
+    values: &[f64],
+    x: f64,
+    axis_label: &str,
+) -> (f64, Vec<CalculationWarning>) {
+    match interpolate_1d(axis, values, x, ExtrapolationPolicy::Clamp) {
+        Ok((v, mut w)) => {
+            for warn in &mut w {
+                warn.message = format!("{axis_label}: {}", warn.message);
+            }
+            (v, w)
+        }
+        Err(_) => {
             if axis.is_empty() {
-                return 0.0;
-            }
-            if x <= axis[0] {
-                values[0]
+                (0.0, vec![])
+            } else if x <= axis[0] {
+                (values[0], vec![])
             } else {
-                *values.last().unwrap()
+                (*values.last().unwrap_or(&values[0]), vec![])
             }
-        })
+        }
+    }
 }
 
-pub fn equivalent_altitude_ft(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
+pub fn equivalent_altitude_ft(
+    data: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+) -> (f64, Vec<CalculationWarning>) {
     let fan_t = &data.fan_t.value;
     let fan_pa = &data.fan_pa.value;
     let fan_ea = &data.fan_ea.value;
+    let mut warnings = Vec::new();
     let row_values: Vec<f64> = fan_ea
         .iter()
-        .map(|row| linear_interp(fan_t, row, oat_c))
+        .map(|row| {
+            let (v, w) = linear_interp(fan_t, row, oat_c, "Fig 5.2 OAT");
+            warnings.extend(w);
+            v
+        })
         .collect();
-    linear_interp(fan_pa, &row_values, pa_ft)
+    let (ea, w) = linear_interp(fan_pa, &row_values, pa_ft, "Fig 5.2 PA");
+    warnings.extend(w);
+    (ea, warnings)
 }
 
-pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
+pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<CalculationWarning>) {
     let to_t = &data.to_t.value;
     let to_pa = &data.to_pa.value;
     let to_base = &data.to_base_m.value;
+    let mut warnings = Vec::new();
     let row_values: Vec<f64> = to_base
         .iter()
         .map(|row| {
@@ -43,22 +66,53 @@ pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
                 .map(|(t, _)| t)
                 .collect();
             let ys: Vec<f64> = row.iter().filter_map(|v| *v).collect();
-            linear_interp(&xs, &ys, oat_c)
+            let (v, w) = linear_interp(&xs, &ys, oat_c, "Fig 5.4 OAT");
+            warnings.extend(w);
+            v
         })
         .collect();
-    linear_interp(to_pa, &row_values, pa_ft)
+    let (base, w) = linear_interp(to_pa, &row_values, pa_ft, "Fig 5.4 PA");
+    warnings.extend(w);
+    (base, warnings)
 }
 
-pub fn weight_factor(data: &Rev29File, weight_kg: f64) -> f64 {
-    linear_interp(&data.wt_kg.value, &data.wt_f.value, weight_kg)
+pub fn weight_factor(data: &Rev29File, weight_kg: f64) -> (f64, Vec<CalculationWarning>) {
+    linear_interp(
+        &data.wt_kg.value,
+        &data.wt_f.value,
+        weight_kg,
+        "Fig 5.4 weight",
+    )
 }
 
-pub fn wind_panel_hw_m(data: &Rev29File, base_distance_m: f64, headwind_kt: f64) -> f64 {
-    wind_panel(&data.hw_lines.value, &data.hw_kt.value, &data.hw_m.value, base_distance_m, headwind_kt)
+pub fn wind_panel_hw_m(
+    data: &Rev29File,
+    base_distance_m: f64,
+    headwind_kt: f64,
+) -> (f64, Vec<CalculationWarning>) {
+    wind_panel(
+        &data.hw_lines.value,
+        &data.hw_kt.value,
+        &data.hw_m.value,
+        base_distance_m,
+        headwind_kt,
+        "Fig 5.4 headwind panel",
+    )
 }
 
-pub fn wind_panel_tw_m(data: &Rev29File, base_distance_m: f64, tailwind_kt: f64) -> f64 {
-    wind_panel(&data.tw_lines.value, &data.tw_kt.value, &data.tw_m.value, base_distance_m, tailwind_kt)
+pub fn wind_panel_tw_m(
+    data: &Rev29File,
+    base_distance_m: f64,
+    tailwind_kt: f64,
+) -> (f64, Vec<CalculationWarning>) {
+    wind_panel(
+        &data.tw_lines.value,
+        &data.tw_kt.value,
+        &data.tw_m.value,
+        base_distance_m,
+        tailwind_kt,
+        "Fig 5.4 tailwind panel",
+    )
 }
 
 fn wind_panel(
@@ -67,21 +121,35 @@ fn wind_panel(
     grid: &[Vec<f64>],
     base_distance_m: f64,
     wind_component_kt: f64,
-) -> f64 {
+    label: &str,
+) -> (f64, Vec<CalculationWarning>) {
+    let mut warnings = Vec::new();
     let at_wind: Vec<f64> = grid
         .iter()
-        .map(|row| linear_interp(lines, row, base_distance_m))
+        .map(|row| {
+            let (v, w) = linear_interp(lines, row, base_distance_m, label);
+            warnings.extend(w);
+            v
+        })
         .collect();
-    linear_interp(wind_kt, &at_wind, wind_component_kt)
+    let (v, w) = linear_interp(wind_kt, &at_wind, wind_component_kt, label);
+    warnings.extend(w);
+    (v, warnings)
 }
 
-pub fn obstacle_add_m(data: &Rev29File, ground_after_wind_m: f64, obstacle_m: f64) -> f64 {
-    let slope = linear_interp(
+pub fn obstacle_add_m(
+    data: &Rev29File,
+    ground_after_wind_m: f64,
+    obstacle_m: f64,
+) -> (f64, Vec<CalculationWarning>) {
+    let (slope, w) = linear_interp(
         &data.obs_lines.value,
         &data.obs_slope_m_per_m.value,
         ground_after_wind_m,
+        "Fig 5.4 obstacle slope",
     );
-    ground_after_wind_m + slope * obstacle_m
+    let warnings = w;
+    (ground_after_wind_m + slope * obstacle_m, warnings)
 }
 
 pub struct TakeoffDistancesM {
@@ -89,6 +157,7 @@ pub struct TakeoffDistancesM {
     pub after_weight_m: f64,
     pub ground_roll_m: f64,
     pub over_obstacle_m: f64,
+    pub warnings: Vec<CalculationWarning>,
 }
 
 pub fn takeoff_distances_m(
@@ -100,37 +169,56 @@ pub fn takeoff_distances_m(
     tailwind_kt: f64,
     obstacle_m: f64,
 ) -> TakeoffDistancesM {
-    let base = takeoff_base_m(data, pa_ft, oat_c);
-    let after_weight = base * weight_factor(data, weight_kg);
-    let mut ground = after_weight;
-    if headwind_kt > 0.0 {
-        ground = wind_panel_hw_m(data, after_weight, headwind_kt);
+    let (base, mut warnings) = takeoff_base_m(data, pa_ft, oat_c);
+    let (wf, w1) = weight_factor(data, weight_kg);
+    warnings.extend(w1);
+    let after_weight = base * wf;
+    let (ground, w2) = if headwind_kt > 0.0 {
+        wind_panel_hw_m(data, after_weight, headwind_kt)
     } else if tailwind_kt > 0.0 {
-        ground = wind_panel_tw_m(data, after_weight, tailwind_kt);
-    }
-    let over_obstacle = obstacle_add_m(data, ground, obstacle_m);
+        wind_panel_tw_m(data, after_weight, tailwind_kt)
+    } else {
+        (after_weight, vec![])
+    };
+    warnings.extend(w2);
+    let (over_obstacle, w3) = obstacle_add_m(data, ground, obstacle_m);
+    warnings.extend(w3);
     TakeoffDistancesM {
         base_m: base,
         after_weight_m: after_weight,
         ground_roll_m: ground,
         over_obstacle_m: over_obstacle,
+        warnings,
     }
 }
 
-pub fn rate_of_climb_fpm(data: &Rev29File, roc_key: &str, pa_ft: f64, oat_c: f64) -> Option<f64> {
+pub fn rate_of_climb_fpm(
+    data: &Rev29File,
+    roc_key: &str,
+    pa_ft: f64,
+    oat_c: f64,
+) -> Option<(f64, Vec<CalculationWarning>)> {
     let [a, b] = *data.roc.value.get(roc_key)?;
-    Some(a + b * equivalent_altitude_ft(data, pa_ft, oat_c))
+    let (ea, warnings) = equivalent_altitude_ft(data, pa_ft, oat_c);
+    Some((a + b * ea, warnings))
 }
 
-pub fn landing_lookup_ft(data: &Rev29File, pa_ft: f64) -> (f64, f64) {
-    let roll = linear_interp(&data.land_alt.value, &data.land_roll.value, pa_ft);
-    let over_50 = linear_interp(&data.land_alt.value, &data.land_50ft.value, pa_ft);
-    (roll, over_50)
-}
-
-pub fn landing_lookup_m(data: &Rev29File, pa_ft: f64) -> (f64, f64) {
-    let (roll_ft, over_ft) = landing_lookup_ft(data, pa_ft);
-    (roll_ft / M_TO_FT, over_ft / M_TO_FT)
+pub fn landing_lookup_ft(data: &Rev29File, pa_ft: f64) -> (f64, f64, Vec<CalculationWarning>) {
+    let (roll, w1) = linear_interp(
+        &data.land_alt.value,
+        &data.land_roll.value,
+        pa_ft,
+        "Table 4 PA",
+    );
+    let (over_50, w2) = linear_interp(
+        &data.land_alt.value,
+        &data.land_50ft.value,
+        pa_ft,
+        "Table 4 PA",
+    );
+    let mut warnings = w1;
+    warnings.extend(w2);
+    (roll, over_50, warnings)
 }
 
 pub fn lb_to_kg(lb: f64) -> f64 {
@@ -145,6 +233,11 @@ pub fn fahrenheit_to_celsius(f: f64) -> f64 {
     (f - 32.0) / 1.8
 }
 
+// Back-compat helpers for tests expecting f64 only
+pub fn equivalent_altitude_ft_value(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
+    equivalent_altitude_ft(data, pa_ft, oat_c).0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,7 +245,15 @@ mod tests {
     #[test]
     fn rev29_worked_takeoff_chain_matches_reference_script() {
         let d = Rev29File::production();
-        let t = takeoff_distances_m(&d, 1000.0, fahrenheit_to_celsius(72.0), 725.0, 4.0, 0.0, 5.0);
+        let t = takeoff_distances_m(
+            &d,
+            1000.0,
+            fahrenheit_to_celsius(72.0),
+            725.0,
+            4.0,
+            0.0,
+            5.0,
+        );
         assert!((t.over_obstacle_m - 356.0).abs() < 0.5);
     }
 }

@@ -11,6 +11,31 @@ pub mod defaults {
     pub const WEIGHT_LB: f64 = 1764.0;
     pub const CRUISE_PRESSURE_ALT_FT: f64 = 6500.0;
     pub const CRUISE_RPM: f64 = 2600.0;
+    /// AFM Section 1 — usable fuel (US gal).
+    pub const FUEL_USABLE_US_GAL: f64 = 23.5;
+    pub const FUEL_RESERVE_US_GAL: f64 = 4.5;
+}
+
+/// AFM climb chart selection (flap configuration / flight phase).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum ClimbFigure {
+    /// Figure 5.5 — cruise flaps, normal climb.
+    #[default]
+    Fig55CruiseFlaps,
+    /// Figure 5.6 — takeoff flaps.
+    Fig56TakeoffFlaps,
+    /// Figure 5.8 — balked landing.
+    Fig58BalkedLanding,
+}
+
+impl ClimbFigure {
+    pub fn roc_key(self) -> &'static str {
+        match self {
+            Self::Fig55CruiseFlaps => "cruise_5_5",
+            Self::Fig56TakeoffFlaps => "takeoff_5_6",
+            Self::Fig58BalkedLanding => "balked_5_8",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -27,6 +52,24 @@ pub struct FlightInputs {
     /// Obstacle height for Fig 5.4 sheet 2 (AFM example uses 5 m / 16 ft).
     #[serde(default = "default_obstacle_m")]
     pub obstacle_height_m: f64,
+    /// When set (hand-plot / chart entry), used as PA instead of elev+QNH.
+    #[serde(default)]
+    pub direct_pressure_altitude_ft: Option<f64>,
+    #[serde(default)]
+    pub climb_figure: ClimbFigure,
+    /// Usable fuel for derived endurance (AFM Sec 1 default).
+    #[serde(default = "default_fuel_usable")]
+    pub fuel_usable_us_gal: f64,
+    #[serde(default = "default_fuel_reserve")]
+    pub fuel_reserve_us_gal: f64,
+}
+
+fn default_fuel_usable() -> f64 {
+    defaults::FUEL_USABLE_US_GAL
+}
+
+fn default_fuel_reserve() -> f64 {
+    defaults::FUEL_RESERVE_US_GAL
 }
 
 fn default_obstacle_m() -> f64 {
@@ -46,6 +89,10 @@ impl Default for FlightInputs {
             cruise_pressure_alt_ft: defaults::CRUISE_PRESSURE_ALT_FT,
             cruise_rpm: defaults::CRUISE_RPM,
             obstacle_height_m: 5.0,
+            direct_pressure_altitude_ft: None,
+            climb_figure: ClimbFigure::default(),
+            fuel_usable_us_gal: defaults::FUEL_USABLE_US_GAL,
+            fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
         }
     }
 }
@@ -127,9 +174,23 @@ pub struct WindResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EnduranceResult {
+    pub provenance: ProvenanceBlock,
+    pub fuel_flow_us_gal_h: f64,
+    pub tas_kt: f64,
+    pub endurance_h: f64,
+    pub range_nm: f64,
+    pub usable_us_gal: f64,
+    pub reserve_us_gal: f64,
+    pub warnings: Vec<CalculationWarning>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SavedReading {
     pub id: String,
     pub label: String,
+    #[serde(default)]
+    pub phase: String,
     pub created_at_iso: String,
     pub inputs: FlightInputs,
     pub takeoff: Option<TakeoffResult>,
@@ -137,4 +198,6 @@ pub struct SavedReading {
     pub cruise: Option<CruiseResult>,
     pub landing: Option<LandingResult>,
     pub wind: Option<WindResult>,
+    #[serde(default)]
+    pub endurance: Option<EnduranceResult>,
 }

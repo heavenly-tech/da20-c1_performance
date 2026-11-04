@@ -1,6 +1,6 @@
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
-use crate::types::{FlightInputs, WindComponents, WindResult};
+use crate::types::{CalculationWarning, FlightInputs, WindComponents, WindResult};
 
 pub fn runway_heading_deg(runway: &str) -> Option<f64> {
     let digits: String = runway.chars().filter(|c| c.is_ascii_digit()).collect();
@@ -26,24 +26,46 @@ pub fn wind_components(
     }
 }
 
-#[derive(Debug, thiserror::Error, PartialEq)]
-pub enum WindError {
-    #[error("wind calculation failed")]
-    Failed,
-}
-
 pub fn compute_wind(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<WindResult, WindError> {
-    let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
+    let mut warnings = Vec::new();
+    let rwy = match runway_heading_deg(&inputs.runway) {
+        Some(h) => h,
+        None => {
+            warnings.push(CalculationWarning {
+                code: "RUNWAY_HEADING".into(),
+                message: format!(
+                    "Runway '{}' has no numeric heading — using 0° for wind components.",
+                    inputs.runway
+                ),
+            });
+            0.0
+        }
+    };
     let components = wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy);
+    if components.along_runway_headwind_kt < 0.0 {
+        warnings.push(CalculationWarning {
+            code: "TAILWIND".into(),
+            message: format!(
+                "Tailwind component {:.1} kt along runway (headwind negative).",
+                -components.along_runway_headwind_kt
+            ),
+        });
+    }
     Ok(WindResult {
         provenance: provenance_for(data.inner(), data.wind_source()),
         components,
         takeoff_landing_correction_ft: 0.0,
-        warnings: vec![],
+        warnings,
     })
+}
+
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum WindError {
+    #[error("wind calculation failed")]
+    Failed,
 }
 
 #[cfg(test)]

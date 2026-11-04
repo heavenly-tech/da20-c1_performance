@@ -1,4 +1,4 @@
-use crate::altitude::pressure_altitude_ft;
+use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::{lb_to_kg, m_to_ft, takeoff_distances_m};
@@ -17,7 +17,7 @@ pub fn compute_takeoff(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<TakeoffResult, TakeoffError> {
-    let pa = pressure_altitude_ft(inputs.field_elevation_ft, inputs.qnh_hpa);
+    let pa = effective_pressure_altitude_ft(inputs);
     let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
     let angle = (inputs.wind_dir_deg - rwy).to_radians();
     let headwind = inputs.wind_speed_kt * angle.cos();
@@ -39,16 +39,17 @@ pub fn compute_takeoff(
     let over_ft = m_to_ft(dist.over_obstacle_m);
     let wind_delta_ft = m_to_ft(dist.ground_roll_m - dist.after_weight_m);
 
-    let warnings = vec![
-        CalculationWarning {
-            code: "TAKEOFF_OBSTACLE_BIAS".into(),
-            message: TAKEOFF_OBSTACLE_DIGITIZATION_NOTE.into(),
-        },
-        CalculationWarning {
-            code: "UNITS".into(),
-            message: "Takeoff distances computed from digitized Fig 5.4 (meters) and displayed in feet.".into(),
-        },
-    ];
+    let mut warnings = dist.warnings;
+    warnings.push(CalculationWarning {
+        code: "TAKEOFF_OBSTACLE_BIAS".into(),
+        message: TAKEOFF_OBSTACLE_DIGITIZATION_NOTE.into(),
+    });
+    warnings.push(CalculationWarning {
+        code: "UNITS".into(),
+        message:
+            "Takeoff distances computed from digitized Fig 5.4 (meters) and displayed in feet."
+                .into(),
+    });
 
     Ok(TakeoffResult {
         provenance: provenance_for(data.inner(), data.takeoff_source()),

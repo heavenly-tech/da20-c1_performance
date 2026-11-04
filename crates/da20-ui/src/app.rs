@@ -2,26 +2,28 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::components::{Disclaimer, Nav};
-use crate::planner::Planner;
-use crate::readings::ReadingsPage;
+use crate::i18n::Locale;
+use crate::phases::{Phase, PhaseShell};
 use crate::storage::ReadingsStore;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Route {
-    Planner,
-    Readings,
-    Methods,
-}
+use crate::theme::{apply_theme, ThemeEffect, ThemePreference};
 
 #[component]
 pub fn App() -> impl IntoView {
-    let route = RwSignal::new(Route::Planner);
+    let phase = RwSignal::new(Phase::Takeoff);
+    let locale = RwSignal::new(Locale::load());
+    let theme = RwSignal::new(ThemePreference::load());
     let data = RwSignal::new(PerformanceData::production());
+    let inputs = RwSignal::new(da20_core::types::FlightInputs::default());
     let store = RwSignal::new(ReadingsStore::load());
+
+    apply_theme(theme.get());
 
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
-            if let Ok(resp) = gloo_net::http::Request::get("/data/performance.json").send().await {
+            if let Ok(resp) = gloo_net::http::Request::get("/data/performance.json")
+                .send()
+                .await
+            {
                 if let Ok(text) = resp.text().await {
                     if let Ok(parsed) = PerformanceData::from_json_str(&text) {
                         if parsed.meta().data_status.as_deref() == Some("production") {
@@ -34,19 +36,16 @@ pub fn App() -> impl IntoView {
     });
 
     view! {
+        <ThemeEffect theme=theme/>
         <div class="app">
-            <Disclaimer/>
+            <Disclaimer locale=locale/>
             <header class="header">
-                <h1>"DA20-C1 Eclipse Performance Planner"</h1>
-                <p class="subtitle">"AFM DA202-C1 Rev 29 (30 Jun 2021) — Chapter 5 digitized data"</p>
-                <Nav route=route/>
+                <div class="logo">"DA20-C1 "<span>{move || crate::i18n::copy(locale.get()).logo_suffix}</span></div>
+                <p class="subtitle">{move || crate::i18n::copy(locale.get()).subtitle}</p>
+                <Nav phase=phase locale=locale theme=theme/>
             </header>
             <main class="main">
-                {move || match route.get() {
-                    Route::Planner => view! { <Planner data=data store=store/> }.into_any(),
-                    Route::Readings => view! { <ReadingsPage store=store/> }.into_any(),
-                    Route::Methods => view! { <MethodsManual/> }.into_any(),
-                }}
+                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store/>
             </main>
             <footer class="footer">
                 <p>
@@ -54,38 +53,20 @@ pub fn App() -> impl IntoView {
                     {move || data.get().meta().doc.clone()}
                     " rev "
                     {move || data.get().meta().revision.to_string()}
-                    " ("
-                    {move || data.get().meta().revision_date.clone()}
-                    ") — "
-                    <a href=move || data.get().meta().afm_official_url.clone().unwrap_or_default()>"Official AFM Rev 29"</a>
                     " · "
-                    <a href=move || data.get().meta().technical_publications_url.clone().unwrap_or_default()>"Technical publications"</a>
+                    <a href=move || data.get().meta().afm_official_url.clone().unwrap_or_default()>
+                        {move || crate::i18n::copy(locale.get()).afm_link}
+                    </a>
                     " · "
-                    <a href=move || data.get().meta().amm_official_url.clone().unwrap_or_default()>"AMM DA201-C1 Rev 25"</a>
+                    <a href=move || data.get().meta().technical_publications_url.clone().unwrap_or_default()>
+                        {move || crate::i18n::copy(locale.get()).portal_link}
+                    </a>
+                    " · "
+                    <a href=move || data.get().meta().amm_official_url.clone().unwrap_or_default()>
+                        {move || crate::i18n::copy(locale.get()).amm_link}
+                    </a>
                 </p>
             </footer>
         </div>
-    }
-}
-
-#[component]
-fn MethodsManual() -> impl IntoView {
-    let entries = da20_core::methods::all_methods();
-    view! {
-        <section class="methods">
-            <h2>"Methods manual"</h2>
-            <p>"Each calculation path, AFM source reference, interpolation policy, and limitations."</p>
-            <ul class="method-list">
-                {entries.into_iter().map(|e| view! {
-                    <li>
-                        <h3>{e.title}</h3>
-                        <p><strong>"AFM: "</strong>{e.afm_reference}</p>
-                        <p>{e.summary}</p>
-                        <p><em>"Interpolation: "</em>{e.interpolation}</p>
-                        <p><em>"Limitations: "</em>{e.limitations}</p>
-                    </li>
-                }).collect_view()}
-            </ul>
-        </section>
     }
 }

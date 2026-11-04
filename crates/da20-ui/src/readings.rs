@@ -1,84 +1,44 @@
+use da20_core::wind_format::format_wind;
 use leptos::prelude::*;
 
+use crate::i18n::{copy, Locale};
 use crate::storage::ReadingsStore;
 
 #[component]
-pub fn ReadingsPage(store: RwSignal<ReadingsStore>) -> impl IntoView {
-    let compare_a = RwSignal::new(String::new());
-    let compare_b = RwSignal::new(String::new());
-
+pub fn ReadingsPage(locale: RwSignal<Locale>, store: RwSignal<ReadingsStore>) -> impl IntoView {
     view! {
-        <section class="readings">
-            <h2>"Saved readings"</h2>
-            <p>"Stored in browser localStorage — unlimited entries."</p>
-            <div class="export-row">
-                <button on:click=move |_| {
-                    let json = store.get().export_json();
-                    download_text("da20-readings.json", &json);
-                }>"Export JSON"</button>
-                <button on:click=move |_| {
-                    let csv = store.get().export_csv();
-                    download_text("da20-readings.csv", &csv);
-                }>"Export CSV"</button>
+        <section class="readings scr on">
+            <div class="card">
+                <h3>{move || copy(locale.get()).tab_readings}</h3>
+                <div class="export-row">
+                    <button class="btn g" on:click=move |_| {
+                        let json = store.get().export_json();
+                        download_text("da20-readings.json", &json);
+                    }>{move || copy(locale.get()).export_json}</button>
+                    <button class="btn g" on:click=move |_| {
+                        let csv = store.get().export_csv();
+                        download_text("da20-readings.csv", &csv);
+                    }>{move || copy(locale.get()).export_csv}</button>
+                </div>
+                <ul class="reading-list">
+                    {move || store.get().readings.iter().rev().map(|r| {
+                        let id = r.id.clone();
+                        let wind = format_wind(r.inputs.wind_dir_deg, r.inputs.wind_speed_kt);
+                        view! {
+                            <li>
+                                <strong>{r.label.clone()}</strong>" · "{r.phase.clone()}" · "{r.created_at_iso.clone()}
+                                <span class="mono">" · "{wind}</span>
+                                <button class="btn g" on:click={
+                                    let id = id.clone();
+                                    move |_| store.update(|s| s.delete(&id))
+                                }>"×"</button>
+                            </li>
+                        }
+                    }).collect_view()}
+                </ul>
             </div>
-
-            <ul class="reading-list">
-                {move || store.get().readings.iter().rev().map(|r| {
-                    let id = r.id.clone();
-                    view! {
-                        <li>
-                            <strong>{r.label.clone()}</strong>" · "{r.created_at_iso.clone()}
-                            <button class="danger" on:click={
-                                let id = id.clone();
-                                move |_| store.update(|s| s.delete(&id))
-                            }>"Delete"</button>
-                            <details>
-                                <summary>"Details"</summary>
-                                <pre>{serde_json::to_string_pretty(r).unwrap_or_default()}</pre>
-                            </details>
-                        </li>
-                    }
-                }).collect_view()}
-            </ul>
-
-            <h3>"Compare"</h3>
-            <div class="compare-row">
-                <label>"A "<input prop:value=move || compare_a.get() on:input=move |ev| compare_a.set(input_value(&ev))/></label>
-                <label>"B "<input prop:value=move || compare_b.get() on:input=move |ev| compare_b.set(input_value(&ev))/></label>
-            </div>
-            {move || {
-                let a = compare_a.get();
-                let b = compare_b.get();
-                let readings = store.get().readings;
-                let ra = readings.iter().find(|r| r.id == a);
-                let rb = readings.iter().find(|r| r.id == b);
-                match (ra, rb) {
-                    (Some(ra), Some(rb)) => view! {
-                        <pre class="compare">{diff_json(ra, rb)}</pre>
-                    }.into_any(),
-                    _ => view! { <p>"Select two reading IDs to compare."</p> }.into_any(),
-                }
-            }}
         </section>
     }
-}
-
-fn diff_json(a: &da20_core::types::SavedReading, b: &da20_core::types::SavedReading) -> String {
-    format!(
-        "Takeoff ground: {:?} vs {:?}\nCruise TAS: {:?} vs {:?}",
-        a.takeoff.as_ref().map(|t| t.ground_roll_ft),
-        b.takeoff.as_ref().map(|t| t.ground_roll_ft),
-        a.cruise.as_ref().map(|c| c.tas_kt),
-        b.cruise.as_ref().map(|c| c.tas_kt),
-    )
-}
-
-fn input_value(ev: &leptos::ev::Event) -> String {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-        .map(|el| el.value())
-        .unwrap_or_default()
 }
 
 fn download_text(filename: &str, content: &str) {

@@ -81,7 +81,10 @@ fn interpolate_cruise_at(
     Ok((tas, gph))
 }
 
-pub fn compute_cruise(data: &PerformanceData, inputs: &FlightInputs) -> Result<CruiseResult, CruiseError> {
+pub fn compute_cruise(
+    data: &PerformanceData,
+    inputs: &FlightInputs,
+) -> Result<CruiseResult, CruiseError> {
     let pa = inputs.cruise_pressure_alt_ft;
     let rpm = inputs.cruise_rpm;
     let rows = &data.inner().cruise_table.value.rows;

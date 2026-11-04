@@ -23,11 +23,17 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
     assert!(err_pct > -5.0 && err_pct < 0.0);
 
     let t65 = fahrenheit_to_celsius(65.0);
-    let roc_55 = rate_of_climb_fpm(inner, "cruise_5_5", 2000.0, t65).unwrap();
+    let roc_55 = rate_of_climb_fpm(inner, "cruise_5_5", 2000.0, t65)
+        .unwrap()
+        .0;
     assert!((roc_55 - 800.0).abs() / 800.0 <= 0.01);
-    let roc_56 = rate_of_climb_fpm(inner, "takeoff_5_6", 2000.0, t65).unwrap();
+    let roc_56 = rate_of_climb_fpm(inner, "takeoff_5_6", 2000.0, t65)
+        .unwrap()
+        .0;
     assert!((roc_56 - 744.0).abs() / 744.0 <= 0.01);
-    let roc_58 = rate_of_climb_fpm(inner, "balked_5_8", 2000.0, fahrenheit_to_celsius(70.0)).unwrap();
+    let roc_58 = rate_of_climb_fpm(inner, "balked_5_8", 2000.0, fahrenheit_to_celsius(70.0))
+        .unwrap()
+        .0;
     assert!((roc_58 - 374.0).abs() / 374.0 <= 0.01);
 
     let hw = 11.0 * (30.0f64.to_radians().cos());

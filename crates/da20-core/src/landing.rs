@@ -1,12 +1,14 @@
-use crate::altitude::pressure_altitude_ft;
+use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
-use crate::rev29::engine::{landing_lookup_ft, m_to_ft, wind_panel_hw_m, wind_panel_tw_m};
+use crate::rev29::engine::landing_lookup_ft;
 use crate::types::{CalculationWarning, FlightInputs, LandingResult};
-use crate::wind::runway_heading_deg;
 
 pub const LANDING_TABLE_50FT_M_NOTE: &str =
     "Table 4 lists 1360 ft (≈415 m rounded) at sea level; AFM narrative text cites 414 m for the same condition.";
+
+pub const LANDING_NO_CORRECTIONS_NOTE: &str =
+    "Table 4 has no wind, temperature, or weight corrections — values are pressure-altitude lookup only.";
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum LandingError {
@@ -14,38 +16,27 @@ pub enum LandingError {
     Failed,
 }
 
-pub fn compute_landing(data: &PerformanceData, inputs: &FlightInputs) -> Result<LandingResult, LandingError> {
-    let pa = pressure_altitude_ft(inputs.field_elevation_ft, inputs.qnh_hpa);
-    let (roll_ft, over_50_ft) = landing_lookup_ft(data.inner(), pa);
+pub fn compute_landing(
+    data: &PerformanceData,
+    inputs: &FlightInputs,
+) -> Result<LandingResult, LandingError> {
+    let pa = effective_pressure_altitude_ft(inputs);
+    let (roll_ft, over_50_ft, mut warnings) = landing_lookup_ft(data.inner(), pa);
 
-    let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
-    let angle = (inputs.wind_dir_deg - rwy).to_radians();
-    let headwind = inputs.wind_speed_kt * angle.cos();
-    let headwind_kt = headwind.max(0.0);
-    let tailwind_kt = (-headwind).max(0.0);
-
-    // Wind correction via Fig 5.4 wind panels applied to table ground roll baseline (meters).
-    let base_m = roll_ft / 3.280839895;
-    let mut corrected_m = base_m;
-    if headwind_kt > 0.0 {
-        corrected_m = wind_panel_hw_m(data.inner(), base_m, headwind_kt);
-    } else if tailwind_kt > 0.0 {
-        corrected_m = wind_panel_tw_m(data.inner(), base_m, tailwind_kt);
-    }
-    let wind_delta_ft = m_to_ft(corrected_m - base_m);
-    let ground_ft = roll_ft + wind_delta_ft;
-    let dist_ft = over_50_ft + wind_delta_ft;
-
-    let warnings = vec![CalculationWarning {
+    warnings.push(CalculationWarning {
         code: "LANDING_TABLE_50FT".into(),
         message: LANDING_TABLE_50FT_M_NOTE.into(),
-    }];
+    });
+    warnings.push(CalculationWarning {
+        code: "LANDING_NO_WIND".into(),
+        message: LANDING_NO_CORRECTIONS_NOTE.into(),
+    });
 
     Ok(LandingResult {
         provenance: provenance_for(data.inner(), data.landing_source()),
-        ground_roll_ft: ground_ft,
-        distance_over_50ft_ft: dist_ft,
-        wind_correction_ft: wind_delta_ft,
+        ground_roll_ft: roll_ft,
+        distance_over_50ft_ft: over_50_ft,
+        wind_correction_ft: 0.0,
         warnings,
     })
 }

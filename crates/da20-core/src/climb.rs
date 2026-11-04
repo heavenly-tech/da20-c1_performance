@@ -1,4 +1,4 @@
-use crate::altitude::pressure_altitude_ft;
+use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::equivalent_altitude::equivalent_altitude_ft;
 use crate::provenance::provenance_for;
@@ -19,10 +19,12 @@ pub fn compute_climb(
     inputs: &FlightInputs,
     target_pressure_alt_ft: f64,
 ) -> Result<ClimbResult, ClimbError> {
-    let pa = pressure_altitude_ft(inputs.field_elevation_ft, inputs.qnh_hpa);
-    let (eq, _) = equivalent_altitude_ft(data, pa, inputs.oat_c);
-    let roc = rate_of_climb_fpm(data.inner(), "cruise_5_5", pa, inputs.oat_c)
-        .ok_or(ClimbError::MissingSegment)?;
+    let pa = effective_pressure_altitude_ft(inputs);
+    let (eq, mut warnings) = equivalent_altitude_ft(data, pa, inputs.oat_c);
+    let key = inputs.climb_figure.roc_key();
+    let (roc, w) =
+        rate_of_climb_fpm(data.inner(), key, pa, inputs.oat_c).ok_or(ClimbError::MissingSegment)?;
+    warnings.extend(w);
 
     let delta_ft = (target_pressure_alt_ft - pa).max(0.0);
     let time_min = if roc > 0.0 {
@@ -31,10 +33,10 @@ pub fn compute_climb(
         None
     };
 
-    let warnings = vec![CalculationWarning {
+    warnings.push(CalculationWarning {
         code: "DERIVED_ESTIMATE".into(),
         message: CLIMB_DERIVED_ESTIMATE_NOTE.into(),
-    }];
+    });
 
     Ok(ClimbResult {
         provenance: provenance_for(data.inner(), data.climb_roc_source()),
@@ -53,14 +55,14 @@ pub fn rate_of_climb_for_figure(
     pa_ft: f64,
     oat_c: f64,
 ) -> Option<f64> {
-    rate_of_climb_fpm(data.inner(), figure_key, pa_ft, oat_c)
+    rate_of_climb_fpm(data.inner(), figure_key, pa_ft, oat_c).map(|(v, _)| v)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rev29::engine::fahrenheit_to_celsius;
     use crate::data::PerformanceData;
+    use crate::rev29::engine::fahrenheit_to_celsius;
 
     fn assert_roc(key: &str, pa: f64, oat_c: f64, expected: f64) {
         let data = PerformanceData::production();

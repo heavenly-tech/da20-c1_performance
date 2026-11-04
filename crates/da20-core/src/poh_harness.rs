@@ -1,9 +1,7 @@
 //! POH worked-example regression harness (AFM Rev 29 reference checks).
 
 use crate::data::PerformanceData;
-use crate::rev29::engine::{
-    fahrenheit_to_celsius, rate_of_climb_fpm, takeoff_distances_m,
-};
+use crate::rev29::engine::{fahrenheit_to_celsius, rate_of_climb_fpm, takeoff_distances_m};
 use crate::types::FlightInputs;
 use crate::wind::wind_components;
 
@@ -43,11 +41,17 @@ pub fn run_rev29_reference_checks(data: &PerformanceData) -> Vec<HarnessResult> 
         ("takeoff_5_6", 744.0, "Fig 5.6"),
         ("balked_5_8", 374.0, "Fig 5.8"),
     ] {
-        let roc = rate_of_climb_fpm(inner, key, 2000.0, if key == "balked_5_8" {
-            fahrenheit_to_celsius(70.0)
-        } else {
-            t65
-        })
+        let roc = rate_of_climb_fpm(
+            inner,
+            key,
+            2000.0,
+            if key == "balked_5_8" {
+                fahrenheit_to_celsius(70.0)
+            } else {
+                t65
+            },
+        )
+        .map(|(v, _)| v)
         .unwrap_or(0.0);
         let err_pct = (roc - expected).abs() / expected * 100.0;
         out.push(HarnessResult {

@@ -28,10 +28,7 @@ pub fn afm_official_url(data: &Rev29File) -> String {
 }
 
 pub fn amm_official_url(data: &Rev29File) -> String {
-    data.meta
-        .amm_official_url
-        .clone()
-        .unwrap_or_default()
+    data.meta.amm_official_url.clone().unwrap_or_default()
 }
 
 pub fn citation_from_source(source: &SourceMeta) -> Citation {
