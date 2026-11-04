@@ -1,0 +1,15 @@
+[package]
+name = "da20-core"
+description = "DA20-C1 Eclipse performance calculations (AFM Ch.5) — core library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+pretty_assertions = "1"

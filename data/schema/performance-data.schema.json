@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://heavenly.cl/da20/schema/performance-data.schema.json",
+  "title": "DA20-C1 Eclipse AFM Chapter 5 Performance Data",
+  "description": "Digitized performance charts and tables with AFM provenance. Real values must come from approved AFM extracts only.",
+  "type": "object",
+  "required": ["meta", "takeoff", "climb", "cruise", "landing", "wind", "equivalent_altitude"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "afm_document_number",
+        "afm_revision",
+        "afm_date",
+        "data_status",
+        "afm_official_url",
+        "amm_official_url"
+      ],
+      "properties": {
+        "afm_document_number": { "type": "string" },
+        "afm_revision": { "type": "string" },
+        "afm_date": { "type": "string", "description": "ISO date or AFM printed date" },
+        "data_status": {
+          "type": "string",
+          "enum": ["production", "synthetic_fixture", "placeholder"]
+        },
+        "afm_official_url": {
+          "type": "string",
+          "description": "Diamond Aircraft official AFM download page (TBD until provided)"
+        },
+        "amm_official_url": {
+          "type": "string",
+          "description": "Diamond Aircraft official AMM download page (TBD until provided)"
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "equivalent_altitude": {
+      "type": "object",
+      "description": "POH Figure 5.2 — pressure altitude to equivalent altitude for climb performance",
+      "required": ["citation", "grid"],
+      "properties": {
+        "citation": { "$ref": "#/$defs/citation" },
+        "grid": { "$ref": "#/$defs/altitude_grid" }
+      }
+    },
+    "takeoff": {
+      "type": "object",
+      "required": ["citation", "weight_lb", "charts"],
+      "properties": {
+        "citation": { "$ref": "#/$defs/citation" },
+        "weight_lb": { "type": "number" },
+        "charts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/takeoff_chart" }
+        }
+      }
+    },
+    "climb": {
+      "type": "object",
+      "required": ["citations", "segments"],
+      "properties": {
+        "citations": {
+          "type": "object",
+          "properties": {
+            "figure_5_5": { "$ref": "#/$defs/citation" },
+            "figure_5_6": { "$ref": "#/$defs/citation" },
+            "figure_5_8": { "$ref": "#/$defs/citation" }
+          }
+        },
+        "segments": { "type": "array", "items": { "$ref": "#/$defs/climb_segment" } }
+      }
+    },
+    "cruise": {
+      "type": "object",
+      "required": ["citation", "table"],
+      "properties": {
+        "citation": { "$ref": "#/$defs/citation", "description": "AFM Table 3 (cruise)" },
+        "table": { "$ref": "#/$defs/cruise_table" }
+      }
+    },
+    "landing": {
+      "type": "object",
+      "required": ["citation", "table"],
+      "properties": {
+        "citation": { "$ref": "#/$defs/citation", "description": "AFM Table 4 (landing)" },
+        "table": { "$ref": "#/$defs/landing_table" }
+      }
+    },
+    "wind": {
+      "type": "object",
+      "required": ["citation", "correction_model"],
+      "properties": {
+        "citation": { "$ref": "#/$defs/citation", "description": "Figure 5.3" },
+        "correction_model": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": { "type": "string", "enum": ["component_table", "chart_grid"] },
+            "grid": { "$ref": "#/$defs/wind_grid" }
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "description": "POH worked examples and numeric tolerances (populated when data arrives)",
+      "properties": {
+        "tolerances": { "type": "object", "additionalProperties": { "type": "number" } },
+        "worked_examples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/worked_example" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "citation": {
+      "type": "object",
+      "required": ["figure_or_table", "page"],
+      "properties": {
+        "figure_or_table": { "type": "string" },
+        "page": { "type": ["integer", "null"] },
+        "afm_revision": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "altitude_grid": {
+      "type": "object",
+      "required": ["pressure_altitude_ft", "rows"],
+      "properties": {
+        "pressure_altitude_ft": { "type": "array", "items": { "type": "number" } },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["oat_c", "equivalent_altitude_ft"],
+            "properties": {
+              "oat_c": { "type": "number" },
+              "equivalent_altitude_ft": { "type": "array", "items": { "type": "number" } }
+            }
+          }
+        }
+      }
+    },
+    "takeoff_chart": {
+      "type": "object",
+      "required": ["pressure_altitude_ft", "temperature_c", "ground_roll_ft", "distance_50ft_ft"],
+      "properties": {
+        "pressure_altitude_ft": { "type": "number" },
+        "temperature_c": { "type": "array", "items": { "type": "number" } },
+        "ground_roll_ft": { "type": "array", "items": { "type": "number" } },
+        "distance_50ft_ft": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+    "climb_segment": {
+      "type": "object",
+      "required": ["figure", "equivalent_altitude_ft", "rate_of_climb_fpm"],
+      "properties": {
+        "figure": { "type": "string" },
+        "equivalent_altitude_ft": { "type": "array", "items": { "type": "number" } },
+        "rate_of_climb_fpm": { "type": "array", "items": { "type": "number" } },
+        "time_min": { "type": "array", "items": { "type": "number" } },
+        "fuel_us_gal": { "type": "array", "items": { "type": "number" } },
+        "distance_nm": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+    "cruise_table": {
+      "type": "object",
+      "required": ["pressure_altitude_ft", "rpm", "rows"],
+      "properties": {
+        "pressure_altitude_ft": { "type": "array", "items": { "type": "number" } },
+        "rpm": { "type": "array", "items": { "type": "number" } },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["oat_c", "tas_kt", "fuel_flow_us_gal_h"],
+            "properties": {
+              "oat_c": { "type": "number" },
+              "tas_kt": { "type": "array", "items": { "type": "number" } },
+              "fuel_flow_us_gal_h": { "type": "array", "items": { "type": "number" } }
+            }
+          }
+        }
+      }
+    },
+    "landing_table": {
+      "type": "object",
+      "required": ["pressure_altitude_ft", "rows"],
+      "properties": {
+        "pressure_altitude_ft": { "type": "array", "items": { "type": "number" } },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["oat_c", "ground_roll_ft", "distance_50ft_ft"],
+            "properties": {
+              "oat_c": { "type": "number" },
+              "ground_roll_ft": { "type": "array", "items": { "type": "number" } },
+              "distance_50ft_ft": { "type": "array", "items": { "type": "number" } }
+            }
+          }
+        }
+      }
+    },
+    "wind_grid": {
+      "type": "object",
+      "properties": {
+        "headwind_component_kt": { "type": "array", "items": { "type": "number" } },
+        "correction_ft": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+    "worked_example": {
+      "type": "object",
+      "required": ["id", "inputs", "expected"],
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "inputs": { "type": "object" },
+        "expected": { "type": "object" },
+        "tolerance_key": { "type": "string" }
+      }
+    }
+  }
+}
