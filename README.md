@@ -60,11 +60,12 @@ Rust tests port `validate_rev29.py` / `validation_rev29.txt`:
 
 Run: `cargo test -p da20-core`
 
-### Screenshot placeholders
+### Screenshots
 
-<!-- TODO: planner numeric mode -->
-<!-- TODO: hand-plot mode -->
-<!-- TODO: methods manual / bias callouts -->
+| Phase | Capture |
+|-------|---------|
+| Takeoff (phase tab + chart) | ![Takeoff phase](docs/screenshots/takeoff-phase.png) |
+| Manual / methods | ![Manual tab](docs/screenshots/manual-tab.png) |
 
 ## Build
 

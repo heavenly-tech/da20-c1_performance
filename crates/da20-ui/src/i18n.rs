@@ -224,7 +224,7 @@ const EN: Copy = Copy {
     methods: &EN_METHODS,
 };
 
-const ES_METHODS: [MethodCopy; 7] = [
+const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
         afm: "AFM DA202-C1 Rev 29 — entradas de rendimiento",
@@ -274,9 +274,16 @@ const ES_METHODS: [MethodCopy; 7] = [
         interpolation: "N/A para componentes.",
         limitations: "Rumbo pista = número × 10°; aviso si pista no numérica.",
     },
+    MethodCopy {
+        title: "Autonomía y alcance (derivado)",
+        afm: "AFM Sec. 1 (capacidad combustible) + Tabla 3 GPH",
+        summary: "(Combustible utilizable − reserva) / caudal Tabla 3; alcance = autonomía × TAS.",
+        interpolation: "Usa crucero interpolado de Tabla 3.",
+        limitations: "Derivado, no carta AFM. Combustible utilizable 23,5 US gal (AFM Rev 29 Sec. 1).",
+    },
 ];
 
-const EN_METHODS: [MethodCopy; 7] = [
+const EN_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Pressure & density altitude",
         afm: "AFM DA202-C1 Rev 29 — performance inputs",
@@ -327,5 +334,12 @@ const EN_METHODS: [MethodCopy; 7] = [
         summary: "Headwind/crosswind by trigonometry; display 200 / 08 kt.",
         interpolation: "N/A for components.",
         limitations: "Runway heading = number × 10°; warning if non-numeric runway.",
+    },
+    MethodCopy {
+        title: "Endurance & range (derived)",
+        afm: "AFM Section 1 (fuel capacity) + Table 3 GPH",
+        summary: "(Usable fuel − reserve) / Table 3 flow; range = endurance × TAS.",
+        interpolation: "Uses interpolated Table 3 cruise.",
+        limitations: "Derived, not an AFM chart. Usable fuel 23.5 US gal (AFM Rev 29 Sec. 1).",
     },
 ];

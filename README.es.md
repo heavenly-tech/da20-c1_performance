@@ -26,6 +26,8 @@ Versión en español del README principal. La interfaz usa **español por defect
 
 No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. El AFM aprobado rige toda la planificación.
 
-## English
+## Capturas
 
-See [README.md](README.md).
+![Pestaña Despegue](docs/screenshots/takeoff-phase.png)
+
+![Manual de métodos](docs/screenshots/manual-tab.png)

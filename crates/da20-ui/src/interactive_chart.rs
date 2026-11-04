@@ -1,11 +1,16 @@
 //! Per-phase interactive chart (numeric entry + drag on same SVG).
 
 use da20_core::altitude::effective_pressure_altitude_ft;
+use da20_core::climb::compute_climb;
+use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
-    climb_roc_vs_ea, landing_table_curves, map_to_svg, takeoff_base_curves, wind_headwind_vs_angle,
-    Polyline,
+    climb_roc_vs_ea, landing_table_curves, map_to_svg, sample_roc_fpm, sample_takeoff_base_m,
+    takeoff_base_curves, wind_headwind_vs_angle, Polyline,
 };
+use da20_core::rev29::engine::lb_to_kg;
+use da20_core::takeoff::compute_takeoff;
 use da20_core::types::FlightInputs;
+use da20_core::wind::compute_wind;
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -110,6 +115,19 @@ pub fn InteractiveChart(
                     render_svg(kind, &d, &i, cursor_x.get(), cursor_y.get())
                 }}
             </svg>
+            <p class="cursor-readout mono">
+                {move || {
+                    let c = copy(locale.get());
+                    let d = data.get();
+                    let i = inputs.get();
+                    let (chart, core) = readout_pair(kind, &d, &i);
+                    format!(
+                        "{}: {chart} | {}: {core}",
+                        c.plot_readout_chart,
+                        c.plot_readout_core,
+                    )
+                }}
+            </p>
         </div>
     }
 }
@@ -193,7 +211,80 @@ fn render_svg(
         <text x="50" y="288" fill="var(--chart-label)" font-size="10">
             {format!("OAT {:.0} °C · PA {:.0} ft", inputs.oat_c, pa)}
         </text>
+        {takeoff_overlays(kind, data, inner, inputs)}
     }
+}
+
+fn takeoff_overlays(
+    kind: ChartKind,
+    data: &PerformanceData,
+    inner: &da20_core::rev29::types::Rev29File,
+    inputs: &FlightInputs,
+) -> impl IntoView {
+    if kind != ChartKind::Takeoff {
+        return view! { <g></g> }.into_any();
+    }
+    let kg = lb_to_kg(inputs.weight_lb);
+    let hw = compute_wind(data, inputs)
+        .map(|w| w.components.headwind_kt)
+        .unwrap_or(0.0);
+    let wt_n = norm_axis(&inner.wt_kg.value, kg);
+    let wt_x = 40.0 + wt_n * 340.0;
+    view! {
+        <line x1=wt_x y1="20" x2=wt_x y2="270" stroke="var(--chart-guide)" stroke-width="1.5" stroke-dasharray="3 4" opacity="0.85"/>
+        <text x="250" y="36" fill="var(--chart-guide)" font-size="10" text-anchor="end">
+            {format!("Wt {kg:.0} kg · HW {hw:.1} kt")}
+        </text>
+    }
+    .into_any()
+}
+
+fn readout_pair(
+    kind: ChartKind,
+    data: &PerformanceData,
+    inputs: &FlightInputs,
+) -> (String, String) {
+    let inner = data.inner();
+    let pa = effective_pressure_altitude_ft(inputs);
+    let chart = match kind {
+        ChartKind::Takeoff => format!(
+            "{:.0} m base",
+            sample_takeoff_base_m(inner, pa, inputs.oat_c)
+        ),
+        ChartKind::Climb => format!(
+            "{:.0} fpm",
+            sample_roc_fpm(inner, inputs.climb_figure.roc_key(), pa, inputs.oat_c)
+        ),
+        ChartKind::Landing => {
+            let (r, d) = da20_core::rev29::charts::sample_landing_ft(inner, pa);
+            format!("{:.0} / {:.0} ft", r, d)
+        }
+        ChartKind::Wind => format!("{:.1} kt HW", {
+            compute_wind(data, inputs)
+                .map(|w| w.components.headwind_kt)
+                .unwrap_or(0.0)
+        }),
+    };
+    let core = match kind {
+        ChartKind::Takeoff => compute_takeoff(data, inputs)
+            .map(|t| format!("{:.0} ft roll", t.ground_roll_ft))
+            .unwrap_or_else(|_| "—".into()),
+        ChartKind::Climb => compute_climb(data, inputs, inputs.cruise_pressure_alt_ft)
+            .map(|c| format!("{:.0} fpm", c.rate_of_climb_fpm))
+            .unwrap_or_else(|_| "—".into()),
+        ChartKind::Landing => compute_landing(data, inputs)
+            .map(|l| format!("{:.0} ft", l.distance_over_50ft_ft))
+            .unwrap_or_else(|_| "—".into()),
+        ChartKind::Wind => compute_wind(data, inputs)
+            .map(|w| {
+                format!(
+                    "{:.1} / {:.1} kt",
+                    w.components.headwind_kt, w.components.crosswind_kt
+                )
+            })
+            .unwrap_or_else(|_| "—".into()),
+    };
+    (chart, core)
 }
 
 fn chart_spec(
