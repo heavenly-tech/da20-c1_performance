@@ -174,7 +174,8 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let after_wt_y = y_dist(core.after_weight_m);
 
     // (1) OAT vertical to PA curve; (2) horizontal to weight-panel reference (left edge);
-    // (3) along weight guides from chart datum kg to aircraft weight.
+    // (3) constant-y to chart datum, then weight guides to aircraft weight;
+    // (4) horizontal to wind-panel left edge, then wind guides.
     let mut points = vec![
         (oat_x, STRIP_BOTTOM),
         (oat_x, y_on_pa_curve),
@@ -188,13 +189,18 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let along_weight = trace_weight_path(data, core.base_m, chart_kg, weight_kg);
     append_segment(&mut points, &along_weight);
 
-    let wind_entry_x = if tw > 0.0 && hw <= 0.0 {
+    let wind_panel_left = if tw > 0.0 && hw <= 0.0 {
         x_tailwind_kt(0.0)
     } else {
-        x_headwind_kt(0.0)
+        TAKEOFF_WIND.x
     };
-    if points.last().map(|(x, _)| (*x - wind_entry_x).abs() > 0.5) == Some(true) {
-        points.push((wind_entry_x, after_wt_y));
+    if let Some((lx, ly)) = points.last().copied() {
+        if (ly - after_wt_y).abs() > 0.5 {
+            points.push((lx, after_wt_y));
+        }
+        if (lx - wind_panel_left).abs() > 0.5 {
+            points.push((wind_panel_left, after_wt_y));
+        }
     }
 
     let wind_trace = if hw > 0.0 {
