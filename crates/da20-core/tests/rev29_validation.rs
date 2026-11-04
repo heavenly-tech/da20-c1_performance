@@ -12,12 +12,12 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
     let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
     let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
     assert!(
-        (d.over_obstacle_m - 360.9).abs() < 1.0,
+        (d.over_obstacle_m - 365.76).abs() < 2.0,
         "over-obstacle {:.2} m",
         d.over_obstacle_m
     );
     assert!(
-        err_pct > -2.0 && err_pct < 0.0,
+        err_pct.abs() < 0.5,
         "AFM Rev 29 worked example err {err_pct:.2}%"
     );
 

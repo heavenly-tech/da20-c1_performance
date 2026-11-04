@@ -346,7 +346,7 @@ const ES_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-9 / 5-10, Figura 5.4",
         summary: "Cadena: rodaje base → factor de peso → panel de viento → obstáculo (m).",
         interpolation: "Lineal en cada panel; aviso si OAT/PA/peso/viento fuera de rango.",
-        limitations: "Sesgo ~1,3 % bajo vs ejemplo Rev 29 (21 °C, 4 kt HW, obstáculo 5 m).",
+        limitations: "Tras escala carta 1 ~3,9 %; error residual <0,5 % vs ejemplo Rev 29 (21 °C, 4 kt HW, 5 m).",
     },
     MethodCopy {
         title: "ROC trepada (Fig 5.5 / 5.6 / 5.8)",
@@ -406,7 +406,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         afm: "AFM p. 5-9 / 5-10, Figure 5.4",
         summary: "Chain: base roll → weight factor → wind panel → obstacle (m).",
         interpolation: "Linear on each panel; warning if OAT/PA/weight/wind out of range.",
-        limitations: "~1.3% short vs Rev 29 worked example (21 °C, 4 kt HW, 5 m obstacle).",
+        limitations: "Sheet 1 OAT/PA scale ~3.9%; residual <0.5% vs Rev 29 example (21 °C, 4 kt HW, 5 m).",
     },
     MethodCopy {
         title: "Climb ROC (Figs 5.5 / 5.6 / 5.8)",
@@ -512,10 +512,10 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
         },
         "TAKEOFF_OBSTACLE_BIAS" => match locale {
             Locale::Es => {
-                "Fig 5.4 ~1,3 % baja vs ejemplo Rev 29 (21 °C, 4 kt HW, obstáculo 5 m).".into()
+                "Fig 5.4: escala carta 1; residual <0,5 % vs ejemplo Rev 29 (21 °C).".into()
             }
             Locale::En => {
-                "Fig 5.4 ~1.3% short vs Rev 29 example (21 °C, 4 kt HW, 5 m obstacle).".into()
+                "Fig 5.4: sheet 1 scale; residual <0.5% vs Rev 29 example (21 °C).".into()
             }
         },
         "UNITS" => match locale {

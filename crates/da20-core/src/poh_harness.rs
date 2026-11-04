@@ -20,9 +20,9 @@ pub fn run_rev29_reference_checks(data: &PerformanceData) -> Vec<HarnessResult> 
     let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
     out.push(HarnessResult {
         example_id: "takeoff_5_4_rev29".into(),
-        passed: err_pct > -2.0 && err_pct < 0.0,
+        passed: err_pct.abs() < 0.5,
         message: format!(
-            "over-obstacle {:.1} m vs 365.76 m ({err_pct:.1}%, ~1.3% short after wind-panel correction)",
+            "over-obstacle {:.1} m vs 365.76 m ({err_pct:.2}% after sheet-1 OAT/PA scale)",
             d.over_obstacle_m
         ),
     });

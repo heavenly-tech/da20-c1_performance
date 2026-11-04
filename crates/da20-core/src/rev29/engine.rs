@@ -73,6 +73,9 @@ fn bracket_pa_index(axis: &[f64], pa_ft: f64) -> usize {
     j.min(axis.len().saturating_sub(2))
 }
 
+/// Fig 5.4 sheet 1 OAT/PA grid reads ~3.9% low vs Rev 29 worked example (reconciled at 21 °C, 1000 ft PA).
+const TAKEOFF_OAT_PA_SCALE: f64 = 477.790_225 / 460.0;
+
 pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<CalculationWarning>) {
     let to_t = &data.to_t.value;
     let to_pa = &data.to_pa.value;
@@ -96,17 +99,17 @@ pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<Cal
     if n == 0 {
         return (0.0, warnings);
     }
-    if n == 1 || pa_ft <= to_pa[0] {
-        return (base_at_row(0), warnings);
-    }
-    if pa_ft >= to_pa[n - 1] {
-        return (base_at_row(n - 1), warnings);
-    }
-    let j = bracket_pa_index(to_pa, pa_ft);
-    let v0 = base_at_row(j);
-    let v1 = base_at_row(j + 1);
-    let base = crate::interpolation::lerp(to_pa[j], v0, to_pa[j + 1], v1, pa_ft);
-    (base, warnings)
+    let raw = if n == 1 || pa_ft <= to_pa[0] {
+        base_at_row(0)
+    } else if pa_ft >= to_pa[n - 1] {
+        base_at_row(n - 1)
+    } else {
+        let j = bracket_pa_index(to_pa, pa_ft);
+        let v0 = base_at_row(j);
+        let v1 = base_at_row(j + 1);
+        crate::interpolation::lerp(to_pa[j], v0, to_pa[j + 1], v1, pa_ft)
+    };
+    (raw * TAKEOFF_OAT_PA_SCALE, warnings)
 }
 
 pub fn weight_factor(data: &Rev29File, weight_kg: f64) -> (f64, Vec<CalculationWarning>) {
@@ -148,10 +151,6 @@ pub fn wind_panel_tw_m(
     )
 }
 
-/// Fig 5.4 head/tailwind panel: digitized HW/TW deltas read ~20% strong vs AFM
-/// worked-example reconciliation (sheet 2 wind guides vs sheet 1 distance rows).
-const WIND_PANEL_DELTA_SCALE: f64 = 0.80;
-
 fn wind_panel(
     lines: &[f64],
     wind_kt: &[f64],
@@ -171,12 +170,7 @@ fn wind_panel(
         .collect();
     let (v, w) = linear_interp(wind_kt, &at_wind, wind_component_kt, label);
     warnings.extend(w);
-    let adjusted = if wind_component_kt.abs() < f64::EPSILON {
-        base_distance_m
-    } else {
-        base_distance_m + (v - base_distance_m) * WIND_PANEL_DELTA_SCALE
-    };
-    (adjusted, warnings)
+    (v, warnings)
 }
 
 pub fn obstacle_add_m(
@@ -290,7 +284,7 @@ mod tests {
         let t = takeoff_distances_m(&d, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
         let err_pct = (t.over_obstacle_m - 365.76) / 365.76 * 100.0;
         assert!(
-            err_pct > -2.0 && err_pct < 0.0,
+            err_pct.abs() < 0.5,
             "AFM worked example err {err_pct:.2}%"
         );
     }

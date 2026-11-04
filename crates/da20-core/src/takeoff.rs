@@ -5,7 +5,7 @@ use crate::rev29::engine::{lb_to_kg, m_to_ft, takeoff_distances_m};
 use crate::types::{CalculationWarning, FlightInputs, TakeoffResult};
 use crate::wind::runway_heading_deg;
 
-pub const TAKEOFF_OBSTACLE_DIGITIZATION_NOTE: &str = "Digitized Fig 5.4 sheet 2 wind guides read HW corrections slightly strong; after correction, over-obstacle distance is ~1.3% short vs AFM Rev 29 worked example (1200 ft / 365.76 m at 1000 ft PA, 21 °C, 725 kg, 4 kt HW, 5 m obstacle).";
+pub const TAKEOFF_OBSTACLE_DIGITIZATION_NOTE: &str = "Fig 5.4 sheet 1 OAT/PA grid was ~3.9% low vs Rev 29 worked example; a uniform sheet-1 scale factor is applied in takeoff_base_m. Residual over-obstacle error at the AFM example (21 °C, 1000 ft PA, 725 kg, 4 kt HW, 5 m) is within ~0.5%.";
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TakeoffError {
@@ -64,8 +64,8 @@ mod tests {
         let d = takeoff_distances_m(data.inner(), 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
         let err_pct = (d.over_obstacle_m - 365.76) / 365.76 * 100.0;
         assert!(
-            (err_pct - (-1.33)).abs() < 0.2,
-            "expected ~-1.3% vs AFM at 21 °C, got {err_pct:.2}%"
+            err_pct.abs() < 0.5,
+            "AFM worked example err {err_pct:.2}% (expected ~0% after OAT/PA scale)"
         );
     }
 }

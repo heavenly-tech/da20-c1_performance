@@ -168,19 +168,26 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let core = takeoff_distances_m(data, pa_ft, inputs.oat_c, weight_kg, hw, tw, obs_m);
 
     let oat_x = x_oat(inputs.oat_c);
-    let y_base = y_dist(core.base_m);
+    let y_on_pa_curve = y_dist(core.base_m);
+    let weight_ref_x = TAKEOFF_WEIGHT.x;
+    let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
     let chart_x = x_weight_kg(chart_kg);
     let after_wt_y = y_dist(core.after_weight_m);
 
-    let mut points = vec![(oat_x, STRIP_BOTTOM), (oat_x, y_base), (chart_x, y_base)];
+    // (1) OAT vertical to PA curve; (2) horizontal to weight-panel reference (left edge);
+    // (3) along weight guides from chart datum kg to aircraft weight.
+    let mut points = vec![
+        (oat_x, STRIP_BOTTOM),
+        (oat_x, y_on_pa_curve),
+        (weight_ref_x, y_on_pa_curve),
+    ];
+
+    if (weight_ref_x - chart_x).abs() > 0.5 {
+        points.push((chart_x, y_on_pa_curve));
+    }
 
     let along_weight = trace_weight_path(data, core.base_m, chart_kg, weight_kg);
     append_segment(&mut points, &along_weight);
-
-    let weight_exit_x = TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w;
-    if points.last().map(|(x, _)| (*x - weight_exit_x).abs() > 0.5) == Some(true) {
-        points.push((weight_exit_x, after_wt_y));
-    }
 
     let wind_entry_x = if tw > 0.0 && hw <= 0.0 {
         x_tailwind_kt(0.0)
@@ -331,6 +338,42 @@ mod tests {
             (ft - 1200.0).abs() < 60.0,
             "expected ~1200 ft over 5 m obstacle, got {ft:.0}"
         );
+    }
+
+    #[test]
+    fn takeoff_path_follows_pilot_reading_order() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 1000.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
+            oat_c: 21.0,
+            weight_lb: 1598.0,
+            ..Default::default()
+        };
+        let path = takeoff_hand_path(&data, &inputs, 1000.0);
+        let oat_x = x_oat(21.0);
+        assert_eq!(path.points[0], (oat_x, STRIP_BOTTOM));
+        assert!((path.points[1].0 - oat_x).abs() < 0.01);
+        assert_eq!(path.points[2].0, TAKEOFF_WEIGHT.x);
+        assert!((path.points[2].1 - path.points[1].1).abs() < 0.01);
+        let core = takeoff_distances_m(
+            &data,
+            1000.0,
+            21.0,
+            lb_to_kg(inputs.weight_lb),
+            0.0,
+            0.0,
+            inputs.obstacle_height_m,
+        );
+        let wt_y = path
+            .points
+            .iter()
+            .find(|(x, _)| (x - x_weight_kg(lb_to_kg(inputs.weight_lb))).abs() < 1.0)
+            .map(|(_, y)| *y)
+            .unwrap_or(0.0);
+        assert!((wt_y - y_dist(core.after_weight_m)).abs() < 0.5);
     }
 
     #[test]
