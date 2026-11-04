@@ -66,13 +66,17 @@ pub fn Nav(
                         apply_palette(&choice, theme.get());
                     }>
                     {move || {
-                        PaletteChoice::menu_options().into_iter().map(|(id, en, es)| {
-                            let label = match locale.get() {
-                                Locale::Es => es,
-                                Locale::En => en,
-                            };
-                            view! { <option value=id.clone() selected={palette.get().id == id}>{label}</option> }
-                        }).collect_view()
+                        let loc = locale.get();
+                        PaletteChoice::menu_options(loc)
+                            .into_iter()
+                            .map(|(id, label)| {
+                                view! {
+                                    <option value=id.clone() selected={palette.get().id == id}>
+                                        {label}
+                                    </option>
+                                }
+                            })
+                            .collect_view()
                     }}
                 </select>
             </label>

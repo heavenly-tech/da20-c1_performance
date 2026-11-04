@@ -1,24 +1,28 @@
+use std::collections::HashMap;
+
 use gloo_storage::{LocalStorage, Storage};
 use leptos::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use wasm_bindgen::JsCast;
 
+use crate::i18n::{copy, Locale};
 use crate::theme::ThemePreference;
 
 const PALETTE_KEY: &str = "da20_palette_v1";
+pub const BUILTIN_PALETTE_ID: &str = "default";
 const PALETTES_JSON: &str = include_str!("../../../data/palettes.json");
 
-#[derive(Debug, Deserialize)]
-struct PalettesFile {
-    default_palette_id: String,
-    palettes: Vec<PaletteDef>,
+/// Pilot can change the shipped default in one place (code constant mirrors CSS fallbacks).
+pub fn default_palette_id() -> &'static str {
+    BUILTIN_PALETTE_ID
 }
 
+const PALETTE_ORDER: &[&str] = &["okabe_ito", "vfr_chart", "mono_amber", "cividis"];
+
 #[derive(Debug, Clone, Deserialize)]
-struct PaletteDef {
-    id: String,
-    name_en: String,
-    name_es: String,
+struct PaletteEntry {
+    name: String,
     light: PaletteColors,
     dark: PaletteColors,
 }
@@ -28,8 +32,6 @@ struct PaletteColors {
     background: String,
     grid: String,
     axis_text: String,
-    chart_line: String,
-    chart_highlight: String,
     guide: String,
     guide_active: String,
     user_path: String,
@@ -37,22 +39,14 @@ struct PaletteColors {
     result: String,
     warning: String,
     border: String,
-    ui_bg: String,
-    ui_panel: String,
-    ui_line: String,
-    ui_txt: String,
-    ui_mut: String,
-    ui_amb: String,
 }
+
+type PalettesFile = HashMap<String, PaletteEntry>;
 
 static FILE: std::sync::OnceLock<PalettesFile> = std::sync::OnceLock::new();
 
 fn file() -> &'static PalettesFile {
     FILE.get_or_init(|| serde_json::from_str(PALETTES_JSON).expect("data/palettes.json must parse"))
-}
-
-pub fn default_palette_id() -> &'static str {
-    &file().default_palette_id
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,35 +69,103 @@ impl PaletteChoice {
         let _ = LocalStorage::set(PALETTE_KEY, self);
     }
 
-    pub fn menu_options() -> Vec<(String, String, String)> {
-        file()
-            .palettes
-            .iter()
-            .map(|p| (p.id.clone(), p.name_en.clone(), p.name_es.clone()))
-            .collect()
+    pub fn menu_options(locale: Locale) -> Vec<(String, String)> {
+        let c = copy(locale);
+        let mut out = vec![(
+            BUILTIN_PALETTE_ID.to_string(),
+            c.palette_builtin_default.to_string(),
+        )];
+        for &id in PALETTE_ORDER {
+            if let Some(entry) = file().get(id) {
+                out.push((
+                    id.to_string(),
+                    palette_display_name(locale, id, &entry.name),
+                ));
+            }
+        }
+        out
     }
 
-    fn def(&self) -> Option<&PaletteDef> {
-        file()
-            .palettes
-            .iter()
-            .find(|p| p.id == self.id)
-            .or_else(|| file().palettes.first())
+    fn entry(&self) -> Option<&PaletteEntry> {
+        if self.id == BUILTIN_PALETTE_ID {
+            return None;
+        }
+        file().get(&self.id)
     }
 
     #[allow(dead_code)]
-    pub fn label(&self, locale: crate::i18n::Locale) -> String {
-        self.def()
-            .map(|p| match locale {
-                crate::i18n::Locale::Es => p.name_es.clone(),
-                crate::i18n::Locale::En => p.name_en.clone(),
-            })
+    pub fn label(&self, locale: Locale) -> String {
+        if self.id == BUILTIN_PALETTE_ID {
+            return copy(locale).palette_builtin_default.to_string();
+        }
+        file()
+            .get(&self.id)
+            .map(|e| palette_display_name(locale, &self.id, &e.name))
             .unwrap_or_else(|| self.id.clone())
     }
 }
 
+fn palette_display_name(locale: Locale, id: &str, json_name: &str) -> String {
+    let c = copy(locale);
+    match (locale, id) {
+        (Locale::Es, "okabe_ito") => c.palette_okabe_ito.to_string(),
+        (Locale::Es, "vfr_chart") => c.palette_vfr_chart.to_string(),
+        (Locale::Es, "mono_amber") => c.palette_mono_amber.to_string(),
+        (Locale::Es, "cividis") => c.palette_cividis.to_string(),
+        _ => json_name.to_string(),
+    }
+}
+
+const PALETTE_CSS_VARS: &[&str] = &[
+    "--chart-bg",
+    "--chart-grid",
+    "--chart-label",
+    "--chart-line",
+    "--chart-highlight",
+    "--chart-guide",
+    "--chart-guide-active",
+    "--chart-user-path",
+    "--chart-marker",
+    "--chart-border",
+    "--ok",
+    "--warn",
+    "--bg",
+    "--panel",
+    "--line",
+    "--txt",
+    "--mut",
+    "--amb",
+];
+
 fn set_var(html: &web_sys::HtmlElement, name: &str, value: &str) {
     let _ = html.style().set_property(name, value);
+}
+
+fn clear_palette_vars(html: &web_sys::HtmlElement) {
+    for name in PALETTE_CSS_VARS {
+        let _ = html.style().remove_property(name);
+    }
+}
+
+fn apply_palette_colors(html: &web_sys::HtmlElement, c: &PaletteColors) {
+    set_var(html, "--chart-bg", &c.background);
+    set_var(html, "--chart-grid", &c.grid);
+    set_var(html, "--chart-label", &c.axis_text);
+    set_var(html, "--chart-line", &c.guide_active);
+    set_var(html, "--chart-highlight", &c.user_path);
+    set_var(html, "--chart-guide", &c.guide);
+    set_var(html, "--chart-guide-active", &c.guide_active);
+    set_var(html, "--chart-user-path", &c.user_path);
+    set_var(html, "--chart-marker", &c.markers);
+    set_var(html, "--chart-border", &c.border);
+    set_var(html, "--ok", &c.result);
+    set_var(html, "--warn", &c.warning);
+    set_var(html, "--bg", &c.background);
+    set_var(html, "--panel", &c.background);
+    set_var(html, "--line", &c.border);
+    set_var(html, "--txt", &c.axis_text);
+    set_var(html, "--mut", &c.guide);
+    set_var(html, "--amb", &c.user_path);
 }
 
 pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
@@ -117,31 +179,19 @@ pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
         return;
     };
     let _ = html.set_attribute("data-palette", &palette.id);
-    let Some(def) = palette.def() else {
+    if palette.id == BUILTIN_PALETTE_ID {
+        clear_palette_vars(&html);
+        return;
+    }
+    let Some(entry) = palette.entry() else {
+        clear_palette_vars(&html);
         return;
     };
     let c = match theme {
-        ThemePreference::Light => &def.light,
-        ThemePreference::Dark => &def.dark,
+        ThemePreference::Light => &entry.light,
+        ThemePreference::Dark => &entry.dark,
     };
-    set_var(&html, "--chart-bg", &c.background);
-    set_var(&html, "--chart-grid", &c.grid);
-    set_var(&html, "--chart-label", &c.axis_text);
-    set_var(&html, "--chart-line", &c.chart_line);
-    set_var(&html, "--chart-highlight", &c.chart_highlight);
-    set_var(&html, "--chart-guide", &c.guide);
-    set_var(&html, "--chart-guide-active", &c.guide_active);
-    set_var(&html, "--chart-user-path", &c.user_path);
-    set_var(&html, "--chart-marker", &c.markers);
-    set_var(&html, "--chart-border", &c.border);
-    set_var(&html, "--ok", &c.result);
-    set_var(&html, "--warn", &c.warning);
-    set_var(&html, "--bg", &c.ui_bg);
-    set_var(&html, "--panel", &c.ui_panel);
-    set_var(&html, "--line", &c.ui_line);
-    set_var(&html, "--txt", &c.ui_txt);
-    set_var(&html, "--mut", &c.ui_mut);
-    set_var(&html, "--amb", &c.ui_amb);
+    apply_palette_colors(&html, c);
 }
 
 #[component]
@@ -162,7 +212,9 @@ mod tests {
 
     #[test]
     fn palettes_json_loads() {
-        assert_eq!(default_palette_id(), "diamond");
-        assert!(PaletteChoice::menu_options().len() >= 4);
+        assert_eq!(default_palette_id(), "default");
+        assert_eq!(file().len(), 4);
+        assert!(file().contains_key("okabe_ito"));
+        assert!(PaletteChoice::menu_options(Locale::En).len() == 5);
     }
 }
