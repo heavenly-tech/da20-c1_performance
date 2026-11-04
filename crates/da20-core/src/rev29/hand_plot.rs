@@ -160,7 +160,6 @@ fn append_segment(points: &mut Vec<(f64, f64)>, segment: &[(f64, f64)]) {
 
 pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> TakeoffPath {
     let weight_kg = lb_to_kg(inputs.weight_lb);
-    let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
     let (hw, tw) = headwind_and_tailwind(inputs);
     let obs_m = inputs
         .obstacle_height_m
