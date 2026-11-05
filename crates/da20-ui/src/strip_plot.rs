@@ -9,9 +9,9 @@ use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, headwind_kt_from_strip_x,
     tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_panel_guides,
-    takeoff_wind_is_tailwind, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ,
-    CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW,
-    TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    takeoff_wind_is_tailwind, x_ea_ft, x_headwind_kt, x_oat, x_obstacle_m, x_tailwind_kt,
+    x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
+    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -32,6 +32,21 @@ use crate::i18n::{
 };
 use crate::phase_readouts::OVERLAY_STROKE_COLORS;
 use crate::storage::ReadingsStore;
+
+const STRIP_INPUT_CURSOR_DASH: &str = "5 4";
+
+fn strip_input_cursor(x: f64) -> impl IntoView {
+    view! {
+        <line
+            x1=x
+            y1=STRIP_TOP
+            x2=x
+            y2=STRIP_BOTTOM
+            class="chart-stroke-guide-active"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StripKind {
@@ -339,8 +354,11 @@ fn render_takeoff_strip(
             </>
         })}
         {obs_guides.collect_view()}
-        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
-        <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="4 3"/>
+        {strip_input_cursor(oat_x)}
+        {strip_input_cursor(x_weight_kg(kg))}
+        {strip_input_cursor(x_headwind_kt(hw))}
+        {strip_input_cursor(x_tailwind_kt(tw))}
+        {strip_input_cursor(x_obstacle_m(inputs.obstacle_height_m))}
         <polyline points=path_pts class="chart-stroke-user-path"/>
         {saved_path_overlays(StripKind::Takeoff, data.clone(), store, phase_key, overlay_ids)}
         {path.markers.iter().map(|(x,y)| view! {
@@ -463,7 +481,10 @@ fn render_climb_strip(
             "14000 ft".to_string(),
             LabelAnchor::Start,
         )}
-        <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+        {strip_input_cursor(oat_x)}
+        {path.as_ref().and_then(|p| p.points.last().copied()).map(|(roc_x, _)| view! {
+            {strip_input_cursor(roc_x)}
+        })}
         {path_pts.map(|pts| view! {
             <>
                 {saved_path_overlays(StripKind::Climb, data.clone(), store, phase_key.clone(), overlay_ids)}
@@ -585,20 +606,27 @@ fn apply_hit(
                     i.wind_strip_crosswind_clamped = clamp;
                 });
             } else if (TAKEOFF_HW.x..TAKEOFF_HW.x + TAKEOFF_HW.w).contains(&sx) {
-                let hw = headwind_kt_from_strip_x(sx);
+                let i0 = inputs.get();
+                let (hw, tw) = headwind_and_tailwind(&i0);
+                if takeoff_wind_is_tailwind(hw, tw) {
+                    return;
+                }
+                let hw_kt = headwind_kt_from_strip_x(sx);
                 inputs.update(|i| {
                     let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
                         return;
                     };
                     let (dir, speed, clamp) =
-                        da20_core::wind::back_solve_wind_for_headwind(i.wind_dir_deg, rwy, hw);
+                        da20_core::wind::back_solve_wind_for_headwind(i.wind_dir_deg, rwy, hw_kt);
                     i.wind_dir_deg = dir;
                     i.wind_speed_kt = speed;
                     i.wind_strip_crosswind_clamped = clamp;
                 });
-            } else if sx >= TAKEOFF_OBS.x {
-                let obs = (sx - TAKEOFF_OBS.x) / TAKEOFF_OBS.w * 15.0;
-                inputs.update(|i| i.obstacle_height_m = obs.clamp(0.0, 15.0));
+            } else if (TAKEOFF_OBS.x..TAKEOFF_OBS.x + TAKEOFF_OBS.w).contains(&sx) {
+                let obs = (sx - TAKEOFF_OBS.x) / TAKEOFF_OBS.w * defaults::OBSTACLE_HEIGHT_MAX_M;
+                inputs.update(|i| {
+                    i.obstacle_height_m = obs.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
+                });
             }
         }
         StripKind::Climb => {
@@ -723,6 +751,33 @@ mod strip_drag_tests {
 
         let sx_tw_ref = tailwind_reference_x();
         assert!((tailwind_kt_from_strip_x(sx_tw_ref) - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_input_cursors_track_hw_tw_obstacle() {
+        use da20_core::types::FlightInputs;
+        let inputs = FlightInputs {
+            wind_speed_kt: 8.0,
+            wind_dir_deg: 0.0,
+            runway: "360".into(),
+            obstacle_height_m: 7.5,
+            ..Default::default()
+        };
+        let (hw, tw) = headwind_and_tailwind(&inputs);
+        assert!((x_headwind_kt(hw) - TAKEOFF_HW.x - hw / 20.0 * TAKEOFF_HW.w).abs() < 0.01);
+        assert!(
+            (x_tailwind_kt(tw)
+                - (TAKEOFF_TW.x + TAKEOFF_TW.w - tw / 5.0 * TAKEOFF_TW.w))
+                .abs()
+                < 0.01
+        );
+        assert!(
+            (x_obstacle_m(inputs.obstacle_height_m)
+                - TAKEOFF_OBS.x
+                - inputs.obstacle_height_m / defaults::OBSTACLE_HEIGHT_MAX_M * TAKEOFF_OBS.w)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
