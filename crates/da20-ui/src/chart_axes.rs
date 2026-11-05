@@ -238,7 +238,7 @@ mod tests {
         assert!(!c.axis_weight_kg.is_empty());
     }
 
-    use da20_core::rev29::hand_plot::{CLIMB_ROC, x_roc_fpm};
+    use da20_core::rev29::hand_plot::{x_roc_fpm, CLIMB_ROC};
 
     #[test]
     fn climb_roc_strip_x_axis_ticks_at_standard_fpm_values() {
@@ -246,7 +246,7 @@ mod tests {
         for roc in ROC_TICKS_FPM {
             let x = x_roc_fpm(roc);
             assert!(
-                x >= CLIMB_ROC.x && x <= CLIMB_ROC.x + CLIMB_ROC.w,
+                (CLIMB_ROC.x..=CLIMB_ROC.x + CLIMB_ROC.w).contains(&x),
                 "ROC tick {roc} fpm maps outside ROC panel"
             );
         }
