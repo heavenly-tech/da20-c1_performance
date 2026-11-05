@@ -1,10 +1,27 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1-alpine AS builder
-ARG TARGETARCH
+# --- Base: OS deps + pinned WASM toolchain (cached unless versions change) ---
+FROM rust:1-alpine AS chef
 RUN apk add --no-cache musl-dev openssl-dev pkgconfig git nodejs npm curl bash
+RUN cargo install cargo-chef --locked --version 0.1.71 \
+    && cargo install trunk --locked --version 0.22.1 \
+    && cargo install wasm-bindgen-cli --locked --version 0.2.130
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# --- Dependency recipe (invalidates only when Cargo.toml / Cargo.lock change) ---
+FROM chef AS planner
 WORKDIR /app
-COPY . .
+COPY Cargo.toml Cargo.lock ./
+COPY crates/da20-core/Cargo.toml crates/da20-core/Cargo.toml
+COPY crates/da20-server/Cargo.toml crates/da20-server/Cargo.toml
+COPY crates/da20-ui/Cargo.toml crates/da20-ui/Cargo.toml
+RUN cargo chef prepare --recipe-path recipe.json
+
+# --- Compile and cache dependency layers (per TARGETARCH musl + wasm32) ---
+FROM chef AS cacher
+ARG TARGETARCH
+WORKDIR /app
+COPY --from=planner /app/recipe.json recipe.json
 RUN case "${TARGETARCH}" in \
       amd64) MUSL_TARGET=x86_64-unknown-linux-musl ;; \
       arm64) MUSL_TARGET=aarch64-unknown-linux-musl ;; \
@@ -12,10 +29,14 @@ RUN case "${TARGETARCH}" in \
     esac \
     && echo "${MUSL_TARGET}" > /tmp/musl_target \
     && rustup target add "$(cat /tmp/musl_target)" wasm32-unknown-unknown
-# Trunk downloads glibc wasm-bindgen binaries that fail on Alpine (ENOENT). Install musl-native CLI.
-RUN cargo install trunk --locked \
-    && cargo install wasm-bindgen-cli --version 0.2.130 --locked
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN MUSL_TARGET="$(cat /tmp/musl_target)" \
+    && cargo chef cook --release --recipe-path recipe.json --target "${MUSL_TARGET}" \
+    && cargo chef cook --release --recipe-path recipe.json --target wasm32-unknown-unknown
+
+# --- Application build (source changes only rebuild this stage + above invalidation) ---
+FROM cacher AS builder
+WORKDIR /app
+COPY . .
 WORKDIR /app/crates/da20-ui
 RUN trunk build --release
 WORKDIR /app
