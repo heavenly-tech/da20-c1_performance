@@ -794,14 +794,16 @@ fn client_to_svg_viewbox_via_ctm(
     client_x: f64,
     client_y: f64,
 ) -> Option<(f64, f64)> {
-    let ctm = svg.get_screen_ctm()?;
-    let inv = ctm.inverse()?;
-    let doc = svg.owner_document()?;
-    let pt = doc.create_svg_point();
-    pt.set_x(client_x);
-    pt.set_y(client_y);
+    use wasm_bindgen::JsCast;
+    let root = svg.dyn_ref::<web_sys::SvgsvgElement>()?;
+    let graphics = root.dyn_ref::<web_sys::SvgGraphicsElement>()?;
+    let ctm = graphics.get_screen_ctm()?;
+    let inv = ctm.inverse().ok()?;
+    let pt = root.create_svg_point();
+    pt.set_x(client_x as f32);
+    pt.set_y(client_y as f32);
     let out = pt.matrix_transform(&inv);
-    Some((out.x(), out.y()))
+    Some((f64::from(out.x()), f64::from(out.y())))
 }
 
 fn svg_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
