@@ -153,6 +153,7 @@ pub fn wind_panel_tw_m(
 }
 
 /// Headwind grid: each row is a wind speed; columns are distance guide lines.
+#[allow(clippy::too_many_arguments)]
 fn wind_panel_kt_rows(
     lines: &[f64],
     wind_kt: &[f64],
@@ -185,6 +186,7 @@ fn wind_panel_kt_rows(
 }
 
 /// Tailwind grid: each row is an entry-distance guide line; columns are wind speeds.
+#[allow(clippy::too_many_arguments)]
 fn wind_panel_line_rows(
     lines: &[f64],
     wind_kt: &[f64],
@@ -218,6 +220,7 @@ fn wind_panel_line_rows(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wind_panel_delta(
     wind_kt: &[f64],
     at_wind: &[f64],
