@@ -202,16 +202,25 @@ fn render_takeoff_strip(
         }
     });
 
-    let headwind_guides = guides.headwind_segments.iter().map(|(p0, p1)| {
+    let headwind_guides = guides.headwind_polylines.iter().map(|poly| {
+        let pts: String = poly
+            .iter()
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         view! {
-            <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 class="chart-stroke-guide" opacity="0.7"/>
+            <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
         }
     });
 
-    let tailwind_guides = guides.tailwind_segments.iter().map(|(p0, p1)| {
+    let tailwind_guides = guides.tailwind_polylines.iter().map(|poly| {
+        let pts: String = poly
+            .iter()
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         view! {
-            <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1
-                class="chart-stroke-guide" opacity="0.7"
+            <polyline points=pts class="chart-stroke-guide" opacity="0.7"
                 stroke-dasharray="6 4"/>
         }
     });

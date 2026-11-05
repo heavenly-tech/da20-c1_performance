@@ -140,7 +140,7 @@ pub fn wind_panel_tw_m(
     base_distance_m: f64,
     tailwind_kt: f64,
 ) -> (f64, Vec<CalculationWarning>) {
-    wind_panel_line_rows(
+    wind_panel_kt_rows(
         &data.tw_lines.value,
         &data.tw_kt.value,
         &data.tw_m.value,
@@ -173,41 +173,6 @@ fn wind_panel_kt_rows(
             v
         })
         .collect();
-    wind_panel_delta(
-        wind_kt,
-        &at_wind,
-        entry_distance_m,
-        wind_component_kt,
-        label,
-        max_chart_kt,
-        limit_code,
-        &mut warnings,
-    )
-}
-
-/// Tailwind grid: each row is an entry-distance guide line; columns are wind speeds.
-#[allow(clippy::too_many_arguments)]
-fn wind_panel_line_rows(
-    lines: &[f64],
-    wind_kt: &[f64],
-    grid: &[Vec<f64>],
-    entry_distance_m: f64,
-    wind_component_kt: f64,
-    label: &str,
-    max_chart_kt: f64,
-    limit_code: &str,
-) -> (f64, Vec<CalculationWarning>) {
-    let mut warnings = Vec::new();
-    if wind_kt.is_empty() || grid.is_empty() {
-        return (entry_distance_m, warnings);
-    }
-    let mut at_wind = Vec::with_capacity(wind_kt.len());
-    for col in 0..wind_kt.len() {
-        let column: Vec<f64> = grid.iter().map(|row| row[col]).collect();
-        let (v, w) = linear_interp(lines, &column, entry_distance_m, label);
-        warnings.extend(w);
-        at_wind.push(v);
-    }
     wind_panel_delta(
         wind_kt,
         &at_wind,

@@ -91,7 +91,9 @@ pub struct CruiseTableValue {
 
 impl Rev29File {
     pub fn from_json_str(s: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(s)
+        let mut file: Self = serde_json::from_str(s)?;
+        file.normalize_wind_grids();
+        Ok(file)
     }
 
     pub fn production() -> Self {
@@ -101,5 +103,54 @@ impl Rev29File {
 
     pub fn is_production(&self) -> bool {
         self.meta.data_status.as_deref() == Some("production")
+    }
+
+    /// AFM wind panels store distances as [wind_kt][guide_line]. JSON `tw_m` is [line][kt] until transposed.
+    fn normalize_wind_grids(&mut self) {
+        let hw_kt = &self.hw_kt.value;
+        let hw_lines = &self.hw_lines.value;
+        assert_eq!(
+            self.hw_m.value.len(),
+            hw_kt.len(),
+            "hw_m rows must match hw_kt"
+        );
+        for row in &self.hw_m.value {
+            assert_eq!(row.len(), hw_lines.len(), "hw_m cols must match hw_lines");
+        }
+
+        let tw_kt = &self.tw_kt.value;
+        let tw_lines = &self.tw_lines.value;
+        let tw_m = &mut self.tw_m.value;
+        if !tw_m.is_empty() && tw_m.len() == tw_lines.len() && tw_m[0].len() == tw_kt.len() {
+            *tw_m = transpose_grid(tw_m);
+        }
+        assert_eq!(tw_m.len(), tw_kt.len(), "tw_m rows must match tw_kt");
+        for row in tw_m.iter() {
+            assert_eq!(row.len(), tw_lines.len(), "tw_m cols must match tw_lines");
+        }
+    }
+}
+
+fn transpose_grid(grid: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    if grid.is_empty() {
+        return vec![];
+    }
+    let cols = grid[0].len();
+    (0..cols)
+        .map(|c| grid.iter().map(|row| row[c]).collect())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Rev29File;
+
+    #[test]
+    fn tw_m_normalized_to_kt_by_line() {
+        let data = Rev29File::production();
+        assert_eq!(data.tw_m.value.len(), data.tw_kt.value.len());
+        for row in &data.tw_m.value {
+            assert_eq!(row.len(), data.tw_lines.value.len());
+        }
     }
 }

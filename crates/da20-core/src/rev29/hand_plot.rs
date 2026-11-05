@@ -6,6 +6,7 @@ use crate::rev29::engine::{
 };
 use crate::rev29::types::Rev29File;
 use crate::types::defaults;
+use crate::types::CalculationWarning;
 use crate::types::FlightInputs;
 use crate::wind::{headwind_tailwind_kt, runway_heading_deg, wind_components};
 
@@ -122,25 +123,88 @@ fn trace_weight_path(data: &Rev29File, base_m: f64, from_kg: f64, to_kg: f64) ->
 }
 
 fn trace_headwind_guide(data: &Rev29File, after_weight_m: f64, hw_kt: f64) -> Vec<(f64, f64)> {
-    let mut pts = Vec::with_capacity(PATH_STEPS + 1);
-    for i in 0..=PATH_STEPS {
-        let t = i as f64 / PATH_STEPS as f64;
-        let hw = hw_kt * t;
-        let dist = wind_panel_hw_m(data, after_weight_m, hw).0;
-        pts.push((x_headwind_kt(hw), y_dist(dist)));
+    trace_wind_panel_guide(
+        data,
+        after_weight_m,
+        hw_kt,
+        &data.hw_kt.value,
+        wind_panel_hw_m,
+        x_headwind_kt,
+    )
+}
+
+fn trace_tailwind_guide(data: &Rev29File, after_weight_m: f64, tw_kt: f64) -> Vec<(f64, f64)> {
+    trace_wind_panel_guide(
+        data,
+        after_weight_m,
+        tw_kt,
+        &data.tw_kt.value,
+        wind_panel_tw_m,
+        x_tailwind_kt,
+    )
+}
+
+fn trace_wind_panel_guide(
+    data: &Rev29File,
+    entry_m: f64,
+    component_kt: f64,
+    kt_axis: &[f64],
+    sample: fn(&Rev29File, f64, f64) -> (f64, Vec<CalculationWarning>),
+    x_map: fn(f64) -> f64,
+) -> Vec<(f64, f64)> {
+    let mut pts = Vec::new();
+    for &kt in kt_axis {
+        if kt > component_kt + 1e-6 {
+            break;
+        }
+        let dist = sample(data, entry_m, kt).0;
+        pts.push((x_map(kt), y_dist(dist)));
+    }
+    let end = (
+        x_map(component_kt),
+        y_dist(sample(data, entry_m, component_kt).0),
+    );
+    if pts.last().copied() != Some(end) {
+        pts.push(end);
     }
     pts
 }
 
-fn trace_tailwind_guide(data: &Rev29File, after_weight_m: f64, tw_kt: f64) -> Vec<(f64, f64)> {
-    let mut pts = Vec::with_capacity(PATH_STEPS + 1);
-    for i in 0..=PATH_STEPS {
-        let t = i as f64 / PATH_STEPS as f64;
-        let tw = tw_kt * t;
-        let dist = wind_panel_tw_m(data, after_weight_m, tw).0;
-        pts.push((x_tailwind_kt(tw), y_dist(dist)));
-    }
-    pts
+/// Chart guide polyline at fixed entry distance (same samples as the hand path wind trace).
+pub fn headwind_guide_polyline(data: &Rev29File, entry_line_m: f64) -> Vec<(f64, f64)> {
+    wind_guide_polyline(
+        data,
+        entry_line_m,
+        &data.hw_kt.value,
+        wind_panel_hw_m,
+        x_headwind_kt,
+    )
+}
+
+pub fn tailwind_guide_polyline(data: &Rev29File, entry_line_m: f64) -> Vec<(f64, f64)> {
+    wind_guide_polyline(
+        data,
+        entry_line_m,
+        &data.tw_kt.value,
+        wind_panel_tw_m,
+        x_tailwind_kt,
+    )
+}
+
+fn wind_guide_polyline(
+    data: &Rev29File,
+    entry_line_m: f64,
+    kt_axis: &[f64],
+    sample: fn(&Rev29File, f64, f64) -> (f64, Vec<CalculationWarning>),
+    x_map: fn(f64) -> f64,
+) -> Vec<(f64, f64)> {
+    kt_axis
+        .iter()
+        .map(|&kt| {
+            let dist = sample(data, entry_line_m, kt).0;
+            (x_map(kt), y_dist(dist))
+        })
+        .collect()
 }
 
 fn trace_obstacle_guide(data: &Rev29File, ground_m: f64, obs_m: f64) -> Vec<(f64, f64)> {
@@ -352,8 +416,6 @@ pub fn obstacle_guide_ys(data: &Rev29File, ground_line_m: f64, obstacle_h_m: f64
     )
 }
 
-const TAKEOFF_GUIDE_HW_MAX_KT: f64 = 20.0;
-const TAKEOFF_GUIDE_TW_MAX_KT: f64 = 5.0;
 const TAKEOFF_GUIDE_OBS_MAX_M: f64 = 15.0;
 const TAKEOFF_GUIDE_LINE_COUNT: usize = 8;
 const TAKEOFF_TW_GUIDE_LINE_COUNT: usize = 7;
@@ -363,19 +425,9 @@ const TAKEOFF_OBS_GUIDE_COUNT: usize = 6;
 #[derive(Clone, Debug, PartialEq)]
 pub struct TakeoffPanelGuides {
     pub weight_polylines: Vec<Vec<(f64, f64)>>,
-    pub headwind_segments: Vec<((f64, f64), (f64, f64))>,
-    pub tailwind_segments: Vec<((f64, f64), (f64, f64))>,
+    pub headwind_polylines: Vec<Vec<(f64, f64)>>,
+    pub tailwind_polylines: Vec<Vec<(f64, f64)>>,
     pub obstacle_ys: Vec<(f64, f64)>,
-}
-
-pub fn tailwind_panel_segment(
-    data: &Rev29File,
-    entry_distance_m: f64,
-    tailwind_max: f64,
-) -> ((f64, f64), (f64, f64)) {
-    let y0 = y_dist(entry_distance_m);
-    let y1 = y_dist(wind_panel_tw_m(data, entry_distance_m, tailwind_max).0);
-    ((x_tailwind_kt(0.0), y0), (x_tailwind_kt(tailwind_max), y1))
 }
 
 pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
@@ -386,19 +438,19 @@ pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
         .take(TAKEOFF_GUIDE_LINE_COUNT)
         .map(|&line_m| weight_guide_polyline(data, line_m))
         .collect();
-    let headwind_segments = data
+    let headwind_polylines = data
         .hw_lines
         .value
         .iter()
         .take(TAKEOFF_GUIDE_LINE_COUNT)
-        .map(|&line_m| wind_panel_segment(data, line_m, TAKEOFF_GUIDE_HW_MAX_KT))
+        .map(|&line_m| headwind_guide_polyline(data, line_m))
         .collect();
-    let tailwind_segments = data
+    let tailwind_polylines = data
         .tw_lines
         .value
         .iter()
         .take(TAKEOFF_TW_GUIDE_LINE_COUNT)
-        .map(|&line_m| tailwind_panel_segment(data, line_m, TAKEOFF_GUIDE_TW_MAX_KT))
+        .map(|&line_m| tailwind_guide_polyline(data, line_m))
         .collect();
     let obstacle_ys = data
         .obs_lines
@@ -409,8 +461,8 @@ pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
         .collect();
     TakeoffPanelGuides {
         weight_polylines,
-        headwind_segments,
-        tailwind_segments,
+        headwind_polylines,
+        tailwind_polylines,
         obstacle_ys,
     }
 }
@@ -434,8 +486,8 @@ mod tests {
             .enumerate()
         {
             assert_eq!(
-                guides.headwind_segments[i],
-                wind_panel_segment(&data, line_m, TAKEOFF_GUIDE_HW_MAX_KT)
+                guides.headwind_polylines[i],
+                headwind_guide_polyline(&data, line_m)
             );
             assert_eq!(
                 guides.weight_polylines[i],
@@ -451,8 +503,8 @@ mod tests {
         let line_m = data.hw_lines.value[2];
         let (wf, _) = crate::rev29::engine::weight_factor(&data, 650.0);
         let (wf_chart, _) = weight_factor(&data, defaults::TAKEOFF_CHART_WEIGHT_KG);
-        let wrong = wind_panel_segment(&data, line_m * wf / wf_chart, TAKEOFF_GUIDE_HW_MAX_KT);
-        assert_ne!(guides.headwind_segments[2], wrong);
+        let wrong = headwind_guide_polyline(&data, line_m * wf / wf_chart);
+        assert_ne!(guides.headwind_polylines[2], wrong);
     }
 
     #[test]
@@ -481,6 +533,54 @@ mod tests {
         let obs = obstacle_add_m(&data, g, h).0;
         assert_eq!(obs, obstacle_add_m(&data, g, h).0);
         assert!((obstacle_add_m(&data, g, 0.0).0 - g).abs() < 1e-9);
+    }
+
+    #[test]
+    fn afm_tailwind_panel_reference_distances() {
+        let data = Rev29File::production();
+        let (d331, _) = wind_panel_tw_m(&data, 300.0, 2.85);
+        assert!(
+            (d331 - 331.0).abs() <= 1.0,
+            "300 m + 2.85 kt TW expected ~331 m, got {d331}"
+        );
+        let (d583, _) = wind_panel_tw_m(&data, 500.0, 4.84);
+        assert!(
+            (d583 - 583.0).abs() <= 1.0,
+            "500 m + 4.84 kt TW expected ~583 m, got {d583}"
+        );
+    }
+
+    #[test]
+    fn path_wind_trace_overlays_guide_at_chart_entry_line() {
+        let data = Rev29File::production();
+        let entry = 300.0;
+        let hw_kt = 20.0;
+        let guide = headwind_guide_polyline(&data, entry);
+        let trace = trace_headwind_guide(&data, entry, hw_kt);
+        assert!(!guide.is_empty() && !trace.is_empty());
+        for pt in &trace {
+            let on_guide = guide
+                .windows(2)
+                .any(|w| point_near_segment(*pt, w[0], w[1], 0.75));
+            assert!(on_guide, "trace point {:?} off guide", pt);
+        }
+    }
+
+    fn point_near_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64), eps: f64) -> bool {
+        let (px, py) = p;
+        let (ax, ay) = a;
+        let (bx, by) = b;
+        let dx = bx - ax;
+        let dy = by - ay;
+        let len_sq = dx * dx + dy * dy;
+        if len_sq < 1e-9 {
+            return (px - ax).hypot(py - ay) <= eps;
+        }
+        let t = ((px - ax) * dx + (py - ay) * dy) / len_sq;
+        let t = t.clamp(0.0, 1.0);
+        let qx = ax + t * dx;
+        let qy = ay + t * dy;
+        (px - qx).hypot(py - qy) <= eps
     }
 
     #[test]
