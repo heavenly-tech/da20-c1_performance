@@ -15,6 +15,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/da20-core/Cargo.toml crates/da20-core/Cargo.toml
 COPY crates/da20-server/Cargo.toml crates/da20-server/Cargo.toml
 COPY crates/da20-ui/Cargo.toml crates/da20-ui/Cargo.toml
+RUN mkdir -p crates/da20-core/src crates/da20-ui/src crates/da20-server/src \
+    && printf '%s\n' 'pub fn _docker_dep_stub() {}' > crates/da20-core/src/lib.rs \
+    && printf '%s\n' 'pub fn _docker_dep_stub() {}' > crates/da20-ui/src/lib.rs \
+    && printf '%s\n' 'fn main() {}' > crates/da20-server/src/main.rs \
+    && mkdir -p dist && printf '%s\n' '<!doctype html><html></html>' > dist/index.html
 RUN cargo chef prepare --recipe-path recipe.json
 
 # --- Compile and cache dependency layers (per TARGETARCH musl + wasm32) ---
