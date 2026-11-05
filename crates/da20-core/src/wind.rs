@@ -91,6 +91,27 @@ pub fn back_solve_wind_for_headwind(
     }
 }
 
+/// Keep wind direction fixed; solve speed for a target tailwind (strip TW sub-panel drag).
+pub fn back_solve_wind_for_tailwind(
+    wind_dir_deg: f64,
+    runway_heading_deg: f64,
+    target_tailwind_kt: f64,
+) -> (f64, f64, bool) {
+    let target = target_tailwind_kt.max(0.0);
+    let angle = (wind_dir_deg - runway_heading_deg).to_radians();
+    let cos = angle.cos();
+    if cos.abs() > COS_EPS {
+        if cos < 0.0 {
+            let speed = (target / -cos).max(0.0);
+            (wind_dir_deg, speed, false)
+        } else {
+            (wind_dir_deg, 0.0, false)
+        }
+    } else {
+        (wind_dir_deg, target, true)
+    }
+}
+
 pub fn compute_wind(
     data: &PerformanceData,
     inputs: &FlightInputs,

@@ -26,7 +26,18 @@ pub struct Panel {
 
 pub const TAKEOFF_OAT: Panel = Panel { x: 60.0, w: 420.0 };
 pub const TAKEOFF_WEIGHT: Panel = Panel { x: 510.0, w: 230.0 };
+/// Full wind panel (TW sub-panel + HW sub-panel).
 pub const TAKEOFF_WIND: Panel = Panel { x: 770.0, w: 150.0 };
+/// Fig 5.4 tailwind sub-panel (0–5 kt); 0 kt reference on the right edge, away from weight panel.
+pub const TAKEOFF_TW: Panel = Panel {
+    x: TAKEOFF_WIND.x,
+    w: 50.0,
+};
+/// Headwind sub-panel (0–20 kt), to the right of the TW sub-panel.
+pub const TAKEOFF_HW: Panel = Panel {
+    x: TAKEOFF_TW.x + TAKEOFF_TW.w,
+    w: TAKEOFF_WIND.w - TAKEOFF_TW.w,
+};
 pub const TAKEOFF_OBS: Panel = Panel { x: 950.0, w: 110.0 };
 
 pub const CLIMB_EQ: Panel = Panel { x: 60.0, w: 480.0 };
@@ -54,11 +65,42 @@ pub fn x_weight_kg(kg: f64) -> f64 {
 }
 
 pub fn x_headwind_kt(hw: f64) -> f64 {
-    TAKEOFF_WIND.x + (hw.clamp(0.0, 20.0) / 20.0) * TAKEOFF_WIND.w
+    TAKEOFF_HW.x + (hw.clamp(0.0, 20.0) / 20.0) * TAKEOFF_HW.w
 }
 
 pub fn x_tailwind_kt(tw: f64) -> f64 {
-    TAKEOFF_WIND.x - (tw.clamp(0.0, 5.0) / 5.0) * (TAKEOFF_WIND.w * 0.25)
+    TAKEOFF_TW.x + TAKEOFF_TW.w - (tw.clamp(0.0, 5.0) / 5.0) * TAKEOFF_TW.w
+}
+
+/// Vertical 0 kt tailwind reference (entry from weight panel).
+pub fn tailwind_reference_x() -> f64 {
+    x_tailwind_kt(0.0)
+}
+
+pub fn takeoff_wind_is_tailwind(hw: f64, tw: f64) -> bool {
+    tw > 0.05 && tw >= hw
+}
+
+pub fn takeoff_wind_panel_entry_x(hw: f64, tw: f64) -> f64 {
+    if takeoff_wind_is_tailwind(hw, tw) {
+        tailwind_reference_x()
+    } else {
+        TAKEOFF_HW.x
+    }
+}
+
+pub fn tailwind_subpanel_x_range() -> (f64, f64) {
+    (TAKEOFF_TW.x, TAKEOFF_TW.x + TAKEOFF_TW.w)
+}
+
+pub fn tailwind_kt_from_strip_x(x: f64) -> f64 {
+    let x = x.clamp(TAKEOFF_TW.x, TAKEOFF_TW.x + TAKEOFF_TW.w);
+    (TAKEOFF_TW.x + TAKEOFF_TW.w - x) / TAKEOFF_TW.w * 5.0
+}
+
+pub fn headwind_kt_from_strip_x(x: f64) -> f64 {
+    let x = x.clamp(TAKEOFF_HW.x, TAKEOFF_HW.x + TAKEOFF_HW.w);
+    (x - TAKEOFF_HW.x) / TAKEOFF_HW.w * 20.0
 }
 
 pub fn x_obstacle_m(obs_m: f64) -> f64 {
@@ -296,11 +338,7 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let along_weight = trace_weight_path(data, core.base_m, chart_kg, weight_kg);
     append_segment(&mut points, &along_weight);
 
-    let wind_panel_left = if tw > 0.0 && hw <= 0.0 {
-        x_tailwind_kt(0.0)
-    } else {
-        TAKEOFF_WIND.x
-    };
+    let wind_panel_left = takeoff_wind_panel_entry_x(hw, tw);
     if let Some((lx, ly)) = points.last().copied() {
         if (ly - after_wt_y).abs() > 0.5 {
             points.push((lx, after_wt_y));
@@ -311,10 +349,10 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     }
     push_turn_marker(&mut markers, (wind_panel_left, after_wt_y));
 
-    let wind_trace = if hw > 0.0 {
-        trace_headwind_guide(data, core.after_weight_m, hw)
-    } else if tw > 0.0 {
+    let wind_trace = if takeoff_wind_is_tailwind(hw, tw) {
         trace_tailwind_guide(data, core.after_weight_m, tw)
+    } else if hw > 0.0 {
+        trace_headwind_guide(data, core.after_weight_m, hw)
     } else {
         vec![(x_headwind_kt(0.0), y_dist(core.after_weight_m))]
     };
@@ -337,10 +375,10 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
         push_turn_marker(&mut markers, final_pt);
     }
 
-    let chart_ground = if hw > 0.0 {
-        wind_panel_hw_m(data, core.after_weight_m, hw).0
-    } else if tw > 0.0 {
+    let chart_ground = if takeoff_wind_is_tailwind(hw, tw) {
         wind_panel_tw_m(data, core.after_weight_m, tw).0
+    } else if hw > 0.0 {
+        wind_panel_hw_m(data, core.after_weight_m, hw).0
     } else {
         core.after_weight_m
     };
@@ -938,11 +976,7 @@ mod tests {
         let path = takeoff_hand_path(data, &inputs, pa_ft);
 
         let wt_exit_y = y_dist(core.after_weight_m);
-        let wind_x = if tw > 0.0 && hw <= 0.0 {
-            x_tailwind_kt(0.0)
-        } else {
-            TAKEOFF_WIND.x
-        };
+        let wind_x = takeoff_wind_panel_entry_x(hw, tw);
         let wind_entry = path
             .points
             .iter()
@@ -1032,6 +1066,63 @@ mod tests {
                 .unwrap_or(2130.0);
             panel_y_continuity(&data, inputs, pa);
         }
+    }
+
+    #[test]
+    fn tailwind_subpanel_x_disjoint_from_weight_panel() {
+        let (tw_lo, tw_hi) = tailwind_subpanel_x_range();
+        let wt_hi = TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w;
+        assert!(
+            tw_lo >= wt_hi - 0.01,
+            "TW sub-panel [{tw_lo},{tw_hi}] must not overlap weight panel ending at {wt_hi}"
+        );
+        for tw in [0.0, 1.0, 2.5, 5.0] {
+            let x = x_tailwind_kt(tw);
+            assert!(x >= tw_lo && x <= tw_hi + 0.01);
+        }
+        assert!((tailwind_reference_x() - tw_hi).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_tailwind_path_x_monotonic_outside_tw_subpanel() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            weight_lb: 1700.0,
+            ..Default::default()
+        };
+        let (hw, tw) = headwind_and_tailwind(&inputs);
+        assert!(takeoff_wind_is_tailwind(hw, tw));
+        let path = takeoff_hand_path(&data, &inputs, 2130.0);
+        let (tw_lo, tw_hi) = tailwind_subpanel_x_range();
+        for w in path.points.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let in_tw = |p: (f64, f64)| p.0 >= tw_lo - 0.5 && p.0 <= tw_hi + 0.5;
+            if in_tw(a) && in_tw(b) {
+                continue;
+            }
+            assert!(
+                b.0 >= a.0 - 0.01,
+                "x must not decrease outside TW sub-panel: ({a:?})→({b:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn takeoff_runway_190_wind_010_05_tailwind_case() {
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            ..Default::default()
+        };
+        use crate::wind::{headwind_tailwind_kt, runway_heading_deg, wind_components};
+        let rwy = runway_heading_deg(&inputs.runway).expect("rwy");
+        let c = wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy);
+        let (hw, tw) = headwind_tailwind_kt(&c);
+        assert!(takeoff_wind_is_tailwind(hw, tw), "hw={hw} tw={tw}");
     }
 
     #[test]

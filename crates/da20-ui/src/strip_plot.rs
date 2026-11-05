@@ -7,10 +7,11 @@ use da20_core::climb::compute_climb;
 use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
-    chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, takeoff_hand_path,
-    takeoff_panel_guides, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ,
-    CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT, TAKEOFF_OBS,
-    TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, headwind_kt_from_strip_x,
+    tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_panel_guides,
+    takeoff_wind_is_tailwind, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ,
+    CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT,
+    TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -206,20 +207,17 @@ fn render_takeoff_strip(
     let base = chart_read_takeoff_base_m(inner, pa, inputs.oat_c);
     let oat_x = x_oat(inputs.oat_c);
     let (hw, tw) = headwind_and_tailwind(&inputs);
-    let tailwind_case = tw > 0.05 && tw >= hw;
-    let wind_kt = if tailwind_case { tw } else { hw };
     let rwy_valid =
         runway_heading_status(&inputs.runway) == da20_core::wind::RunwayHeadingStatus::Valid;
+    let tailwind_case = rwy_valid && takeoff_wind_is_tailwind(hw, tw);
+    let wind_kt = if tailwind_case { tw } else { hw };
     let wind_panel_lbl = if tailwind_case {
         c.strip_panel_tw
     } else {
         c.strip_panel_hw
     };
-    let wind_caption_lbl = if tailwind_case {
-        c.strip_fig54_tw
-    } else {
-        c.strip_fig54_hw
-    };
+    let (wind_caption_lbl, wind_caption_kt) =
+        takeoff_strip_wind_caption_parts(locale, hw, tw, rwy_valid);
     let kg = lb_to_kg(inputs.weight_lb);
     let guides = takeoff_panel_guides(inner);
 
@@ -329,8 +327,18 @@ fn render_takeoff_strip(
         {grid_lines()}
         {curve_paths.collect_view()}
         {weight_guides.collect_view()}
-        {headwind_guides.collect_view()}
+        <g class:results-muted=tailwind_case>
+            {headwind_guides.collect_view()}
+        </g>
         {tailwind_guides.collect_view()}
+        {tailwind_case.then(|| view! {
+            <>
+                <rect x=TAKEOFF_TW.x y=STRIP_TOP width=TAKEOFF_TW.w height=STRIP_BOTTOM-STRIP_TOP
+                    class="chart-panel" opacity="0.35"/>
+                <line x1=tailwind_reference_x() y1=STRIP_TOP x2=tailwind_reference_x() y2=STRIP_BOTTOM
+                    class="chart-stroke-guide" stroke-dasharray="5 4"/>
+            </>
+        })}
         {obs_guides.collect_view()}
         <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="4 3"/>
@@ -352,7 +360,11 @@ fn render_takeoff_strip(
             LabelAnchor::Middle,
         )}
         {guide_line_label(
-            TAKEOFF_WIND.x + TAKEOFF_WIND.w + 3.0,
+            if tailwind_case {
+                tailwind_reference_x() + 3.0
+            } else {
+                TAKEOFF_HW.x + TAKEOFF_HW.w + 3.0
+            },
             STRIP_TOP + 14.0,
             format!("{wind_kt:.0} kt"),
             LabelAnchor::Start,
@@ -363,7 +375,7 @@ fn render_takeoff_strip(
         </text>
         <text x="520" y="28" fill="var(--chart-label)" font-size="11"
             opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
-            {c.strip_fig54_wt}" "{format!("{kg:.0}")}" kg · "{wind_caption_lbl}" "{format!("{wind_kt:.1}")}" kt"
+            {c.strip_fig54_wt}" "{format!("{kg:.0}")}" kg · "{wind_caption_lbl}" "{format!("{wind_caption_kt:.1}")}" kt"
         </text>
     }
 }
@@ -577,8 +589,25 @@ fn apply_hit(
                     - (sx - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w
                         * (defaults::TAKEOFF_CHART_WEIGHT_KG - 600.0);
                 inputs.update(|i| i.weight_lb = kg / 0.45359237);
-            } else if (TAKEOFF_WIND.x..TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
-                let hw = (sx - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
+            } else if (TAKEOFF_TW.x..TAKEOFF_TW.x + TAKEOFF_TW.w).contains(&sx) {
+                let i0 = inputs.get();
+                let (hw, tw) = headwind_and_tailwind(&i0);
+                if !takeoff_wind_is_tailwind(hw, tw) {
+                    return;
+                }
+                let tw_kt = tailwind_kt_from_strip_x(sx);
+                inputs.update(|i| {
+                    let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
+                        return;
+                    };
+                    let (dir, speed, clamp) =
+                        da20_core::wind::back_solve_wind_for_tailwind(i.wind_dir_deg, rwy, tw_kt);
+                    i.wind_dir_deg = dir;
+                    i.wind_speed_kt = speed;
+                    i.wind_strip_crosswind_clamped = clamp;
+                });
+            } else if (TAKEOFF_HW.x..TAKEOFF_HW.x + TAKEOFF_HW.w).contains(&sx) {
+                let hw = headwind_kt_from_strip_x(sx);
                 inputs.update(|i| {
                     let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
                         return;
@@ -669,6 +698,24 @@ fn release_pointer(ev: &web_sys::PointerEvent) {
     }
 }
 
+/// ES/EN strip caption wind label + kt for Fig 5.4 header line.
+pub fn takeoff_strip_wind_caption_parts(
+    locale: Locale,
+    hw: f64,
+    tw: f64,
+    rwy_valid: bool,
+) -> (&'static str, f64) {
+    let c = copy(locale);
+    if !rwy_valid {
+        return (c.strip_fig54_hw, 0.0);
+    }
+    if takeoff_wind_is_tailwind(hw, tw) {
+        (c.strip_fig54_tw, tw)
+    } else {
+        (c.strip_fig54_hw, hw)
+    }
+}
+
 #[cfg(test)]
 mod strip_drag_tests {
     use super::*;
@@ -692,8 +739,27 @@ mod strip_drag_tests {
                 * (defaults::TAKEOFF_CHART_WEIGHT_KG - 600.0);
         assert!((kg_at_left - 800.0).abs() < 0.01);
 
-        let sx_wind_mid = TAKEOFF_WIND.x + TAKEOFF_WIND.w * 0.5;
-        let hw = (sx_wind_mid - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
+        let sx_hw = TAKEOFF_HW.x + TAKEOFF_HW.w * 0.5;
+        let hw = headwind_kt_from_strip_x(sx_hw);
         assert!((hw - 10.0).abs() < 0.01);
+
+        let sx_tw_ref = tailwind_reference_x();
+        assert!((tailwind_kt_from_strip_x(sx_tw_ref) - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_strip_caption_shows_tailwind_for_runway_190_wind_010() {
+        use da20_core::types::FlightInputs;
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            ..Default::default()
+        };
+        let (hw, tw) = headwind_and_tailwind(&inputs);
+        let (lbl, kt) = takeoff_strip_wind_caption_parts(Locale::Es, hw, tw, true);
+        assert_eq!(lbl, copy(Locale::Es).strip_fig54_tw);
+        assert!((kt - tw).abs() < 0.01);
+        assert!((kt - 5.0).abs() < 0.01);
     }
 }
