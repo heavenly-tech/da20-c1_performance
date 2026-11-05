@@ -771,6 +771,7 @@ pub(crate) fn client_to_strip_viewbox_meet(
     (sx, sy)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn strip_viewbox_to_client_meet(
     sx: f64,
     sy: f64,
