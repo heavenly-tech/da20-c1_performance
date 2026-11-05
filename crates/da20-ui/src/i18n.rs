@@ -26,6 +26,13 @@ impl Locale {
         }
     }
 
+    pub fn html_lang(self) -> &'static str {
+        match self {
+            Self::Es => "es",
+            Self::En => "en",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Es => "ES",
@@ -130,9 +137,11 @@ pub struct Copy {
     pub strip_fig54_base: &'static str,
     pub strip_fig54_wt: &'static str,
     pub strip_fig54_hw: &'static str,
+    pub strip_fig54_tw: &'static str,
     pub strip_panel_oat_pa: &'static str,
     pub strip_panel_weight: &'static str,
     pub strip_panel_hw: &'static str,
+    pub strip_panel_tw: &'static str,
     pub strip_panel_obstacle: &'static str,
     pub strip_fig52_ea: &'static str,
     pub strip_fig55_roc: &'static str,
@@ -245,9 +254,11 @@ const ES: Copy = Copy {
     strip_fig54_base: "Fig 5.4 · base",
     strip_fig54_wt: "Peso",
     strip_fig54_hw: "Viento de frente",
+    strip_fig54_tw: "Viento de cola",
     strip_panel_oat_pa: "OAT / PA",
     strip_panel_weight: "Peso",
     strip_panel_hw: "Viento de frente (kt)",
+    strip_panel_tw: "Viento de cola (kt)",
     strip_panel_obstacle: "Obstáculo",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
@@ -353,9 +364,11 @@ const EN: Copy = Copy {
     strip_fig54_base: "Fig 5.4 · base",
     strip_fig54_wt: "Wt",
     strip_fig54_hw: "HW",
+    strip_fig54_tw: "Tailwind",
     strip_panel_oat_pa: "OAT / PA",
     strip_panel_weight: "Weight",
-    strip_panel_hw: "HW kt",
+    strip_panel_hw: "Headwind (kt)",
+    strip_panel_tw: "Tailwind (kt)",
     strip_panel_obstacle: "Obstacle",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
@@ -566,6 +579,9 @@ pub fn format_along_runway_component(
 }
 
 pub fn format_crosswind_component(locale: Locale, crosswind_kt: f64) -> String {
+    if crosswind_kt.abs() < 0.05 {
+        return String::new();
+    }
     use da20_core::wind::format_component_kt;
     let mag = format_component_kt(crosswind_kt.abs());
     match locale {

@@ -17,7 +17,7 @@ use crate::strip_plot::{StripHandPlot, StripKind};
 use da20_core::types::ChartPhase;
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
     Takeoff,
     Climb,

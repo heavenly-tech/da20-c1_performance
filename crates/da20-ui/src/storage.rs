@@ -204,6 +204,27 @@ fn new_reading_id() -> String {
     }
 }
 
+/// Display a saved readout timestamp in the user's local timezone (not raw UTC `Z`).
+pub fn format_readout_timestamp(iso: &str, locale: crate::i18n::Locale) -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsValue;
+        let loc = match locale {
+            crate::i18n::Locale::Es => "es-CL",
+            crate::i18n::Locale::En => "en-US",
+        };
+        js_sys::Date::new(&JsValue::from_str(iso))
+            .to_locale_string_with_locale(loc)
+            .as_string()
+            .unwrap_or_else(|| iso.to_string())
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = locale;
+        iso.replace('T', " ").trim_end_matches('Z').to_string()
+    }
+}
+
 fn format_iso_now() -> String {
     if cfg!(target_arch = "wasm32") {
         js_sys::Date::new_0()

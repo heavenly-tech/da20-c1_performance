@@ -14,6 +14,7 @@ use da20_core::rev29::hand_plot::{
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
+use da20_core::wind::runway_heading_status;
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -105,7 +106,12 @@ pub fn StripHandPlot(
                     .into_any(),
                 }}
             </svg>
-            <p class="cursor-readout mono">
+            <p class="cursor-readout mono"
+                class:results-muted=move || {
+                    kind == StripKind::Takeoff
+                        && runway_heading_status(&inputs.get().runway)
+                            != da20_core::wind::RunwayHeadingStatus::Valid
+                }>
                 {move || readout_line(locale.get(), kind, data.get(), inputs.get())}
             </p>
         </div>
@@ -129,6 +135,10 @@ fn readout_line(
     let inner = data.inner();
     match kind {
         StripKind::Takeoff => {
+            if runway_heading_status(&inputs.runway) != da20_core::wind::RunwayHeadingStatus::Valid
+            {
+                return format!("{}: — | {}: —", c.plot_readout_chart, c.plot_readout_core);
+            }
             let path = takeoff_hand_path(inner, &inputs, pa);
             let core = compute_takeoff(&data, &inputs)
                 .map(|t| {
@@ -195,7 +205,21 @@ fn render_takeoff_strip(
     let path = takeoff_hand_path(inner, &inputs, pa);
     let base = chart_read_takeoff_base_m(inner, pa, inputs.oat_c);
     let oat_x = x_oat(inputs.oat_c);
-    let (hw, _tw) = headwind_and_tailwind(&inputs);
+    let (hw, tw) = headwind_and_tailwind(&inputs);
+    let tailwind_case = tw > 0.05 && tw >= hw;
+    let wind_kt = if tailwind_case { tw } else { hw };
+    let rwy_valid =
+        runway_heading_status(&inputs.runway) == da20_core::wind::RunwayHeadingStatus::Valid;
+    let wind_panel_lbl = if tailwind_case {
+        c.strip_panel_tw
+    } else {
+        c.strip_panel_hw
+    };
+    let wind_caption_lbl = if tailwind_case {
+        c.strip_fig54_tw
+    } else {
+        c.strip_fig54_hw
+    };
     let kg = lb_to_kg(inputs.weight_lb);
     let guides = takeoff_panel_guides(inner);
 
@@ -231,86 +255,38 @@ fn render_takeoff_strip(
         }
     });
 
-    let hw_line_m = inner.hw_lines.value.clone();
-    let weight_guides =
-        guides
-            .weight_polylines
+    let weight_guides = guides.weight_polylines.iter().map(|poly| {
+        let pts: String = poly
             .iter()
-            .zip(hw_line_m.iter())
-            .map(|(poly, &line_m)| {
-                let pts: String = poly
-                    .iter()
-                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let (lx, ly) = poly
-                    .last()
-                    .copied()
-                    .unwrap_or((TAKEOFF_WEIGHT.x, STRIP_TOP));
-                view! {
-                    <>
-                        <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
-                        {guide_line_label(
-                            lx + 3.0,
-                            ly,
-                            format!("{line_m:.0} m"),
-                            LabelAnchor::Start,
-                        )}
-                    </>
-                }
-            });
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        view! {
+            <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
+        }
+    });
 
-    let headwind_guides =
-        guides
-            .headwind_polylines
+    let headwind_guides = guides.headwind_polylines.iter().map(|poly| {
+        let pts: String = poly
             .iter()
-            .zip(hw_line_m.iter())
-            .map(|(poly, &line_m)| {
-                let pts: String = poly
-                    .iter()
-                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let (lx, ly) = poly.last().copied().unwrap_or((TAKEOFF_WIND.x, STRIP_TOP));
-                view! {
-                    <>
-                        <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
-                        {guide_line_label(
-                            lx + 3.0,
-                            ly,
-                            format!("{line_m:.0} m"),
-                            LabelAnchor::Start,
-                        )}
-                    </>
-                }
-            });
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        view! {
+            <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
+        }
+    });
 
-    let tw_line_m = inner.tw_lines.value.clone();
-    let tailwind_guides =
-        guides
-            .tailwind_polylines
+    let tailwind_guides = guides.tailwind_polylines.iter().map(|poly| {
+        let pts: String = poly
             .iter()
-            .zip(tw_line_m.iter())
-            .map(|(poly, &line_m)| {
-                let pts: String = poly
-                    .iter()
-                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let (lx, ly) = poly.first().copied().unwrap_or((TAKEOFF_WIND.x, STRIP_TOP));
-                view! {
-                    <>
-                        <polyline points=pts class="chart-stroke-guide" opacity="0.7"
-                            stroke-dasharray="6 4"/>
-                        {guide_line_label(
-                            lx - 3.0,
-                            ly,
-                            format!("{line_m:.0} m"),
-                            LabelAnchor::End,
-                        )}
-                    </>
-                }
-            });
+            .map(|(x, y)| format!("{x:.1},{y:.1}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        view! {
+            <polyline points=pts class="chart-stroke-guide" opacity="0.7" stroke-dasharray="6 4"/>
+        }
+    });
 
     let obs_line_m = inner.obs_lines.value.clone();
     let obs_guides = guides
@@ -349,7 +325,7 @@ fn render_takeoff_strip(
         .join(" ");
 
     view! {
-        {panel_backgrounds(locale)}
+        {panel_backgrounds(locale, wind_panel_lbl)}
         {grid_lines()}
         {curve_paths.collect_view()}
         {weight_guides.collect_view()}
@@ -378,14 +354,16 @@ fn render_takeoff_strip(
         {guide_line_label(
             TAKEOFF_WIND.x + TAKEOFF_WIND.w + 3.0,
             STRIP_TOP + 14.0,
-            format!("{:.0} kt", inner.hw_kt.value.last().copied().unwrap_or(20.0)),
+            format!("{wind_kt:.0} kt"),
             LabelAnchor::Start,
         )}
-        <text x="70" y="28" fill="var(--chart-label)" font-size="11">
+        <text x="70" y="28" fill="var(--chart-label)" font-size="11"
+            opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
             {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
         </text>
-        <text x="520" y="28" fill="var(--chart-label)" font-size="11">
-            {c.strip_fig54_wt}" "{format!("{kg:.0}")}" kg · "{c.strip_fig54_hw}" "{format!("{hw:.1}")}" kt"
+        <text x="520" y="28" fill="var(--chart-label)" font-size="11"
+            opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
+            {c.strip_fig54_wt}" "{format!("{kg:.0}")}" kg · "{wind_caption_lbl}" "{format!("{wind_kt:.1}")}" kt"
         </text>
     }
 }
@@ -542,7 +520,7 @@ fn saved_path_overlays(
     .into_any()
 }
 
-fn panel_backgrounds(locale: Locale) -> impl IntoView {
+fn panel_backgrounds(locale: Locale, wind_panel_label: &'static str) -> impl IntoView {
     let c = copy(locale);
     view! {
         <rect x=TAKEOFF_OAT.x y=STRIP_TOP width=TAKEOFF_OAT.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
@@ -551,7 +529,7 @@ fn panel_backgrounds(locale: Locale) -> impl IntoView {
         <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_oat_pa}</text>
         <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_weight}</text>
-        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_hw}</text>
+        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{wind_panel_label}</text>
         <text x=TAKEOFF_OBS.x+TAKEOFF_OBS.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_obstacle}</text>
     }
 }

@@ -11,7 +11,7 @@ use crate::i18n::{
     copy, format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
 };
 use crate::phases::{phase_default_label, phase_storage_name, Phase};
-use crate::storage::{compute_all, new_reading, ReadingsStore};
+use crate::storage::{compute_all, format_readout_timestamp, new_reading, ReadingsStore};
 use da20_core::endurance::compute_endurance;
 use da20_core::PerformanceData;
 
@@ -121,7 +121,7 @@ pub fn PhaseReadoutsPanel(
                                         }
                                     }>
                                     <strong>{r.label.clone()}</strong>
-                                    <span class="lab">{r.created_at_iso.clone()}</span>
+                                    <span class="lab">{format_readout_timestamp(&r.created_at_iso, loc)}</span>
                                     <span class="mono readout-summary">{summary}</span>
                                     <span class="mono readout-results">{results}</span>
                                 </button>

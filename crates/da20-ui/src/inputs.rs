@@ -6,7 +6,8 @@ use da20_core::pressure::{
 use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
-    runway_heading_deg, runway_heading_status, wind_components, RunwayHeadingStatus,
+    runway_heading_deg, runway_heading_status, wind_chart_panel_needs_crosswind_note,
+    wind_components, RunwayHeadingStatus,
 };
 use da20_core::wind_format::{format_wind, parse_wind};
 use leptos::prelude::*;
@@ -272,11 +273,14 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                 let comp = wind_components(i.wind_dir_deg, i.wind_speed_kt, rwy);
                 let along = format_along_runway_component(locale.get(), &comp);
                 let cross = format_crosswind_component(locale.get(), comp.crosswind_kt);
+                let show_xw_note = wind_chart_panel_needs_crosswind_note(&i);
                 view! {
                     <div class="wind-components">
                         {along.map(|line| view! { <p class="lab mono">{line}</p> })}
-                        <p class="lab mono">{cross}</p>
-                        {i.wind_strip_crosswind_clamped.then(|| view! {
+                        {(comp.crosswind_kt.abs() > 0.05).then(|| view! {
+                            <p class="lab mono">{cross}</p>
+                        })}
+                        {show_xw_note.then(|| view! {
                             <p class="lab field-error">{c.wind_strip_crosswind_note}</p>
                         })}
                     </div>

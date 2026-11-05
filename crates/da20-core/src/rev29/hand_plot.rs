@@ -350,11 +350,12 @@ pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> O
     let y_roc = y_roc_fpm(chart_roc);
     let fan_right = CLIMB_EQ.x + CLIMB_EQ.w;
 
-    // Fan: OAT → EA; enter ROC at same EA, then straight onto the climb line at that EA (no (ea_x, y_ea) corner).
+    // Fan → EA; horizontal into ROC panel at EA; vertical read on ROC line at EA.
     let points = vec![
         (oat_x, STRIP_BOTTOM),
         (oat_x, y_ea),
         (fan_right, y_ea),
+        (ea_x, y_ea),
         (ea_x, y_roc),
     ];
     let markers = points.clone();
@@ -796,11 +797,40 @@ mod tests {
         assert!((end.0 - x_ea_ft(ea)).abs() < 0.5);
         assert!((end.1 - y_roc_fpm(line_roc)).abs() < 0.5);
         assert!(
-            !path.points.iter().any(|&(x, y)| {
-                (x - end.0).abs() < 0.5 && (y - y_ea_ft(ea)).abs() < 0.5 && (y - end.1).abs() > 0.5
-            }),
-            "path must not visit (ea_x, y_ea) before the ROC readout"
+            path.points
+                .iter()
+                .any(|&(x, y)| { (x - x_ea_ft(ea)).abs() < 0.5 && (y - y_ea_ft(ea)).abs() < 0.5 }),
+            "path must enter ROC panel at (ea_x, y_ea) before the axis readout"
         );
+    }
+
+    #[test]
+    fn climb_path_segments_axis_aligned_except_along_roc_line() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Climb,
+            }),
+            oat_c: 18.0,
+            ..Default::default()
+        };
+        let path = climb_hand_path(&data, &inputs, 2500.0).expect("climb");
+        let pts = &path.points;
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let dx = (b.0 - a.0).abs();
+            let dy = (b.1 - a.1).abs();
+            let axis_aligned = dx < 0.01 || dy < 0.01;
+            assert!(
+                axis_aligned,
+                "segment ({a:?})→({b:?}) must be horizontal or vertical, not diagonal"
+            );
+        }
+        let ea = path.chart_ea_ft;
+        let roc_end = pts.last().copied().expect("end");
+        assert!((roc_end.0 - x_ea_ft(ea)).abs() < 0.5);
+        assert!((roc_end.1 - y_roc_fpm(path.chart_roc_fpm)).abs() < 0.5);
     }
 
     #[test]

@@ -31,6 +31,14 @@ pub fn App() -> impl IntoView {
     });
 
     Effect::new(move |_| {
+        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+            if let Some(html) = doc.document_element() {
+                let _ = html.set_attribute("lang", locale.get().html_lang());
+            }
+        }
+    });
+
+    Effect::new(move |_| {
         leptos::task::spawn_local(async move {
             if let Ok(resp) = gloo_net::http::Request::get("/data/performance.json")
                 .send()

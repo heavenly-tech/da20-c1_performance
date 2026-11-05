@@ -147,6 +147,25 @@ pub fn along_runway_display_kt(components: &WindComponents) -> (bool, f64) {
     }
 }
 
+/// Chart/strip wind panels use along-runway component only; show a note when crosswind dominates or strip drag clamped.
+pub fn wind_chart_panel_needs_crosswind_note(inputs: &FlightInputs) -> bool {
+    if inputs.wind_strip_crosswind_clamped {
+        return true;
+    }
+    if runway_heading_status(&inputs.runway) != RunwayHeadingStatus::Valid {
+        return false;
+    }
+    let Some(rwy) = runway_heading_deg(&inputs.runway) else {
+        return false;
+    };
+    if inputs.wind_speed_kt < 0.05 {
+        return false;
+    }
+    let comp = wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy);
+    let (hw, tw) = headwind_tailwind_kt(&comp);
+    hw < 0.05 && tw < 0.05 && comp.crosswind_kt.abs() > 0.05
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +227,20 @@ mod tests {
         assert!(!clamp);
         let c = wind_components(d, s, rwy);
         assert!((c.headwind_kt - 8.0).abs() < 0.2);
+    }
+
+    #[test]
+    fn pure_crosswind_triggers_chart_panel_note() {
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 280.0,
+            wind_speed_kt: 10.0,
+            ..Default::default()
+        };
+        assert!(wind_chart_panel_needs_crosswind_note(&inputs));
+        let mut clamped = inputs.clone();
+        clamped.wind_strip_crosswind_clamped = true;
+        assert!(wind_chart_panel_needs_crosswind_note(&clamped));
     }
 
     #[test]
