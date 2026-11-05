@@ -5,12 +5,17 @@ use crate::components::{Disclaimer, Nav};
 use crate::i18n::Locale;
 use crate::palette::{apply_palette, PaletteChoice, PaletteThemeEffect};
 use crate::phases::{Phase, PhaseShell};
+use crate::routing::{
+    read_phase_from_location, redirect_legacy_manual_hash, write_phase_to_location,
+};
 use crate::storage::ReadingsStore;
 use crate::theme::ThemePreference;
 
 #[component]
 pub fn App() -> impl IntoView {
-    let phase = RwSignal::new(Phase::Takeoff);
+    redirect_legacy_manual_hash();
+    let initial_phase = read_phase_from_location().unwrap_or(Phase::Takeoff);
+    let phase = RwSignal::new(initial_phase);
     let locale = RwSignal::new(Locale::load());
     let theme = RwSignal::new(ThemePreference::load());
     let palette = RwSignal::new(PaletteChoice::for_theme(theme.get_untracked()));
@@ -20,6 +25,10 @@ pub fn App() -> impl IntoView {
 
     crate::theme::apply_theme(theme.get());
     apply_palette(&palette.get(), theme.get());
+
+    Effect::new(move |_| {
+        write_phase_to_location(phase.get());
+    });
 
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {

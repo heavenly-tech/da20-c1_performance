@@ -108,7 +108,7 @@ fn tab_label(locale: Locale, p: Phase) -> &'static str {
         Phase::Endurance => c.tab_endurance,
         Phase::Landing => c.tab_landing,
         Phase::Readings => c.tab_readings,
-        Phase::Manual => c.tab_manual,
+        Phase::Manual => c.tab_method,
     }
 }
 

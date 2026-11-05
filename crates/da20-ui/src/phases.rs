@@ -178,7 +178,7 @@ fn phase_storage_name(phase: Phase) -> String {
         Phase::Endurance => "endurance",
         Phase::Landing => "landing",
         Phase::Readings => "readings",
-        Phase::Manual => "manual",
+        Phase::Manual => "method",
     }
     .into()
 }

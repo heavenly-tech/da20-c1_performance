@@ -15,6 +15,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{copy, Locale};
 use crate::inputs::set_chart_pa;
@@ -209,8 +210,12 @@ fn render_svg(
             })
             .collect::<Vec<_>>()
             .join(" ");
+        let label = polyline_guide_label(kind, inner, idx, &pl, x_min, x_max, y_min, y_max);
         view! {
-            <polyline points=pts class=class/>
+            <>
+                <polyline points=pts class=class/>
+                {label}
+            </>
         }
     });
 
@@ -238,6 +243,89 @@ fn render_svg(
             }}
         </text>
         {takeoff_overlays(kind, data, inner, inputs)}
+        {interactive_grid_labels(kind, x_min, x_max, y_min, y_max)}
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn polyline_guide_label(
+    kind: ChartKind,
+    inner: &da20_core::rev29::types::Rev29File,
+    idx: usize,
+    pl: &Polyline,
+    x_min: f64,
+    x_max: f64,
+    y_min: f64,
+    y_max: f64,
+) -> impl IntoView {
+    match kind {
+        ChartKind::Climb => {
+            let (x0, y0) = pl.points.first().copied().unwrap_or((x_min, y_min));
+            let (x1, y1) = pl.points.last().copied().unwrap_or((x_max, y_min));
+            let (sx0, sy0) =
+                map_to_svg(x0, y0, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
+            let (sx1, sy1) =
+                map_to_svg(x1, y1, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
+            view! {
+                <>
+                    {guide_line_label(sx0 - 4.0, sy0, "0 ft".to_string(), LabelAnchor::End)}
+                    {guide_line_label(sx1 + 4.0, sy1, "14000 ft".to_string(), LabelAnchor::Start)}
+                </>
+            }
+            .into_any()
+        }
+        _ => {
+            let (x, y, text) = match kind {
+                ChartKind::Takeoff => {
+                    let pa = inner.to_pa.value.get(idx).copied().unwrap_or(0.0);
+                    let (x, y) = pl.points.last().copied().unwrap_or((x_max, y_min));
+                    (x, y, format!("{pa:.0} ft"))
+                }
+                ChartKind::Landing => {
+                    let text = if idx == 0 {
+                        "Roll".to_string()
+                    } else {
+                        "50 ft".to_string()
+                    };
+                    let (x, y) = pl.points.last().copied().unwrap_or((x_max, y_min));
+                    (x, y, text)
+                }
+                ChartKind::Wind => {
+                    let (x, y) = pl.points.last().copied().unwrap_or((x_max, y_min));
+                    (x, y, format!("{y:.0} kt"))
+                }
+                ChartKind::Climb => unreachable!(),
+            };
+            let (sx, sy) = map_to_svg(x, y, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
+            guide_line_label(sx + 4.0, sy, text, LabelAnchor::Start).into_any()
+        }
+    }
+}
+
+fn interactive_grid_labels(
+    kind: ChartKind,
+    x_min: f64,
+    x_max: f64,
+    y_min: f64,
+    y_max: f64,
+) -> impl IntoView {
+    let y_ticks: &[f64] = match kind {
+        ChartKind::Takeoff => &[150.0, 400.0, 650.0, 900.0],
+        ChartKind::Climb => &[0.0, 250.0, 500.0, 750.0, 1000.0],
+        ChartKind::Landing => &[600.0, 900.0, 1200.0, 1600.0],
+        ChartKind::Wind => &[],
+    };
+    view! {
+        {y_ticks.iter().map(|&y| {
+            let (_, sy) = map_to_svg(x_min, y, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
+            let text = match kind {
+                ChartKind::Takeoff => format!("{y:.0} m"),
+                ChartKind::Climb => format!("{y:.0} fpm"),
+                ChartKind::Landing => format!("{y:.0} ft"),
+                ChartKind::Wind => String::new(),
+            };
+            guide_line_label(44.0, sy, text, LabelAnchor::End)
+        }).collect_view()}
     }
 }
 

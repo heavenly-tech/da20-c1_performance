@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 mod app;
+mod chart_guides;
 mod chart_inputs;
 mod components;
 mod i18n;
@@ -10,6 +11,7 @@ mod palette;
 mod phases;
 mod qnh_unit;
 mod readings;
+mod routing;
 mod storage;
 mod strip_plot;
 mod theme;

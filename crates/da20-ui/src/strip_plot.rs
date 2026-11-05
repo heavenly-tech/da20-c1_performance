@@ -16,6 +16,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
     copy, format_strip_chart_roll_obs, format_takeoff_conservative_estimate,
@@ -177,7 +178,8 @@ fn render_takeoff_strip(
     let guides = takeoff_panel_guides(inner);
 
     let base_curves = takeoff_base_curves(inner);
-    let curve_paths = base_curves.iter().map(|pl| {
+    let pa_axis = inner.to_pa.value.clone();
+    let curve_paths = base_curves.iter().enumerate().map(|(idx, pl)| {
         let pts: String = pl
             .points
             .iter()
@@ -188,52 +190,134 @@ fn render_takeoff_strip(
             })
             .collect::<Vec<_>>()
             .join(" ");
-        view! { <polyline points=pts class="chart-stroke-line"/> }
+        let pa_label = pa_axis.get(idx).copied().unwrap_or(0.0);
+        let (lx, ly) = pl
+            .points
+            .last()
+            .map(|(t, m)| (x_oat(*t), y_dist(*m)))
+            .unwrap_or((TAKEOFF_OAT.x, STRIP_TOP));
+        view! {
+            <>
+                <polyline points=pts class="chart-stroke-line"/>
+                {guide_line_label(
+                    lx + 4.0,
+                    ly,
+                    format!("{pa_label:.0} ft"),
+                    LabelAnchor::Start,
+                )}
+            </>
+        }
     });
 
-    let weight_guides = guides.weight_polylines.iter().map(|poly| {
-        let pts: String = poly
+    let hw_line_m = inner.hw_lines.value.clone();
+    let weight_guides =
+        guides
+            .weight_polylines
             .iter()
-            .map(|(x, y)| format!("{x:.1},{y:.1}"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        view! {
-            <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
-        }
-    });
+            .zip(hw_line_m.iter())
+            .map(|(poly, &line_m)| {
+                let pts: String = poly
+                    .iter()
+                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let (lx, ly) = poly
+                    .last()
+                    .copied()
+                    .unwrap_or((TAKEOFF_WEIGHT.x, STRIP_TOP));
+                view! {
+                    <>
+                        <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
+                        {guide_line_label(
+                            lx + 3.0,
+                            ly,
+                            format!("{line_m:.0} m"),
+                            LabelAnchor::Start,
+                        )}
+                    </>
+                }
+            });
 
-    let headwind_guides = guides.headwind_polylines.iter().map(|poly| {
-        let pts: String = poly
+    let headwind_guides =
+        guides
+            .headwind_polylines
             .iter()
-            .map(|(x, y)| format!("{x:.1},{y:.1}"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        view! {
-            <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
-        }
-    });
+            .zip(hw_line_m.iter())
+            .map(|(poly, &line_m)| {
+                let pts: String = poly
+                    .iter()
+                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let (lx, ly) = poly.last().copied().unwrap_or((TAKEOFF_WIND.x, STRIP_TOP));
+                view! {
+                    <>
+                        <polyline points=pts class="chart-stroke-guide" opacity="0.7"/>
+                        {guide_line_label(
+                            lx + 3.0,
+                            ly,
+                            format!("{line_m:.0} m"),
+                            LabelAnchor::Start,
+                        )}
+                    </>
+                }
+            });
 
-    let tailwind_guides = guides.tailwind_polylines.iter().map(|poly| {
-        let pts: String = poly
+    let tw_line_m = inner.tw_lines.value.clone();
+    let tailwind_guides =
+        guides
+            .tailwind_polylines
             .iter()
-            .map(|(x, y)| format!("{x:.1},{y:.1}"))
-            .collect::<Vec<_>>()
-            .join(" ");
-        view! {
-            <polyline points=pts class="chart-stroke-guide" opacity="0.7"
-                stroke-dasharray="6 4"/>
-        }
-    });
+            .zip(tw_line_m.iter())
+            .map(|(poly, &line_m)| {
+                let pts: String = poly
+                    .iter()
+                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let (lx, ly) = poly.first().copied().unwrap_or((TAKEOFF_WIND.x, STRIP_TOP));
+                view! {
+                    <>
+                        <polyline points=pts class="chart-stroke-guide" opacity="0.7"
+                            stroke-dasharray="6 4"/>
+                        {guide_line_label(
+                            lx - 3.0,
+                            ly,
+                            format!("{line_m:.0} m"),
+                            LabelAnchor::End,
+                        )}
+                    </>
+                }
+            });
 
-    let obs_guides = guides.obstacle_ys.iter().map(|(y0, y15)| {
-        view! {
-            <line
-                x1=TAKEOFF_OBS.x y1=*y0
-                x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=*y15
-                class="chart-stroke-guide" opacity="0.7"
-            />
-        }
-    });
+    let obs_line_m = inner.obs_lines.value.clone();
+    let obs_guides = guides
+        .obstacle_ys
+        .iter()
+        .zip(obs_line_m.iter())
+        .map(|((y0, y15), &g_m)| {
+            view! {
+                <>
+                    <line
+                        x1=TAKEOFF_OBS.x y1=*y0
+                        x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=*y15
+                        class="chart-stroke-guide" opacity="0.7"
+                    />
+                    {guide_line_label(
+                        TAKEOFF_OBS.x + TAKEOFF_OBS.w + 3.0,
+                        *y15,
+                        format!("{:.0} m", defaults::OBSTACLE_HEIGHT_MAX_M),
+                        LabelAnchor::Start,
+                    )}
+                    {guide_line_label(
+                        TAKEOFF_OBS.x - 3.0,
+                        *y0,
+                        format!("{g_m:.0} m"),
+                        LabelAnchor::End,
+                    )}
+                </>
+            }
+        });
 
     let path_pts: String = path
         .points
@@ -256,6 +340,24 @@ fn render_takeoff_strip(
         {path.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view()}
+        {guide_line_label(
+            x_weight_kg(defaults::TAKEOFF_CHART_WEIGHT_KG),
+            STRIP_TOP + 14.0,
+            format!("{:.0} kg", defaults::TAKEOFF_CHART_WEIGHT_KG),
+            LabelAnchor::Middle,
+        )}
+        {guide_line_label(
+            x_weight_kg(600.0),
+            STRIP_TOP + 14.0,
+            "600 kg".to_string(),
+            LabelAnchor::Middle,
+        )}
+        {guide_line_label(
+            TAKEOFF_WIND.x + TAKEOFF_WIND.w + 3.0,
+            STRIP_TOP + 14.0,
+            format!("{:.0} kt", inner.hw_kt.value.last().copied().unwrap_or(20.0)),
+            LabelAnchor::Start,
+        )}
         <text x="70" y="28" fill="var(--chart-label)" font-size="11">
             {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
         </text>
@@ -275,14 +377,31 @@ fn render_climb_strip(
     let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Climb));
     let path = climb_hand_path(inner, &inputs, pa);
     let eq_curves = equivalent_altitude_curves(inner);
-    let eq_paths = eq_curves.iter().map(|pl| {
+    let fan_pa = inner.fan_pa.value.clone();
+    let eq_paths = eq_curves.iter().enumerate().map(|(idx, pl)| {
         let pts: String = pl
             .points
             .iter()
             .map(|(t, ea)| format!("{},{}", x_oat(*t), y_ea_ft(*ea)))
             .collect::<Vec<_>>()
             .join(" ");
-        view! { <polyline points=pts class="chart-stroke-line"/> }
+        let pa_label = fan_pa.get(idx).copied().unwrap_or(0.0);
+        let (lx, ly) = pl
+            .points
+            .last()
+            .map(|(t, ea)| (x_oat(*t), y_ea_ft(*ea)))
+            .unwrap_or((CLIMB_EQ.x, STRIP_TOP));
+        view! {
+            <>
+                <polyline points=pts class="chart-stroke-line"/>
+                {guide_line_label(
+                    lx + 4.0,
+                    ly,
+                    format!("{pa_label:.0} ft"),
+                    LabelAnchor::Start,
+                )}
+            </>
+        }
     });
 
     let roc_pl = climb_roc_vs_ea(inner, inputs.climb_figure.roc_key());
@@ -316,6 +435,18 @@ fn render_climb_strip(
         <text x={CLIMB_ROC.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{roc_label}</text>
         {eq_paths.collect_view()}
         <polyline points=roc_pts class="chart-stroke-line"/>
+        {guide_line_label(
+            x_ea_ft(0.0),
+            y_roc_fpm(roc_pl.points.first().map(|(_, r)| *r).unwrap_or(0.0)),
+            "0 ft".to_string(),
+            LabelAnchor::End,
+        )}
+        {guide_line_label(
+            x_ea_ft(14_000.0),
+            y_roc_fpm(roc_pl.points.last().map(|(_, r)| *r).unwrap_or(0.0)),
+            "14000 ft".to_string(),
+            LabelAnchor::Start,
+        )}
         <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         {path_pts.map(|pts| view! {
             <polyline points=pts class="chart-stroke-user-path"/>
@@ -346,7 +477,15 @@ fn grid_lines() -> impl IntoView {
             let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
             let y = y_dist(m);
             view! {
-                <line x1=TAKEOFF_OAT.x y1=y x2=TAKEOFF_OBS.x+TAKEOFF_OBS.w y2=y class="chart-stroke-grid"/>
+                <>
+                    <line x1=TAKEOFF_OAT.x y1=y x2=TAKEOFF_OBS.x+TAKEOFF_OBS.w y2=y class="chart-stroke-grid"/>
+                    {guide_line_label(
+                        TAKEOFF_OAT.x - 3.0,
+                        y,
+                        format!("{m:.0} m"),
+                        LabelAnchor::End,
+                    )}
+                </>
             }
         }).collect_view()}
     }

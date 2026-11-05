@@ -342,18 +342,19 @@ pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> O
     let key = inputs.climb_figure.roc_key();
     let (ea, _) = equivalent_altitude_ft(data, pa_ft, inputs.oat_c);
     let (core_roc, _) = rate_of_climb_fpm(data, key, pa_ft, inputs.oat_c)?;
-    let [a, b] = *data.roc.value.get(key)?;
-    let chart_roc = a + b * ea;
+    let chart_roc = chart_roc_fpm_at_ea(data, key, ea);
 
     let oat_x = x_oat(inputs.oat_c);
     let y_ea = y_ea_ft(ea);
     let ea_x = x_ea_ft(ea);
     let y_roc = y_roc_fpm(chart_roc);
+    let fan_right = CLIMB_EQ.x + CLIMB_EQ.w;
 
+    // Fan: OAT → EA; enter ROC at same EA, then straight onto the climb line at that EA (no (ea_x, y_ea) corner).
     let points = vec![
         (oat_x, STRIP_BOTTOM),
         (oat_x, y_ea),
-        (ea_x, y_ea),
+        (fan_right, y_ea),
         (ea_x, y_roc),
     ];
     let markers = points.clone();
@@ -365,6 +366,12 @@ pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> O
         chart_roc_fpm: chart_roc,
         core_roc_fpm: core_roc,
     })
+}
+
+/// ROC (fpm) read on the selected climb figure line at equivalent altitude.
+pub fn chart_roc_fpm_at_ea(data: &Rev29File, roc_key: &str, ea_ft: f64) -> f64 {
+    let [a, b] = *data.roc.value.get(roc_key).unwrap_or(&[0.0, 0.0]);
+    a + b * ea_ft
 }
 
 /// Chart-read base roll (OAT/PA panel only).
@@ -767,6 +774,33 @@ mod tests {
         let base = chart_read_takeoff_base_m(&data, 1000.0, 21.0);
         let (engine_base, _) = takeoff_base_m(&data, 1000.0, 21.0);
         assert!((base - engine_base).abs() < 0.01);
+    }
+
+    #[test]
+    fn climb_chart_readout_matches_roc_line_at_ea() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 3500.0,
+                phase: crate::types::ChartPhase::Climb,
+            }),
+            oat_c: 25.0,
+            ..Default::default()
+        };
+        let key = inputs.climb_figure.roc_key();
+        let path = climb_hand_path(&data, &inputs, 3500.0).expect("climb");
+        let (ea, _) = equivalent_altitude_ft(&data, 3500.0, inputs.oat_c);
+        let line_roc = chart_roc_fpm_at_ea(&data, key, ea);
+        assert!((path.chart_roc_fpm - line_roc).abs() < 0.01);
+        let end = path.points.last().copied().expect("path end");
+        assert!((end.0 - x_ea_ft(ea)).abs() < 0.5);
+        assert!((end.1 - y_roc_fpm(line_roc)).abs() < 0.5);
+        assert!(
+            !path.points.iter().any(|&(x, y)| {
+                (x - end.0).abs() < 0.5 && (y - y_ea_ft(ea)).abs() < 0.5 && (y - end.1).abs() > 0.5
+            }),
+            "path must not visit (ea_x, y_ea) before the ROC readout"
+        );
     }
 
     #[test]
