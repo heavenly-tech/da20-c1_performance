@@ -270,7 +270,7 @@ const ES: Copy = Copy {
     strip_panel_hw: "Viento de frente (kt)",
     strip_panel_tw: "Viento de cola (kt)",
     strip_panel_obstacle: "Obstáculo",
-    strip_climb_roc_x_axis: "Régimen de ascenso (fpm)",
+    strip_climb_roc_x_axis: "Razón de ascenso (fpm)",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
     strip_fig56_roc: "Fig 5.6 ROC",
