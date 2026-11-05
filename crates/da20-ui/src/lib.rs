@@ -1,6 +1,7 @@
 use leptos::prelude::*;
 
 mod app;
+mod chart_axes;
 mod chart_guides;
 mod chart_inputs;
 mod components;

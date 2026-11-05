@@ -20,6 +20,10 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::chart_axes::{
+    climb_strip_axis_ticks, climb_strip_panel_titles, takeoff_strip_panel_titles,
+    takeoff_strip_x_axis_ticks,
+};
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
@@ -211,11 +215,6 @@ fn render_takeoff_strip(
         runway_heading_status(&inputs.runway) == da20_core::wind::RunwayHeadingStatus::Valid;
     let tailwind_case = rwy_valid && takeoff_wind_is_tailwind(hw, tw);
     let wind_kt = if tailwind_case { tw } else { hw };
-    let wind_panel_lbl = if tailwind_case {
-        c.strip_panel_tw
-    } else {
-        c.strip_panel_hw
-    };
     let (wind_caption_lbl, wind_caption_kt) =
         takeoff_strip_wind_caption_parts(locale, hw, tw, rwy_valid);
     let kg = lb_to_kg(inputs.weight_lb);
@@ -323,7 +322,8 @@ fn render_takeoff_strip(
         .join(" ");
 
     view! {
-        {panel_backgrounds(locale, wind_panel_lbl)}
+        {panel_backgrounds(locale)}
+        {takeoff_strip_x_axis_ticks(c)}
         {grid_lines()}
         {curve_paths.collect_view()}
         {weight_guides.collect_view()}
@@ -447,8 +447,8 @@ fn render_climb_strip(
     view! {
         <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <rect x=CLIMB_ROC.x y=STRIP_TOP width=CLIMB_ROC.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
-        <text x={CLIMB_EQ.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{c.strip_fig52_ea}</text>
-        <text x={CLIMB_ROC.x + 8.0} y="36" fill="var(--chart-label)" font-size="11">{roc_label}</text>
+        {climb_strip_panel_titles(c, roc_label)}
+        {climb_strip_axis_ticks(c)}
         {eq_paths.collect_view()}
         <polyline points=roc_pts class="chart-stroke-line"/>
         {guide_line_label(
@@ -532,17 +532,14 @@ fn saved_path_overlays(
     .into_any()
 }
 
-fn panel_backgrounds(locale: Locale, wind_panel_label: &'static str) -> impl IntoView {
+fn panel_backgrounds(locale: Locale) -> impl IntoView {
     let c = copy(locale);
     view! {
         <rect x=TAKEOFF_OAT.x y=STRIP_TOP width=TAKEOFF_OAT.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <rect x=TAKEOFF_WEIGHT.x y=STRIP_TOP width=TAKEOFF_WEIGHT.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <rect x=TAKEOFF_WIND.x y=STRIP_TOP width=TAKEOFF_WIND.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
-        <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_oat_pa}</text>
-        <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_weight}</text>
-        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{wind_panel_label}</text>
-        <text x=TAKEOFF_OBS.x+TAKEOFF_OBS.w/2.0 y="538" fill="var(--chart-label)" font-size="12" text-anchor="middle">{c.strip_panel_obstacle}</text>
+        {takeoff_strip_panel_titles(c)}
     }
 }
 

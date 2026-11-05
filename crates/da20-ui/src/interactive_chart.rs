@@ -15,6 +15,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
+use crate::chart_axes::interactive_chart_axis_ticks;
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{copy, Locale};
@@ -232,8 +233,8 @@ fn render_svg(
         <line x1=gx y1="20" x2=gx y2="270" class="chart-stroke-grid" stroke-dasharray="4 3"/>
         <line x1="40" y1=gy x2="380" y2=gy class="chart-stroke-grid" stroke-dasharray="4 3"/>
         <circle cx=gx cy=gy r="6" class="chart-handle"/>
-        <text x="50" y="36" fill="var(--chart-label)" font-size="11">{x_label}</text>
-        <text x="330" y="285" fill="var(--chart-label)" font-size="11">{y_label}</text>
+        <text x="200" y="292" class="chart-axis-title" text-anchor="middle">{x_label}</text>
+        <text x="44" y="16" class="chart-axis-title" text-anchor="start">{y_label}</text>
         <text x="50" y="288" fill="var(--chart-label)" font-size="10">
             {match kind {
                 ChartKind::Takeoff | ChartKind::Climb => {
@@ -243,7 +244,7 @@ fn render_svg(
             }}
         </text>
         {takeoff_overlays(kind, data, inner, inputs)}
-        {interactive_grid_labels(kind, x_min, x_max, y_min, y_max)}
+        {interactive_chart_axis_ticks(kind, x_min, x_max, y_min, y_max)}
     }
 }
 
@@ -302,33 +303,6 @@ fn polyline_guide_label(
     }
 }
 
-fn interactive_grid_labels(
-    kind: ChartKind,
-    x_min: f64,
-    x_max: f64,
-    y_min: f64,
-    y_max: f64,
-) -> impl IntoView {
-    let y_ticks: &[f64] = match kind {
-        ChartKind::Takeoff => &[150.0, 400.0, 650.0, 900.0],
-        ChartKind::Climb => &[0.0, 250.0, 500.0, 750.0, 1000.0],
-        ChartKind::Landing => &[600.0, 900.0, 1200.0, 1600.0],
-        ChartKind::Wind => &[],
-    };
-    view! {
-        {y_ticks.iter().map(|&y| {
-            let (_, sy) = map_to_svg(x_min, y, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
-            let text = match kind {
-                ChartKind::Takeoff => format!("{y:.0} m"),
-                ChartKind::Climb => format!("{y:.0} fpm"),
-                ChartKind::Landing => format!("{y:.0} ft"),
-                ChartKind::Wind => String::new(),
-            };
-            guide_line_label(44.0, sy, text, LabelAnchor::End)
-        }).collect_view()}
-    }
-}
-
 fn takeoff_overlays(
     kind: ChartKind,
     data: &PerformanceData,
@@ -346,8 +320,8 @@ fn takeoff_overlays(
     let wt_x = 40.0 + wt_n * 340.0;
     view! {
         <line x1=wt_x y1="20" x2=wt_x y2="270" class="chart-stroke-guide-active" stroke-dasharray="3 4" opacity="0.85"/>
-        <text x="250" y="36" fill="var(--chart-guide-active)" font-size="10" text-anchor="end">
-            {format!("Wt {kg:.0} kg · HW {hw:.1} kt")}
+        <text x="250" y="36" class="chart-axis-title" text-anchor="end">
+            {format!("{kg:.0} kg · {hw:.1} kt")}
         </text>
     }
     .into_any()
@@ -405,7 +379,7 @@ fn readout_pair(
 fn chart_axis_labels(locale: Locale, kind: ChartKind) -> (&'static str, &'static str) {
     let c = copy(locale);
     match kind {
-        ChartKind::Takeoff => (c.axis_oat_c, c.axis_base_roll_m),
+        ChartKind::Takeoff => (c.axis_oat_c, c.axis_dist_m),
         ChartKind::Climb => (c.axis_ea_ft, c.axis_roc_fpm),
         ChartKind::Landing => (c.axis_pa_ft, c.axis_dist_ft),
         ChartKind::Wind => (c.axis_angle_deg, c.axis_hw_kt),
