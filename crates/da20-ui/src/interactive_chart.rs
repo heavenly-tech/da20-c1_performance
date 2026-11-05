@@ -15,7 +15,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
-use crate::chart_axes::interactive_chart_axis_ticks;
+use crate::chart_axes::{interactive_chart_axis_ticks, interactive_chart_major_grid};
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{copy, Locale};
@@ -228,10 +228,9 @@ fn render_svg(
 
     view! {
         <rect x="40" y="20" width="340" height="250" class="chart-panel"/>
+        {interactive_chart_major_grid(kind, x_min, x_max, y_min, y_max)}
         {paths.collect_view()}
         <line x1=oat_sx y1="20" x2=oat_sx y2="270" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
-        <line x1=gx y1="20" x2=gx y2="270" class="chart-stroke-grid" stroke-dasharray="4 3"/>
-        <line x1="40" y1=gy x2="380" y2=gy class="chart-stroke-grid" stroke-dasharray="4 3"/>
         <circle cx=gx cy=gy r="6" class="chart-handle"/>
         <text x="200" y="292" class="chart-axis-title" text-anchor="middle">{x_label}</text>
         <text x="44" y="16" class="chart-axis-title" text-anchor="start">{y_label}</text>

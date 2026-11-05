@@ -10,7 +10,7 @@ use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, headwind_kt_from_strip_x,
     tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_panel_guides,
     takeoff_wind_is_tailwind, x_ea_ft, x_oat, x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ,
-    CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT,
+    CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT,
     TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
@@ -21,8 +21,8 @@ use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::chart_axes::{
-    climb_strip_axis_ticks, climb_strip_panel_titles, takeoff_strip_panel_titles,
-    takeoff_strip_x_axis_ticks,
+    climb_strip_axis_ticks, climb_strip_major_grid, climb_strip_panel_titles,
+    takeoff_strip_major_grid, takeoff_strip_panel_titles, takeoff_strip_x_axis_ticks,
 };
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
@@ -323,8 +323,7 @@ fn render_takeoff_strip(
 
     view! {
         {panel_backgrounds(locale)}
-        {takeoff_strip_x_axis_ticks(c)}
-        {grid_lines()}
+        {takeoff_strip_major_grid()}
         {curve_paths.collect_view()}
         {weight_guides.collect_view()}
         <g class:results-muted=tailwind_case>
@@ -369,6 +368,7 @@ fn render_takeoff_strip(
             format!("{wind_kt:.0} kt"),
             LabelAnchor::Start,
         )}
+        {takeoff_strip_x_axis_ticks(c)}
         <text x="70" y="28" fill="var(--chart-label)" font-size="11"
             opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
             {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
@@ -448,7 +448,7 @@ fn render_climb_strip(
         <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <rect x=CLIMB_ROC.x y=STRIP_TOP width=CLIMB_ROC.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         {climb_strip_panel_titles(c, roc_label)}
-        {climb_strip_axis_ticks(c)}
+        {climb_strip_major_grid()}
         {eq_paths.collect_view()}
         <polyline points=roc_pts class="chart-stroke-line"/>
         {guide_line_label(
@@ -473,6 +473,7 @@ fn render_climb_strip(
         {path.map(|p| p.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view())}
+        {climb_strip_axis_ticks(c)}
     }
 }
 
@@ -540,26 +541,6 @@ fn panel_backgrounds(locale: Locale) -> impl IntoView {
         <rect x=TAKEOFF_WIND.x y=STRIP_TOP width=TAKEOFF_WIND.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         <rect x=TAKEOFF_OBS.x y=STRIP_TOP width=TAKEOFF_OBS.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
         {takeoff_strip_panel_titles(c)}
-    }
-}
-
-fn grid_lines() -> impl IntoView {
-    view! {
-        {(0..=8).map(|i| {
-            let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
-            let y = y_dist(m);
-            view! {
-                <>
-                    <line x1=TAKEOFF_OAT.x y1=y x2=TAKEOFF_OBS.x+TAKEOFF_OBS.w y2=y class="chart-stroke-grid"/>
-                    {guide_line_label(
-                        TAKEOFF_OAT.x - 3.0,
-                        y,
-                        format!("{m:.0} m"),
-                        LabelAnchor::End,
-                    )}
-                </>
-            }
-        }).collect_view()}
     }
 }
 
