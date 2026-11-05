@@ -6,7 +6,7 @@ use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::i18n::Copy;
 use da20_core::rev29::charts::map_to_svg;
 use da20_core::rev29::hand_plot::{
-    x_ea_ft, x_headwind_kt, x_oat, x_obstacle_m, x_tailwind_kt, x_weight_kg, y_dist, y_roc_fpm,
+    x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft,
     CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT,
     TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT,
 };
@@ -62,14 +62,15 @@ pub fn takeoff_strip_major_grid() -> impl IntoView {
 pub fn climb_strip_major_grid() -> impl IntoView {
     let roc_x1 = CLIMB_ROC.x + CLIMB_ROC.w;
     view! {
-        {strip_distance_hlines(CLIMB_EQ.x, roc_x1)}
+        {EA_TICKS_FT.into_iter().map(|ea| {
+            major_hline(CLIMB_EQ.x, roc_x1, y_ea_ft(ea))
+        }).collect_view()}
         {OAT_TICKS_C.into_iter().map(|t| {
             let x = CLIMB_EQ.x + (t + 20.0) / 75.0 * CLIMB_EQ.w;
             major_vline(x, STRIP_TOP, STRIP_BOTTOM)
         }).collect_view()}
-        {EA_TICKS_FT.into_iter().map(|ea| major_vline(x_ea_ft(ea), STRIP_TOP, STRIP_BOTTOM)).collect_view()}
         {ROC_TICKS_FPM.into_iter().map(|roc| {
-            major_hline(CLIMB_ROC.x, roc_x1, y_roc_fpm(roc))
+            major_vline(x_roc_fpm(roc), STRIP_TOP, STRIP_BOTTOM)
         }).collect_view()}
     }
 }
@@ -145,7 +146,7 @@ pub fn takeoff_strip_x_axis_ticks(c: &Copy) -> impl IntoView {
     }
 }
 
-/// Climb strip — OAT (°C) on fan panel, EA (ft) on ROC panel x, ROC (fpm) on ROC y.
+/// Climb strip — OAT (°C) on fan panel; shared EA (ft) on Y; ROC (fpm) on ROC panel X.
 pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
     view! {
         {OAT_TICKS_C.into_iter().map(|t| {
@@ -153,28 +154,20 @@ pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
             strip_tick(x, STRIP_TICK_Y, format!("{t:.0} °C"))
         }).collect_view()}
         {EA_TICKS_FT.into_iter().map(|ea| {
-            strip_tick(x_ea_ft(ea), STRIP_TICK_Y, format!("{ea:.0} ft"))
-        }).collect_view()}
-        {ROC_TICKS_FPM.into_iter().map(|roc| {
-            strip_tick(
-                CLIMB_ROC.x - 6.0,
-                y_roc_fpm(roc),
-                format!("{roc:.0} fpm"),
-            )
-        }).collect_view()}
-        {(0..=8).map(|i| {
-            let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
             guide_line_label(
                 CLIMB_EQ.x - 3.0,
-                y_dist(m),
-                format!("{m:.0} m"),
+                y_ea_ft(ea),
+                format!("{ea:.0} ft"),
                 LabelAnchor::End,
             )
+        }).collect_view()}
+        {ROC_TICKS_FPM.into_iter().map(|roc| {
+            strip_tick(x_roc_fpm(roc), STRIP_TICK_Y, format!("{roc:.0} fpm"))
         }).collect_view()}
         {strip_tick(
             CLIMB_EQ.x - 18.0,
             (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.axis_dist_m.to_string(),
+            c.axis_ea_ft.to_string(),
         )}
     }
 }
@@ -226,8 +219,8 @@ pub fn takeoff_strip_panel_titles(c: &Copy) -> impl IntoView {
 pub fn climb_strip_panel_titles(c: &Copy, roc_title: &'static str) -> impl IntoView {
     view! {
         <text x=CLIMB_EQ.x+CLIMB_EQ.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_oat_c}</text>
-        <text x=CLIMB_ROC.x+CLIMB_ROC.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_ea_ft}</text>
-        <text x=CLIMB_ROC.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.axis_roc_fpm}</text>
+        <text x=CLIMB_ROC.x+CLIMB_ROC.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_roc_fpm}</text>
+        <text x=CLIMB_EQ.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.axis_ea_ft}</text>
         <text x=CLIMB_ROC.x + 8.0 y="36" class="chart-axis-title" text-anchor="start">{roc_title}</text>
     }
 }

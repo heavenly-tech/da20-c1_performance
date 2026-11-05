@@ -9,9 +9,9 @@ use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, headwind_kt_from_strip_x,
     tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_panel_guides,
-    takeoff_wind_is_tailwind, x_ea_ft, x_headwind_kt, x_oat, x_obstacle_m, x_tailwind_kt,
-    x_weight_kg, y_dist, y_ea_ft, y_roc_fpm, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
-    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt,
+    x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW,
+    TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -465,7 +465,7 @@ fn render_climb_strip(
     let roc_pts: String = roc_pl
         .points
         .iter()
-        .map(|(ea, roc)| format!("{},{}", x_ea_ft(*ea), y_roc_fpm(*roc)))
+        .map(|(ea, roc)| format!("{},{}", x_roc_fpm(*roc), y_ea_ft(*ea)))
         .collect::<Vec<_>>()
         .join(" ");
 
@@ -493,14 +493,20 @@ fn render_climb_strip(
         {eq_paths.collect_view()}
         <polyline points=roc_pts class="chart-stroke-line"/>
         {guide_line_label(
-            x_ea_ft(0.0),
-            y_roc_fpm(roc_pl.points.first().map(|(_, r)| *r).unwrap_or(0.0)),
+            x_roc_fpm(roc_pl.points.first().map(|(_, r)| *r).unwrap_or(0.0)),
+            y_ea_ft(0.0),
             "0 ft".to_string(),
             LabelAnchor::End,
         )}
         {guide_line_label(
-            x_ea_ft(14_000.0),
-            y_roc_fpm(roc_pl.points.last().map(|(_, r)| *r).unwrap_or(0.0)),
+            x_roc_fpm(
+                roc_pl
+                    .points
+                    .last()
+                    .map(|(_, r)| *r)
+                    .unwrap_or(0.0),
+            ),
+            y_ea_ft(14_000.0),
             "14000 ft".to_string(),
             LabelAnchor::Start,
         )}

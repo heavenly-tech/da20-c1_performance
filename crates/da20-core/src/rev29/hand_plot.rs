@@ -116,38 +116,28 @@ pub fn y_ea_ft(ea: f64) -> f64 {
         - (ea.clamp(ea_min, ea_max) - ea_min) / (ea_max - ea_min) * (STRIP_BOTTOM - STRIP_TOP)
 }
 
-pub fn x_ea_ft(ea: f64) -> f64 {
-    CLIMB_ROC.x + (ea.clamp(0.0, 14_000.0) / 14_000.0) * CLIMB_ROC.w
+/// Inverse of [`y_ea_ft`]: EA (ft) at a strip Y (shared EA / ROC panel vertical axis).
+pub fn ea_ft_from_strip_y(y: f64) -> f64 {
+    let ea_min = -2000.0;
+    let ea_max = 16_000.0;
+    let h = STRIP_BOTTOM - STRIP_TOP;
+    let t = (STRIP_BOTTOM - y.clamp(STRIP_TOP, STRIP_BOTTOM)) / h;
+    ea_min + t * (ea_max - ea_min)
 }
 
-/// EA (ft) read on the ROC panel x-axis at strip x.
-pub fn ea_ft_from_strip_x(x: f64) -> f64 {
-    ((x - CLIMB_ROC.x) / CLIMB_ROC.w * 14_000.0).clamp(0.0, 14_000.0)
+/// ROC panel horizontal axis: ROC (fpm) → strip x (0–1000 fpm).
+pub fn x_roc_fpm(roc: f64) -> f64 {
+    CLIMB_ROC.x + (roc.clamp(0.0, 1000.0) / 1000.0) * CLIMB_ROC.w
 }
 
-/// Y coordinate of the ROC panel x-axis (ROC = 0 baseline).
+/// ROC (fpm) read on the ROC panel x-axis at strip x.
+pub fn roc_fpm_from_strip_x(x: f64) -> f64 {
+    ((x - CLIMB_ROC.x) / CLIMB_ROC.w * 1000.0).clamp(0.0, 1000.0)
+}
+
+/// Y coordinate of the ROC panel x-axis (ROC = 0 baseline at panel bottom).
 pub fn roc_panel_x_axis_y() -> f64 {
     STRIP_BOTTOM
-}
-
-pub fn y_roc_fpm(roc: f64) -> f64 {
-    STRIP_BOTTOM - (roc.clamp(0.0, 1000.0) / 1000.0) * (STRIP_BOTTOM - STRIP_TOP)
-}
-
-/// Inverse of [`y_roc_fpm`]: ROC fpm at a strip Y coordinate.
-pub fn strip_y_to_roc_fpm(y: f64) -> f64 {
-    let h = STRIP_BOTTOM - STRIP_TOP;
-    ((STRIP_BOTTOM - y.clamp(STRIP_TOP, STRIP_BOTTOM)) / h) * 1000.0
-}
-
-/// EA (ft) where the selected ROC figure line crosses a horizontal at strip Y.
-pub fn ea_at_horizontal_roc_intersection(data: &Rev29File, roc_key: &str, y_strip: f64) -> f64 {
-    let roc = strip_y_to_roc_fpm(y_strip);
-    let [a, b] = *data.roc.value.get(roc_key).unwrap_or(&[0.0, 0.0]);
-    if b.abs() < 1e-12 {
-        return 0.0;
-    }
-    ((roc - a) / b).clamp(0.0, 14_000.0)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -410,11 +400,10 @@ pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> O
     let oat_x = x_oat(inputs.oat_c);
     let y_ea = y_ea_ft(ea);
     let fan_right = CLIMB_EQ.x + CLIMB_EQ.w;
-    let ea_on_roc = ea_at_horizontal_roc_intersection(data, key, y_ea);
-    let x_on_roc = x_ea_ft(ea_on_roc);
-    let chart_roc = chart_roc_fpm_at_ea(data, key, ea_on_roc);
+    let chart_roc = chart_roc_fpm_at_ea(data, key, ea);
+    let x_on_roc = x_roc_fpm(chart_roc);
 
-    // Fan → EA; horizontal onto ROC line; vertical to x-axis readout at intersection x.
+    // Fan → EA; horizontal at EA onto ROC line; vertical to ROC x-axis readout.
     let points = vec![
         (oat_x, STRIP_BOTTOM),
         (oat_x, y_ea),
@@ -427,7 +416,7 @@ pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> O
     Some(ClimbPath {
         points,
         markers,
-        chart_ea_ft: ea_on_roc,
+        chart_ea_ft: ea,
         chart_roc_fpm: chart_roc,
         core_roc_fpm: core_roc,
     })
@@ -856,17 +845,63 @@ mod tests {
         let path = climb_hand_path(&data, &inputs, 3500.0).expect("climb");
         let (ea, _) = equivalent_altitude_ft(&data, 3500.0, inputs.oat_c);
         let y_ea = y_ea_ft(ea);
-        let ea_on_roc = ea_at_horizontal_roc_intersection(&data, key, y_ea);
-        let line_roc = chart_roc_fpm_at_ea(&data, key, ea_on_roc);
+        let line_roc = chart_roc_fpm_at_ea(&data, key, ea);
         assert!((path.chart_roc_fpm - line_roc).abs() < 0.01);
-        assert!((path.chart_ea_ft - ea_on_roc).abs() < 0.01);
+        assert!((path.chart_ea_ft - ea).abs() < 0.01);
         let hit = path.points[path.points.len() - 2];
         let axis = path.points.last().copied().expect("path end");
-        assert!((hit.0 - x_ea_ft(ea_on_roc)).abs() < 0.5);
+        assert!((hit.0 - x_roc_fpm(line_roc)).abs() < 0.5);
         assert!((hit.1 - y_ea).abs() < 0.5);
         assert!((axis.0 - hit.0).abs() < 0.01);
         assert!((axis.1 - roc_panel_x_axis_y()).abs() < 0.5);
-        assert!((path.chart_ea_ft - ea_ft_from_strip_x(hit.0)).abs() < 0.01);
+        assert!((path.chart_roc_fpm - roc_fpm_from_strip_x(hit.0)).abs() < 0.01);
+    }
+
+    #[test]
+    fn climb_chart_readout_within_one_percent_of_core() {
+        let data = Rev29File::production();
+        let cases = [
+            (2130.0, 20.0),
+            (2500.0, 18.0),
+            (3500.0, 25.0),
+            (6500.0, 15.0),
+        ];
+        for (pa_ft, oat_c) in cases {
+            let inputs = FlightInputs {
+                pa_override: Some(crate::types::PaOverride {
+                    pa_ft,
+                    phase: crate::types::ChartPhase::Climb,
+                }),
+                oat_c,
+                ..Default::default()
+            };
+            let path = climb_hand_path(&data, &inputs, pa_ft).expect("climb");
+            let (ea, _) = equivalent_altitude_ft(&data, pa_ft, oat_c);
+            assert!(
+                (path.chart_ea_ft - ea).abs() < 1.0,
+                "pa={pa_ft} oat={oat_c}: chart EA {} vs fan EA {ea}",
+                path.chart_ea_ft
+            );
+            assert!(
+                (path.chart_roc_fpm - path.core_roc_fpm).abs() / path.core_roc_fpm.max(1.0) < 0.01,
+                "pa={pa_ft} oat={oat_c}: chart ROC {} vs core {}",
+                path.chart_roc_fpm,
+                path.core_roc_fpm
+            );
+        }
+    }
+
+    #[test]
+    fn climb_roc_panel_shares_ea_y_mapper_with_fan_chart() {
+        let data = Rev29File::production();
+        let key = FlightInputs::default().climb_figure.roc_key();
+        let pl = crate::rev29::charts::climb_roc_vs_ea(&data, key);
+        for (ea, roc) in &pl.points {
+            let y = y_ea_ft(*ea);
+            let x = x_roc_fpm(*roc);
+            assert!((ea_ft_from_strip_y(y) - ea).abs() < 5.0);
+            assert!((roc_fpm_from_strip_x(x) - roc).abs() < 1.0);
+        }
     }
 
     #[test]
@@ -882,6 +917,7 @@ mod tests {
         };
         let key = inputs.climb_figure.roc_key();
         let path = climb_hand_path(&data, &inputs, 2500.0).expect("climb");
+        let (ea, _) = equivalent_altitude_ft(&data, 2500.0, inputs.oat_c);
         let pts = &path.points;
         assert!(pts.len() >= 3);
         let transfer_from = pts[pts.len() - 3];
@@ -903,11 +939,11 @@ mod tests {
             (axis.1 - roc_panel_x_axis_y()).abs() < 0.5,
             "readout point must sit on the ROC panel x-axis"
         );
-        let ea_on_roc = ea_at_horizontal_roc_intersection(&data, key, hit.1);
-        let roc_at_hit = chart_roc_fpm_at_ea(&data, key, ea_on_roc);
+        let roc_at_hit = chart_roc_fpm_at_ea(&data, key, ea);
         assert!((path.chart_roc_fpm - roc_at_hit).abs() < 0.01);
-        assert!((hit.0 - x_ea_ft(ea_on_roc)).abs() < 0.5);
-        assert!((path.chart_ea_ft - ea_ft_from_strip_x(hit.0)).abs() < 0.01);
+        assert!((hit.0 - x_roc_fpm(roc_at_hit)).abs() < 0.5);
+        assert!((hit.1 - y_ea_ft(ea)).abs() < 0.5);
+        assert!((path.chart_roc_fpm - roc_fpm_from_strip_x(axis.0)).abs() < 0.01);
     }
 
     #[test]
@@ -922,6 +958,7 @@ mod tests {
             ..Default::default()
         };
         let path = climb_hand_path(&data, &inputs, 2500.0).expect("climb");
+        let (ea, _) = equivalent_altitude_ft(&data, 2500.0, inputs.oat_c);
         let pts = &path.points;
         for w in pts.windows(2) {
             let (a, b) = (w[0], w[1]);
@@ -937,7 +974,7 @@ mod tests {
         let hit = pts[pts.len() - 2];
         assert!((end.0 - hit.0).abs() < 0.01);
         assert!((end.1 - roc_panel_x_axis_y()).abs() < 0.5);
-        assert!((path.chart_ea_ft - ea_ft_from_strip_x(hit.0)).abs() < 0.01);
+        assert!((path.chart_ea_ft - ea).abs() < 1.0);
     }
 
     #[test]
@@ -954,10 +991,8 @@ mod tests {
         let key = inputs.climb_figure.roc_key();
         let path = climb_hand_path(&data, &inputs, 2000.0).expect("roc");
         let fan_ea = equivalent_altitude_ft(&data, 2000.0, inputs.oat_c).0;
-        let y_ea = y_ea_ft(fan_ea);
-        let ea_on_roc = ea_at_horizontal_roc_intersection(&data, key, y_ea);
-        assert!((path.chart_ea_ft - ea_on_roc).abs() < 0.01);
-        assert!((path.chart_roc_fpm - chart_roc_fpm_at_ea(&data, key, ea_on_roc)).abs() < 0.01);
+        assert!((path.chart_ea_ft - fan_ea).abs() < 0.01);
+        assert!((path.chart_roc_fpm - chart_roc_fpm_at_ea(&data, key, fan_ea)).abs() < 0.01);
         assert!(path.core_roc_fpm > 0.0);
     }
 
