@@ -766,9 +766,7 @@ mod strip_drag_tests {
         let (hw, tw) = headwind_and_tailwind(&inputs);
         assert!((x_headwind_kt(hw) - TAKEOFF_HW.x - hw / 20.0 * TAKEOFF_HW.w).abs() < 0.01);
         assert!(
-            (x_tailwind_kt(tw)
-                - (TAKEOFF_TW.x + TAKEOFF_TW.w - tw / 5.0 * TAKEOFF_TW.w))
-                .abs()
+            (x_tailwind_kt(tw) - (TAKEOFF_TW.x + TAKEOFF_TW.w - tw / 5.0 * TAKEOFF_TW.w)).abs()
                 < 0.01
         );
         assert!(

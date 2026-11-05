@@ -7,6 +7,7 @@ RUN cargo install cargo-chef --locked --version 0.1.71 \
     && cargo install trunk --locked --version 0.22.1 \
     && cargo install wasm-bindgen-cli --locked --version 0.2.130
 ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup target add wasm32-unknown-unknown
 
 # --- Dependency recipe (invalidates only when Cargo.toml / Cargo.lock change) ---
 FROM chef AS planner
@@ -53,6 +54,7 @@ RUN MUSL_TARGET="$(cat /tmp/musl_target)" \
 FROM cacher AS builder
 WORKDIR /app
 COPY . .
+RUN rustup target add wasm32-unknown-unknown
 WORKDIR /app/crates/da20-ui
 RUN trunk build --release
 WORKDIR /app
