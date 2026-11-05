@@ -433,6 +433,22 @@ pub fn chart_read_takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f6
     takeoff_base_m(data, pa_ft, oat_c).0
 }
 
+/// Horizontal PA trace on the Fig 5.4 OAT/PA panel at the chart-read base distance.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TakeoffOatPaTrace {
+    pub y: f64,
+    pub oat_x: f64,
+    pub pa_ft: f64,
+}
+
+pub fn takeoff_oat_panel_pa_trace(data: &Rev29File, pa_ft: f64, oat_c: f64) -> TakeoffOatPaTrace {
+    TakeoffOatPaTrace {
+        y: y_dist(chart_read_takeoff_base_m(data, pa_ft, oat_c)),
+        oat_x: x_oat(oat_c),
+        pa_ft,
+    }
+}
+
 /// Sample wind-panel ground distance at a given headwind (follow guide line).
 pub fn chart_read_wind_ground_m(data: &Rev29File, after_weight_m: f64, headwind_kt: f64) -> f64 {
     wind_panel_hw_m(data, after_weight_m, headwind_kt).0
@@ -716,6 +732,25 @@ mod tests {
         let tw_c = wind_components(10.0, 5.0, 190.0);
         let (is_hw, kt) = along_runway_display_kt(&tw_c);
         assert!(!is_hw && kt > 0.5);
+    }
+
+    #[test]
+    fn takeoff_oat_panel_pa_trace_y_matches_engine_base_read() {
+        let data = Rev29File::production();
+        for pa_ft in [500.0, 2500.0, 7500.0] {
+            for oat_c in [-10.0, 15.0, 40.0] {
+                let trace = takeoff_oat_panel_pa_trace(&data, pa_ft, oat_c);
+                assert_eq!(trace.pa_ft, pa_ft);
+                let base = takeoff_base_m(&data, pa_ft, oat_c).0;
+                assert!(
+                    (trace.y - y_dist(base)).abs() < 0.01,
+                    "pa={pa_ft} oat={oat_c}: y {} vs {}",
+                    trace.y,
+                    y_dist(base)
+                );
+                assert!((trace.oat_x - x_oat(oat_c)).abs() < 0.01);
+            }
+        }
     }
 
     #[test]

@@ -563,6 +563,15 @@ pub fn format_strip_chart_roll_obs(locale: Locale, roll_m: f64, obs_m: f64) -> S
     }
 }
 
+/// AFM-style label on the takeoff OAT/PA panel PA trace (horizontal guide).
+pub fn format_takeoff_strip_pa_trace_label(locale: Locale, pa_ft: f64) -> String {
+    let ft = pa_ft.round();
+    match locale {
+        Locale::Es => format!("AP {ft:.0} ft"),
+        Locale::En => format!("PA {ft:.0} ft"),
+    }
+}
+
 #[allow(dead_code)]
 pub fn phase_slug_label(locale: Locale, slug: &str) -> String {
     let c = copy(locale);
@@ -722,6 +731,18 @@ mod i18n_display_tests {
             along_runway_headwind_kt: 0.0,
         };
         assert!(format_along_runway_component(Locale::Es, &comp).is_none());
+    }
+
+    #[test]
+    fn takeoff_strip_pa_trace_label_es_en() {
+        assert_eq!(
+            format_takeoff_strip_pa_trace_label(Locale::Es, 2500.0),
+            "AP 2500 ft"
+        );
+        assert_eq!(
+            format_takeoff_strip_pa_trace_label(Locale::En, 2500.0),
+            "PA 2500 ft"
+        );
     }
 
     #[test]

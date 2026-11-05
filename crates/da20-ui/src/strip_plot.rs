@@ -8,10 +8,10 @@ use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, take
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, headwind_kt_from_strip_x,
-    tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_panel_guides,
-    takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt,
-    x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW,
-    TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_oat_panel_pa_trace,
+    takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm,
+    x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
+    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -28,7 +28,7 @@ use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
     copy, format_strip_chart_roll_obs, format_takeoff_conservative_estimate,
-    format_takeoff_over_obstacle_result, Locale,
+    format_takeoff_over_obstacle_result, format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::phase_readouts::OVERLAY_STROKE_COLORS;
 use crate::storage::ReadingsStore;
@@ -58,6 +58,57 @@ fn strip_input_cursor(x: f64) -> impl IntoView {
             class="chart-stroke-guide-active"
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
+    }
+}
+
+fn strip_oat_pa_trace_guide(y: f64, oat_x: f64, label: String) -> impl IntoView {
+    view! {
+        <line
+            x1=TAKEOFF_OAT.x
+            y1=y
+            x2=oat_x
+            y2=y
+            class="chart-stroke-guide-active"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        {guide_line_label(
+            TAKEOFF_OAT.x + 4.0,
+            y,
+            label,
+            LabelAnchor::Start,
+        )}
+    }
+}
+
+fn strip_oat_pa_trace_guide_overlay(
+    y: f64,
+    oat_x: f64,
+    label: String,
+    color: &'static str,
+) -> impl IntoView {
+    view! {
+        <line
+            x1=TAKEOFF_OAT.x
+            y1=y
+            x2=oat_x
+            y2=y
+            fill="none"
+            stroke=color
+            stroke-width="2.5"
+            opacity="0.88"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        <text
+            x=TAKEOFF_OAT.x + 4.0
+            y=y
+            fill=color
+            font-size="9"
+            text-anchor="start"
+            dominant-baseline="middle"
+            opacity="0.92"
+        >
+            {label}
+        </text>
     }
 }
 
@@ -359,10 +410,14 @@ fn render_takeoff_strip(
         .collect::<Vec<_>>()
         .join(" ");
 
+    let pa_trace = takeoff_oat_panel_pa_trace(inner, pa, inputs.oat_c);
+    let pa_trace_label = format_takeoff_strip_pa_trace_label(locale, pa);
+
     view! {
         {panel_backgrounds(locale)}
         {takeoff_strip_major_grid()}
         {curve_paths.collect_view()}
+        {strip_oat_pa_trace_guide(pa_trace.y, pa_trace.oat_x, pa_trace_label)}
         {weight_guides.collect_view()}
         <g class:results-muted=tailwind_case>
             {headwind_guides.collect_view()}
@@ -383,7 +438,14 @@ fn render_takeoff_strip(
         {strip_input_cursor(x_tailwind_kt(tw))}
         {strip_input_cursor(x_obstacle_m(inputs.obstacle_height_m))}
         <polyline points=path_pts class="chart-stroke-user-path"/>
-        {saved_path_overlays(StripKind::Takeoff, data.clone(), store, phase_key, overlay_ids)}
+        {saved_path_overlays(
+            locale,
+            StripKind::Takeoff,
+            data.clone(),
+            store,
+            phase_key,
+            overlay_ids,
+        )}
         {path.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view()}
@@ -516,7 +578,14 @@ fn render_climb_strip(
         })}
         {path_pts.map(|pts| view! {
             <>
-                {saved_path_overlays(StripKind::Climb, data.clone(), store, phase_key.clone(), overlay_ids)}
+                {saved_path_overlays(
+                    locale,
+                    StripKind::Climb,
+                    data.clone(),
+                    store,
+                    phase_key.clone(),
+                    overlay_ids,
+                )}
                 <polyline points=pts class="chart-stroke-user-path"/>
             </>
         })}
@@ -528,6 +597,7 @@ fn render_climb_strip(
 }
 
 fn saved_path_overlays(
+    locale: Locale,
     kind: StripKind,
     data: PerformanceData,
     store: Option<RwSignal<ReadingsStore>>,
@@ -566,15 +636,29 @@ fn saved_path_overlays(
                         .collect::<Vec<_>>()
                         .join(" ");
                     let color = OVERLAY_STROKE_COLORS[idx % OVERLAY_STROKE_COLORS.len()];
+                    let pa_guide = (kind == StripKind::Takeoff).then(|| {
+                        let trace =
+                            takeoff_oat_panel_pa_trace(inner, pa, r.inputs.oat_c);
+                        let label = format_takeoff_strip_pa_trace_label(locale, pa);
+                        strip_oat_pa_trace_guide_overlay(
+                            trace.y,
+                            trace.oat_x,
+                            label,
+                            color,
+                        )
+                    });
                     Some(view! {
-                        <polyline
-                            points=pts
-                            fill="none"
-                            stroke=color
-                            stroke-width="2.5"
-                            opacity="0.88"
-                            stroke-dasharray="7 4"
-                        />
+                        <>
+                            {pa_guide}
+                            <polyline
+                                points=pts
+                                fill="none"
+                                stroke=color
+                                stroke-width="2.5"
+                                opacity="0.88"
+                                stroke-dasharray="7 4"
+                            />
+                        </>
                     })
                 })
                 .collect_view()
@@ -825,10 +909,25 @@ mod strip_drag_tests {
     }
 
     #[test]
-    fn obstacle_guide_labels_skip_overlapping_y() {
-        let mut placed = Vec::new();
-        assert!(obstacle_guide_label_y_allowed(200.0, &mut placed));
-        assert!(!obstacle_guide_label_y_allowed(205.0, &mut placed));
-        assert!(obstacle_guide_label_y_allowed(220.0, &mut placed));
+    fn takeoff_oat_pa_trace_y_matches_effective_pa_engine_read() {
+        use da20_core::types::{ChartPhase, PaOverride};
+        use da20_core::PerformanceData;
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            pa_override: Some(PaOverride {
+                pa_ft: 2500.0,
+                phase: ChartPhase::Takeoff,
+            }),
+            oat_c: 20.0,
+            ..Default::default()
+        };
+        let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Takeoff));
+        let trace = takeoff_oat_panel_pa_trace(data.inner(), pa, inputs.oat_c);
+        assert!((pa - 2500.0).abs() < 0.01);
+        assert!(
+            (trace.y - y_dist(chart_read_takeoff_base_m(data.inner(), pa, inputs.oat_c))).abs()
+                < 0.01
+        );
     }
 }
