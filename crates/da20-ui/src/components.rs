@@ -30,7 +30,6 @@ pub fn Nav(
             <PhaseTab phase=phase target=Phase::Cruise locale=locale/>
             <PhaseTab phase=phase target=Phase::Endurance locale=locale/>
             <PhaseTab phase=phase target=Phase::Landing locale=locale/>
-            <PhaseTab phase=phase target=Phase::Readings locale=locale/>
             <PhaseTab phase=phase target=Phase::Manual locale=locale/>
             <button class="lang-btn" on:click=move |_| {
                 let next = locale.get().toggle();
@@ -107,7 +106,6 @@ fn tab_label(locale: Locale, p: Phase) -> &'static str {
         Phase::Cruise => c.tab_cruise,
         Phase::Endurance => c.tab_endurance,
         Phase::Landing => c.tab_landing,
-        Phase::Readings => c.tab_readings,
         Phase::Manual => c.tab_method,
     }
 }

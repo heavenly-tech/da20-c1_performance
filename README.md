@@ -19,7 +19,7 @@ Performance planning helper for the **Diamond DA20-C1 Eclipse**, implementing AF
 | Server | Single binary (`da20-performance`) — Axum, embedded `dist/` assets |
 | Container | `scratch` static musl binary; `VIRTUAL_HOST` in `docker-compose.yml` |
 
-**UI:** Spanish default (EN toggle, `localStorage`). Phase tabs: Takeoff, Climb, Cruise, Endurance, Landing, Readings, Manual — no Descent tab (Rev 29 has no descent data). **Light theme by default** (dark navy + amber toggle); choice saved in `localStorage`. Wind display: `200 / 08 kt`. See [README.es.md](README.es.md).
+**UI:** Spanish default (EN toggle, `localStorage`). Phase tabs: Takeoff, Climb, Cruise, Endurance, Landing, Method — no Descent tab (Rev 29 has no descent data). Saved readouts live under each phase tab (not a global Lecturas tab). **Light theme by default** (dark navy + amber toggle); choice saved in `localStorage`. Wind display: `200 / 08 kt`. See [README.es.md](README.es.md).
 
 Intended host: `da20-c1.heavenly.cl` behind **nginx-proxy** (`VIRTUAL_HOST` / `LETSENCRYPT_HOST`), no bundled nginx.
 

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use da20_core::endurance::compute_endurance;
 use da20_core::PerformanceData;
 use leptos::prelude::*;
@@ -7,11 +9,10 @@ use crate::i18n::{
     copy, format_along_runway_component, format_crosswind_component, format_obstacle_over,
     format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
 };
-use crate::inputs::{
-    input_value, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField, SharedAirfieldInputs,
-};
+use crate::inputs::{ClimbFlapToggle, CruiseInputs, NumField, ObstacleField, SharedAirfieldInputs};
 use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, LandingTableView};
-use crate::storage::{compute_all, new_reading, ReadingsStore, SavedBundle};
+use crate::phase_readouts::PhaseReadoutsPanel;
+use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use da20_core::types::ChartPhase;
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
@@ -23,7 +24,6 @@ pub enum Phase {
     Cruise,
     Endurance,
     Landing,
-    Readings,
     Manual,
 }
 
@@ -74,7 +74,6 @@ pub fn PhaseShell(
                     <p class="lab warn">{move || copy(locale.get()).landing_no_corr}</p>
                 </PhaseGrid>
             }.into_any(),
-            Phase::Readings => view! { <crate::readings::ReadingsPage locale=locale store=store/> }.into_any(),
             Phase::Manual => view! { <MethodsManual locale=locale data=data/> }.into_any(),
         }}
     }
@@ -90,6 +89,7 @@ fn PhaseGrid(
     #[prop(default = true)] airfield: bool,
     children: Children,
 ) -> impl IntoView {
+    let overlay_ids = RwSignal::new(HashSet::<String>::new());
     let bundle = Memo::new(move |_| {
         let d = data.get();
         let i = inputs.get();
@@ -97,7 +97,6 @@ fn PhaseGrid(
         b.endurance = compute_endurance(&d, &i).ok();
         b
     });
-    let label = RwSignal::new(String::new());
 
     view! {
         <section class="phase scr on">
@@ -116,31 +115,16 @@ fn PhaseGrid(
                 </div>
                 <div class="card chart-card">
                     <h3>{phase_title(locale, phase)}</h3>
-                    {phase_chart(phase, locale, data, inputs)}
+                    {phase_chart(phase, locale, data, inputs, store, overlay_ids)}
                     {move || phase_results(locale.get(), phase, bundle.get(), inputs.get())}
-                    <div class="save-row">
-                        <label>
-                            <input prop:value=move || label.get()
-                                on:input=move |ev| label.set(input_value(&ev))/>
-                        </label>
-                        <button class="btn" on:click=move |_| {
-                            let mut b = bundle.get();
-                            if b.endurance.is_none() {
-                                b.endurance = compute_endurance(&data.get(), &inputs.get()).ok();
-                            }
-                            let reading = new_reading(
-                                if label.get().is_empty() {
-                                    phase_default_label(phase)
-                                } else {
-                                    label.get()
-                                },
-                                phase_storage_name(phase),
-                                inputs.get(),
-                                b,
-                            );
-                            store.update(|s| s.push(reading));
-                        }>{move || copy(locale.get()).save_reading}</button>
-                    </div>
+                    <PhaseReadoutsPanel
+                        locale=locale
+                        phase=phase
+                        data=data
+                        inputs=inputs
+                        store=store
+                        overlay_ids=overlay_ids
+                    />
                 </div>
             </div>
         </section>
@@ -165,32 +149,31 @@ fn phase_title(locale: RwSignal<Locale>, phase: Phase) -> impl IntoView {
             Phase::Cruise => c.cruise,
             Phase::Endurance => c.tab_endurance,
             Phase::Landing => c.landing,
-            _ => "",
+            Phase::Manual => "",
         }
     }
 }
 
-fn phase_storage_name(phase: Phase) -> String {
+pub(crate) fn phase_storage_name(phase: Phase) -> String {
     match phase {
         Phase::Takeoff => "takeoff",
         Phase::Climb => "climb",
         Phase::Cruise => "cruise",
         Phase::Endurance => "endurance",
         Phase::Landing => "landing",
-        Phase::Readings => "readings",
         Phase::Manual => "method",
     }
     .into()
 }
 
-fn phase_default_label(phase: Phase) -> String {
+pub(crate) fn phase_default_label(phase: Phase) -> String {
     match phase {
         Phase::Takeoff => "Takeoff".into(),
         Phase::Climb => "Climb".into(),
         Phase::Cruise => "Cruise".into(),
         Phase::Endurance => "Endurance".into(),
         Phase::Landing => "Landing".into(),
-        _ => "Reading".into(),
+        Phase::Manual => "Method".into(),
     }
 }
 
@@ -198,15 +181,34 @@ fn phase_chart(
     phase: Phase,
     locale: RwSignal<Locale>,
     data: RwSignal<PerformanceData>,
-    inputs: RwSignal<da20_core::types::FlightInputs>,
+    inputs: RwSignal<FlightInputs>,
+    store: RwSignal<ReadingsStore>,
+    overlay_ids: RwSignal<HashSet<String>>,
 ) -> impl IntoView {
+    let phase_key = phase_storage_name(phase);
     match phase {
         Phase::Takeoff => view! {
-            <StripHandPlot locale=locale kind=StripKind::Takeoff data=data inputs=inputs/>
+            <StripHandPlot
+                locale=locale
+                kind=StripKind::Takeoff
+                data=data
+                inputs=inputs
+                store=store
+                phase_key=phase_key
+                overlay_ids=overlay_ids
+            />
         }
         .into_any(),
         Phase::Climb => view! {
-            <StripHandPlot locale=locale kind=StripKind::Climb data=data inputs=inputs/>
+            <StripHandPlot
+                locale=locale
+                kind=StripKind::Climb
+                data=data
+                inputs=inputs
+                store=store
+                phase_key=phase_key
+                overlay_ids=overlay_ids
+            />
         }
         .into_any(),
         Phase::Cruise => view! {
@@ -222,7 +224,7 @@ fn phase_chart(
             <InteractiveChart locale=locale kind=ChartKind::Landing data=data inputs=inputs/>
         }
         .into_any(),
-        _ => view! { <span></span> }.into_any(),
+        Phase::Manual => view! { <span></span> }.into_any(),
     }
 }
 
@@ -331,7 +333,7 @@ fn phase_results(
                 None => view! { <p class="error">"—"</p> }.into_any(),
             }}
         }.into_any(),
-        _ => view! { <span></span> }.into_any(),
+        Phase::Manual => view! { <span></span> }.into_any(),
     }
 }
 
@@ -363,3 +365,5 @@ fn MethodsManual(locale: RwSignal<Locale>, data: RwSignal<PerformanceData>) -> i
         </section>
     }
 }
+
+use da20_core::types::FlightInputs;

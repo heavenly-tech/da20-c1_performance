@@ -502,6 +502,59 @@ body {
   border-radius: 8px;
 }
 
+.readouts-panel {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.readout-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.readout-restore {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.readout-restore:hover {
+  opacity: 0.92;
+}
+
+.readout-summary,
+.readout-results {
+  display: block;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.readout-selected {
+  outline: 1px solid var(--amb);
+}
+
+.overlay-toggle {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.readout-del {
+  flex-shrink: 0;
+}
+
+.export-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
 .method-list {
   padding-left: 1.2rem;
 }

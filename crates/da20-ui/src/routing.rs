@@ -9,7 +9,6 @@ pub fn phase_slug(phase: Phase) -> &'static str {
         Phase::Cruise => "cruise",
         Phase::Endurance => "endurance",
         Phase::Landing => "landing",
-        Phase::Readings => "readings",
         Phase::Manual => "method",
     }
 }
@@ -21,9 +20,9 @@ pub fn phase_from_slug(slug: &str) -> Option<Phase> {
         "cruise" => Some(Phase::Cruise),
         "endurance" => Some(Phase::Endurance),
         "landing" => Some(Phase::Landing),
-        "readings" => Some(Phase::Readings),
         "method" => Some(Phase::Manual),
         "manual" => Some(Phase::Manual),
+        "readings" => Some(Phase::Takeoff),
         _ => None,
     }
 }
@@ -48,8 +47,11 @@ pub fn write_phase_to_location(phase: Phase) {
 pub fn redirect_legacy_manual_hash() {
     if let Some(window) = web_sys::window() {
         if let Ok(hash) = window.location().hash() {
-            if hash.trim_start_matches('#').eq_ignore_ascii_case("manual") {
+            let slug = hash.trim_start_matches('#');
+            if slug.eq_ignore_ascii_case("manual") {
                 let _ = window.location().set_hash("method");
+            } else if slug.eq_ignore_ascii_case("readings") {
+                let _ = window.location().set_hash("takeoff");
             }
         }
     }

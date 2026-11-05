@@ -1,5 +1,7 @@
 //! Multi-panel hand-plot strips (Fig 5.4 takeoff, Fig 5.2 → ROC climb).
 
+use std::collections::HashSet;
+
 use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
 use da20_core::climb::compute_climb;
 use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
@@ -22,6 +24,8 @@ use crate::i18n::{
     copy, format_strip_chart_roll_obs, format_takeoff_conservative_estimate,
     format_takeoff_over_obstacle_result, Locale,
 };
+use crate::phase_readouts::OVERLAY_STROKE_COLORS;
+use crate::storage::ReadingsStore;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum StripKind {
@@ -35,6 +39,9 @@ pub fn StripHandPlot(
     kind: StripKind,
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
+    #[prop(optional)] store: Option<RwSignal<ReadingsStore>>,
+    #[prop(optional)] phase_key: Option<String>,
+    #[prop(optional)] overlay_ids: Option<RwSignal<HashSet<String>>>,
 ) -> impl IntoView {
     let dragging = RwSignal::new(false);
 
@@ -78,12 +85,24 @@ pub fn StripHandPlot(
                 on:pointermove=on_pointer_move
             >
                 {move || match kind {
-                    StripKind::Takeoff => {
-                        render_takeoff_strip(locale.get(), data.get(), inputs.get()).into_any()
-                    }
-                    StripKind::Climb => {
-                        render_climb_strip(locale.get(), data.get(), inputs.get()).into_any()
-                    }
+                    StripKind::Takeoff => render_takeoff_strip(
+                        locale.get(),
+                        data.get(),
+                        inputs.get(),
+                        store,
+                        phase_key.clone(),
+                        overlay_ids,
+                    )
+                    .into_any(),
+                    StripKind::Climb => render_climb_strip(
+                        locale.get(),
+                        data.get(),
+                        inputs.get(),
+                        store,
+                        phase_key.clone(),
+                        overlay_ids,
+                    )
+                    .into_any(),
                 }}
             </svg>
             <p class="cursor-readout mono">
@@ -166,6 +185,9 @@ fn render_takeoff_strip(
     locale: Locale,
     data: PerformanceData,
     inputs: FlightInputs,
+    store: Option<RwSignal<ReadingsStore>>,
+    phase_key: Option<String>,
+    overlay_ids: Option<RwSignal<HashSet<String>>>,
 ) -> impl IntoView {
     let c = copy(locale);
     let inner = data.inner();
@@ -337,6 +359,7 @@ fn render_takeoff_strip(
         <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="4 3"/>
         <polyline points=path_pts class="chart-stroke-user-path"/>
+        {saved_path_overlays(StripKind::Takeoff, data.clone(), store, phase_key, overlay_ids)}
         {path.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view()}
@@ -371,6 +394,9 @@ fn render_climb_strip(
     locale: Locale,
     data: PerformanceData,
     inputs: FlightInputs,
+    store: Option<RwSignal<ReadingsStore>>,
+    phase_key: Option<String>,
+    overlay_ids: Option<RwSignal<HashSet<String>>>,
 ) -> impl IntoView {
     let c = copy(locale);
     let inner = data.inner();
@@ -449,12 +475,71 @@ fn render_climb_strip(
         )}
         <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         {path_pts.map(|pts| view! {
-            <polyline points=pts class="chart-stroke-user-path"/>
+            <>
+                {saved_path_overlays(StripKind::Climb, data.clone(), store, phase_key.clone(), overlay_ids)}
+                <polyline points=pts class="chart-stroke-user-path"/>
+            </>
         })}
         {path.map(|p| p.markers.iter().map(|(x,y)| view! {
             <circle cx=*x cy=*y r="6" class="chart-marker"/>
         }).collect_view())}
     }
+}
+
+fn saved_path_overlays(
+    kind: StripKind,
+    data: PerformanceData,
+    store: Option<RwSignal<ReadingsStore>>,
+    phase_key: Option<String>,
+    overlay_ids: Option<RwSignal<HashSet<String>>>,
+) -> impl IntoView {
+    let (store, phase_key, overlay_ids) = match (store, phase_key, overlay_ids) {
+        (Some(s), Some(pk), Some(ids)) => (s, pk, ids),
+        _ => {
+            return ().into_any();
+        }
+    };
+    view! {
+        {move || {
+            let inner = data.inner();
+            let selected = overlay_ids.get();
+            store
+                .get()
+                .for_phase(&phase_key)
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| selected.contains(&r.id))
+                .filter_map(|(idx, r)| {
+                    let chart_phase = match kind {
+                        StripKind::Takeoff => ChartPhase::Takeoff,
+                        StripKind::Climb => ChartPhase::Climb,
+                    };
+                    let pa = effective_pressure_altitude_ft(&r.inputs, Some(chart_phase));
+                    let points = match kind {
+                        StripKind::Takeoff => takeoff_hand_path(inner, &r.inputs, pa).points,
+                        StripKind::Climb => climb_hand_path(inner, &r.inputs, pa)?.points,
+                    };
+                    let pts: String = points
+                        .iter()
+                        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let color = OVERLAY_STROKE_COLORS[idx % OVERLAY_STROKE_COLORS.len()];
+                    Some(view! {
+                        <polyline
+                            points=pts
+                            fill="none"
+                            stroke=color
+                            stroke-width="2.5"
+                            opacity="0.88"
+                            stroke-dasharray="7 4"
+                        />
+                    })
+                })
+                .collect_view()
+        }}
+    }
+    .into_any()
 }
 
 fn panel_backgrounds(locale: Locale) -> impl IntoView {
