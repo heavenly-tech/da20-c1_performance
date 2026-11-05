@@ -7,11 +7,11 @@ use da20_core::climb::compute_climb;
 use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
-    chart_read_takeoff_base_m, climb_hand_path, headwind_and_tailwind, headwind_kt_from_strip_x,
-    tailwind_kt_from_strip_x, tailwind_reference_x, takeoff_hand_path, takeoff_oat_panel_pa_trace,
-    takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm,
-    x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
-    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    back_solve_takeoff_wind_from_strip_x, chart_read_takeoff_base_m, climb_hand_path,
+    headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path, takeoff_oat_panel_pa_trace,
+    takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt,
+    x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW,
+    TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
@@ -701,36 +701,16 @@ fn apply_hit(
                     - (sx - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w
                         * (defaults::TAKEOFF_CHART_WEIGHT_KG - 600.0);
                 inputs.update(|i| i.weight_lb = kg / 0.45359237);
-            } else if (TAKEOFF_TW.x..TAKEOFF_TW.x + TAKEOFF_TW.w).contains(&sx) {
-                let i0 = inputs.get();
-                let (hw, tw) = headwind_and_tailwind(&i0);
-                if !takeoff_wind_is_tailwind(hw, tw) {
-                    return;
-                }
-                let tw_kt = tailwind_kt_from_strip_x(sx);
+            } else if (TAKEOFF_WIND.x..=TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
                 inputs.update(|i| {
                     let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
                         return;
                     };
-                    let (dir, speed, clamp) =
-                        da20_core::wind::back_solve_wind_for_tailwind(i.wind_dir_deg, rwy, tw_kt);
-                    i.wind_dir_deg = dir;
-                    i.wind_speed_kt = speed;
-                    i.wind_strip_crosswind_clamped = clamp;
-                });
-            } else if (TAKEOFF_HW.x..TAKEOFF_HW.x + TAKEOFF_HW.w).contains(&sx) {
-                let i0 = inputs.get();
-                let (hw, tw) = headwind_and_tailwind(&i0);
-                if takeoff_wind_is_tailwind(hw, tw) {
-                    return;
-                }
-                let hw_kt = headwind_kt_from_strip_x(sx);
-                inputs.update(|i| {
-                    let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
+                    let Some((dir, speed, clamp)) =
+                        back_solve_takeoff_wind_from_strip_x(sx, i.wind_dir_deg, rwy)
+                    else {
                         return;
                     };
-                    let (dir, speed, clamp) =
-                        da20_core::wind::back_solve_wind_for_headwind(i.wind_dir_deg, rwy, hw_kt);
                     i.wind_dir_deg = dir;
                     i.wind_speed_kt = speed;
                     i.wind_strip_crosswind_clamped = clamp;
@@ -838,6 +818,7 @@ pub fn takeoff_strip_wind_caption_parts(
 #[cfg(test)]
 mod strip_drag_tests {
     use super::*;
+    use da20_core::rev29::hand_plot::{headwind_kt_from_strip_x, tailwind_kt_from_strip_x};
     use da20_core::types::defaults;
 
     #[test]
@@ -864,6 +845,20 @@ mod strip_drag_tests {
 
         let sx_tw_ref = tailwind_reference_x();
         assert!((tailwind_kt_from_strip_x(sx_tw_ref) - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_wind_strip_drag_back_solves_from_tw_subpanel() {
+        let rwy = 190.0;
+        let dir = 10.0;
+        let sx = TAKEOFF_TW.x + TAKEOFF_TW.w * 0.25;
+        let (d, s, _) = back_solve_takeoff_wind_from_strip_x(sx, dir, rwy).expect("tw drag");
+        assert_eq!(d, dir);
+        assert!(s > 0.0);
+        let tw = tailwind_kt_from_strip_x(sx);
+        let comp = da20_core::wind::wind_components(d, s, rwy);
+        let (_, tw_out) = da20_core::wind::headwind_tailwind_kt(&comp);
+        assert!((tw_out - tw).abs() < 0.15, "tw_out={tw_out} target={tw}");
     }
 
     #[test]

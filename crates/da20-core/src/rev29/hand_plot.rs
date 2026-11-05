@@ -103,6 +103,33 @@ pub fn headwind_kt_from_strip_x(x: f64) -> f64 {
     (x - TAKEOFF_HW.x) / TAKEOFF_HW.w * 20.0
 }
 
+/// Map strip x in the Fig 5.4 wind panel to a wind speed back-solve (direction fixed).
+/// TW sub-panel (left) → tailwind; HW sub-panel (right) → headwind; shared edge is 0 kt.
+pub fn back_solve_takeoff_wind_from_strip_x(
+    sx: f64,
+    wind_dir_deg: f64,
+    runway_heading_deg: f64,
+) -> Option<(f64, f64, bool)> {
+    if !(TAKEOFF_WIND.x..=TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
+        return None;
+    }
+    if sx <= tailwind_reference_x() {
+        let tw = tailwind_kt_from_strip_x(sx);
+        Some(crate::wind::back_solve_wind_for_tailwind(
+            wind_dir_deg,
+            runway_heading_deg,
+            tw,
+        ))
+    } else {
+        let hw = headwind_kt_from_strip_x(sx);
+        Some(crate::wind::back_solve_wind_for_headwind(
+            wind_dir_deg,
+            runway_heading_deg,
+            hw,
+        ))
+    }
+}
+
 pub fn x_obstacle_m(obs_m: f64) -> f64 {
     TAKEOFF_OBS.x
         + (obs_m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M) / defaults::OBSTACLE_HEIGHT_MAX_M)
@@ -679,6 +706,58 @@ mod tests {
             d5 - entry < 120.0,
             "total TW correction should stay on chart scale"
         );
+    }
+
+    #[test]
+    fn takeoff_ground_roll_increases_monotonically_with_tailwind_0_to_10_kt() {
+        let data = Rev29File::production();
+        let pa = 2500.0;
+        let oat = 15.0;
+        let kg = 772.0;
+        let mut prev = takeoff_distances_m(&data, pa, oat, kg, 0.0, 0.0, 0.0).ground_roll_m;
+        for step in 1..=100 {
+            let tw = step as f64 / 10.0;
+            let dist = takeoff_distances_m(&data, pa, oat, kg, 0.0, tw, 0.0).ground_roll_m;
+            assert!(
+                dist >= prev - 1e-9,
+                "tailwind {tw} kt: ground roll {dist} m decreased from {prev} m"
+            );
+            prev = dist;
+        }
+    }
+
+    #[test]
+    fn takeoff_wind_strip_zero_kt_shared_at_tw_hw_boundary() {
+        let x = tailwind_reference_x();
+        assert!((x - TAKEOFF_HW.x).abs() < 1e-9);
+        assert!((tailwind_kt_from_strip_x(x) - headwind_kt_from_strip_x(x)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn takeoff_tailwind_hand_path_follows_tw_panel_guide_to_core_distance() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            weight_lb: 1700.0,
+            obstacle_height_m: 0.0,
+            ..Default::default()
+        };
+        let (hw, tw) = headwind_and_tailwind(&inputs);
+        assert!(takeoff_wind_is_tailwind(hw, tw));
+        let path = takeoff_hand_path(&data, &inputs, 2500.0);
+        assert!((path.chart_ground_m - path.core_ground_m).abs() < 0.05);
+        let core = takeoff_distances_m(
+            &data,
+            2500.0,
+            inputs.oat_c,
+            lb_to_kg(inputs.weight_lb),
+            hw,
+            tw,
+            0.0,
+        );
+        assert!(path.core_ground_m > core.after_weight_m);
     }
 
     #[test]
