@@ -214,7 +214,7 @@ pub fn format_readout_timestamp(iso: &str, locale: crate::i18n::Locale) -> Strin
             crate::i18n::Locale::En => "en-US",
         };
         js_sys::Date::new(&JsValue::from_str(iso))
-            .to_locale_string_with_locale(loc)
+            .to_locale_string(loc, &JsValue::UNDEFINED)
             .as_string()
             .unwrap_or_else(|| iso.to_string())
     }
