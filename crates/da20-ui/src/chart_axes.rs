@@ -219,7 +219,7 @@ pub fn takeoff_strip_panel_titles(c: &Copy) -> impl IntoView {
 pub fn climb_strip_panel_titles(c: &Copy, roc_title: &'static str) -> impl IntoView {
     view! {
         <text x=CLIMB_EQ.x+CLIMB_EQ.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_oat_c}</text>
-        <text x=CLIMB_ROC.x+CLIMB_ROC.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_roc_fpm}</text>
+        <text x=CLIMB_ROC.x+CLIMB_ROC.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_climb_roc_x_axis}</text>
         <text x=CLIMB_EQ.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.axis_ea_ft}</text>
         <text x=CLIMB_ROC.x + 8.0 y="36" class="chart-axis-title" text-anchor="start">{roc_title}</text>
     }
@@ -236,6 +236,39 @@ mod tests {
         assert!((x_tailwind_kt(5.0) - TAKEOFF_TW.x).abs() < 0.01);
         let c = copy(Locale::En);
         assert!(!c.axis_weight_kg.is_empty());
+    }
+
+    use da20_core::rev29::hand_plot::{CLIMB_ROC, x_roc_fpm};
+
+    #[test]
+    fn climb_roc_strip_x_axis_ticks_at_standard_fpm_values() {
+        assert_eq!(ROC_TICKS_FPM, [0.0, 250.0, 500.0, 750.0, 1000.0]);
+        for roc in ROC_TICKS_FPM {
+            let x = x_roc_fpm(roc);
+            assert!(
+                x >= CLIMB_ROC.x && x <= CLIMB_ROC.x + CLIMB_ROC.w,
+                "ROC tick {roc} fpm maps outside ROC panel"
+            );
+        }
+        assert!((x_roc_fpm(0.0) - CLIMB_ROC.x).abs() < 0.01);
+        assert!((x_roc_fpm(1000.0) - (CLIMB_ROC.x + CLIMB_ROC.w)).abs() < 0.01);
+    }
+
+    #[test]
+    fn climb_roc_strip_x_axis_title_es_en() {
+        assert_eq!(
+            copy(Locale::Es).strip_climb_roc_x_axis,
+            "Régimen de ascenso (fpm)"
+        );
+        assert_eq!(
+            copy(Locale::En).strip_climb_roc_x_axis,
+            "Rate of climb (fpm)"
+        );
+    }
+
+    #[test]
+    fn climb_major_grid_includes_roc_verticals_at_same_ticks() {
+        assert_eq!(ROC_TICKS_FPM.len(), EA_TICKS_FT.len());
     }
 
     #[test]
