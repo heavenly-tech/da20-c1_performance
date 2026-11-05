@@ -752,8 +752,8 @@ fn lerp_axis(axis: &[f64], n: f64) -> f64 {
 const STRIP_VIEWBOX_W: f64 = 1110.0;
 const STRIP_VIEWBOX_H: f64 = 560.0;
 
-/// Map pointer client coordinates within an element bounding box to strip SVG viewBox space.
-fn pointer_to_strip_viewbox(
+/// Map client coordinates to strip viewBox when the SVG uses default `meet` (same geometry as CTM⁻¹).
+pub(crate) fn client_to_strip_viewbox_meet(
     client_x: f64,
     client_y: f64,
     rect_left: f64,
@@ -761,17 +761,62 @@ fn pointer_to_strip_viewbox(
     rect_width: f64,
     rect_height: f64,
 ) -> (f64, f64) {
-    let nx = (client_x - rect_left) / rect_width;
-    let ny = (client_y - rect_top) / rect_height;
-    (nx * STRIP_VIEWBOX_W, ny * STRIP_VIEWBOX_H)
+    let scale = (rect_width / STRIP_VIEWBOX_W).min(rect_height / STRIP_VIEWBOX_H);
+    let rendered_w = STRIP_VIEWBOX_W * scale;
+    let rendered_h = STRIP_VIEWBOX_H * scale;
+    let ox = rect_left + (rect_width - rendered_w) * 0.5;
+    let oy = rect_top + (rect_height - rendered_h) * 0.5;
+    let sx = (client_x - ox) / scale;
+    let sy = (client_y - oy) / scale;
+    (sx, sy)
+}
+
+pub(crate) fn strip_viewbox_to_client_meet(
+    sx: f64,
+    sy: f64,
+    rect_left: f64,
+    rect_top: f64,
+    rect_width: f64,
+    rect_height: f64,
+) -> (f64, f64) {
+    let scale = (rect_width / STRIP_VIEWBOX_W).min(rect_height / STRIP_VIEWBOX_H);
+    let rendered_w = STRIP_VIEWBOX_W * scale;
+    let rendered_h = STRIP_VIEWBOX_H * scale;
+    let ox = rect_left + (rect_width - rendered_w) * 0.5;
+    let oy = rect_top + (rect_height - rendered_h) * 0.5;
+    (ox + sx * scale, oy + sy * scale)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn client_to_svg_viewbox_via_ctm(
+    svg: &web_sys::SvgElement,
+    client_x: f64,
+    client_y: f64,
+) -> Option<(f64, f64)> {
+    let ctm = svg.get_screen_ctm()?;
+    let inv = ctm.inverse()?;
+    let doc = svg.owner_document()?;
+    let pt = doc.create_svg_point();
+    pt.set_x(client_x);
+    pt.set_y(client_y);
+    let out = pt.matrix_transform(&inv);
+    Some((out.x(), out.y()))
 }
 
 fn svg_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
     let target = ev.current_target()?.dyn_into::<web_sys::Element>().ok()?;
+    let client_x = ev.client_x() as f64;
+    let client_y = ev.client_y() as f64;
+    #[cfg(target_arch = "wasm32")]
+    if let Ok(svg) = target.clone().dyn_into::<web_sys::SvgElement>() {
+        if let Some(pt) = client_to_svg_viewbox_via_ctm(&svg, client_x, client_y) {
+            return Some(pt);
+        }
+    }
     let rect = target.get_bounding_client_rect();
-    Some(pointer_to_strip_viewbox(
-        ev.client_x() as f64,
-        ev.client_y() as f64,
+    Some(client_to_strip_viewbox_meet(
+        client_x,
+        client_y,
         rect.left(),
         rect.top(),
         rect.width(),
@@ -822,8 +867,66 @@ mod strip_drag_tests {
     use da20_core::types::defaults;
 
     #[test]
-    fn pointer_to_viewbox_maps_element_center() {
-        let (sx, sy) = pointer_to_strip_viewbox(200.0, 90.0, 100.0, 40.0, 200.0, 100.0);
+    fn pointer_meet_mapping_round_trips_known_viewbox_pixels() {
+        let rect_left = 12.0;
+        let rect_top = 24.0;
+        let rect_w = 920.0;
+        let rect_h = 360.0;
+        for (sx, sy) in [
+            (
+                TAKEOFF_OAT.x + TAKEOFF_OAT.w * 0.25,
+                (STRIP_TOP + STRIP_BOTTOM) * 0.5,
+            ),
+            (x_weight_kg(720.0), STRIP_TOP + 40.0),
+            (x_headwind_kt(10.0), STRIP_BOTTOM - 30.0),
+            (x_tailwind_kt(3.0), STRIP_BOTTOM - 30.0),
+        ] {
+            let (cx, cy) =
+                strip_viewbox_to_client_meet(sx, sy, rect_left, rect_top, rect_w, rect_h);
+            let (sx2, sy2) =
+                client_to_strip_viewbox_meet(cx, cy, rect_left, rect_top, rect_w, rect_h);
+            assert!(
+                (sx2 - sx).abs() < 1e-6 && (sy2 - sy).abs() < 1e-6,
+                "round-trip failed for ({sx},{sy})"
+            );
+        }
+    }
+
+    #[test]
+    fn pointer_meet_mapping_oat_pa_from_oat_panel_pixel() {
+        let rect = (0.0, 0.0, 900.0, 360.0);
+        let sx = TAKEOFF_OAT.x + TAKEOFF_OAT.w * 0.5;
+        let sy = 300.0;
+        let (cx, cy) = strip_viewbox_to_client_meet(sx, sy, rect.0, rect.1, rect.2, rect.3);
+        let (sx2, sy2) = client_to_strip_viewbox_meet(cx, cy, rect.0, rect.1, rect.2, rect.3);
+        assert!((sx2 - sx).abs() < 1e-6 && (sy2 - sy).abs() < 1e-6);
+        let oat = (sx2 - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0;
+        assert!((oat - 17.5).abs() < 0.01);
+        let ny = 1.0 - (sy2 - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
+        assert!((ny - (1.0 - (300.0 - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP))).abs() < 1e-6);
+    }
+
+    #[test]
+    fn full_rect_stretch_mapping_differs_from_meet_when_letterboxed() {
+        let rect_w = 1400.0;
+        let rect_h = 700.0;
+        let sx = 300.0;
+        let sy = 280.0;
+        let (cx, cy) = strip_viewbox_to_client_meet(sx, sy, 0.0, 0.0, rect_w, rect_h);
+        let stretched_x = cx / rect_w * STRIP_VIEWBOX_W;
+        let stretched_y = cy / rect_h * STRIP_VIEWBOX_H;
+        assert!(
+            (stretched_x - sx).abs() > 0.5,
+            "old stretch mapping should mis-read X under horizontal letterboxing"
+        );
+        assert!((stretched_y - sy).abs() < 1e-6);
+        let (sx2, sy2) = client_to_strip_viewbox_meet(cx, cy, 0.0, 0.0, rect_w, rect_h);
+        assert!((sx2 - sx).abs() < 1e-6 && (sy2 - sy).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pointer_to_viewbox_maps_element_center_when_aspect_matches() {
+        let (sx, sy) = client_to_strip_viewbox_meet(200.0, 90.0, 100.0, 40.0, 200.0, 100.0);
         assert!((sx - 555.0).abs() < 0.01);
         assert!((sy - 280.0).abs() < 0.01);
     }
