@@ -239,6 +239,7 @@ fn format_iso_now() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::Locale;
     use da20_core::types::{defaults, FlightInputs};
 
     fn sample_reading(phase: &str, id: &str) -> SavedReading {
@@ -314,5 +315,12 @@ mod tests {
         let raw = serde_json::to_string(&store).unwrap();
         let back: ReadingsStore = serde_json::from_str(&raw).unwrap();
         assert_eq!(store, back);
+    }
+
+    #[test]
+    fn readout_timestamp_native_strips_utc_z_suffix() {
+        let s = format_readout_timestamp("2026-01-01T12:30:00.000Z", Locale::En);
+        assert!(!s.ends_with('Z'));
+        assert!(s.contains("2026"));
     }
 }

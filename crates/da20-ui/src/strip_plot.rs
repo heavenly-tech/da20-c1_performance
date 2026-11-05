@@ -34,6 +34,19 @@ use crate::phase_readouts::OVERLAY_STROKE_COLORS;
 use crate::storage::ReadingsStore;
 
 const STRIP_INPUT_CURSOR_DASH: &str = "5 4";
+const OBSTACLE_GUIDE_LABEL_MIN_DY: f64 = 12.0;
+
+/// Skip obstacle-panel `{NNN} m` labels that would stack on the same strip y.
+pub(crate) fn obstacle_guide_label_y_allowed(y: f64, placed: &mut Vec<f64>) -> bool {
+    if placed
+        .iter()
+        .any(|p| (p - y).abs() < OBSTACLE_GUIDE_LABEL_MIN_DY)
+    {
+        return false;
+    }
+    placed.push(y);
+    true
+}
 
 fn strip_input_cursor(x: f64) -> impl IntoView {
     view! {
@@ -301,11 +314,17 @@ fn render_takeoff_strip(
     });
 
     let obs_line_m = inner.obs_lines.value.clone();
+    let obs_guide_count = guides.obstacle_ys.len();
+    let mut obs_label_ys: Vec<f64> = Vec::new();
     let obs_guides = guides
         .obstacle_ys
         .iter()
         .zip(obs_line_m.iter())
-        .map(|((y0, y15), &g_m)| {
+        .enumerate()
+        .map(|(idx, ((y0, y15), &g_m))| {
+            let show_left = obstacle_guide_label_y_allowed(*y0, &mut obs_label_ys);
+            let show_right = idx + 1 == obs_guide_count
+                && obstacle_guide_label_y_allowed(*y15, &mut obs_label_ys);
             view! {
                 <>
                     <line
@@ -313,18 +332,22 @@ fn render_takeoff_strip(
                         x2={TAKEOFF_OBS.x + TAKEOFF_OBS.w} y2=*y15
                         class="chart-stroke-guide" opacity="0.7"
                     />
-                    {guide_line_label(
-                        TAKEOFF_OBS.x + TAKEOFF_OBS.w + 3.0,
-                        *y15,
-                        format!("{:.0} m", defaults::OBSTACLE_HEIGHT_MAX_M),
-                        LabelAnchor::Start,
-                    )}
-                    {guide_line_label(
-                        TAKEOFF_OBS.x - 3.0,
-                        *y0,
-                        format!("{g_m:.0} m"),
-                        LabelAnchor::End,
-                    )}
+                    {show_right.then(|| view! {
+                        {guide_line_label(
+                            TAKEOFF_OBS.x + TAKEOFF_OBS.w + 3.0,
+                            *y15,
+                            format!("{:.0} m", defaults::OBSTACLE_HEIGHT_MAX_M),
+                            LabelAnchor::Start,
+                        )}
+                    })}
+                    {show_left.then(|| view! {
+                        {guide_line_label(
+                            TAKEOFF_OBS.x - 3.0,
+                            *y0,
+                            format!("{g_m:.0} m"),
+                            LabelAnchor::End,
+                        )}
+                    })}
                 </>
             }
         });
@@ -792,5 +815,14 @@ mod strip_drag_tests {
         assert_eq!(lbl, copy(Locale::Es).strip_fig54_tw);
         assert!((kt - tw).abs() < 0.01);
         assert!((kt - 5.0).abs() < 0.01);
+        assert_eq!(lbl, "Viento de cola");
+    }
+
+    #[test]
+    fn obstacle_guide_labels_skip_overlapping_y() {
+        let mut placed = Vec::new();
+        assert!(obstacle_guide_label_y_allowed(200.0, &mut placed));
+        assert!(!obstacle_guide_label_y_allowed(205.0, &mut placed));
+        assert!(obstacle_guide_label_y_allowed(220.0, &mut placed));
     }
 }
