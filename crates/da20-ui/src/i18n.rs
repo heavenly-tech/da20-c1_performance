@@ -614,47 +614,6 @@ pub fn data_status_label(locale: Locale, status: &str) -> String {
     }
 }
 
-#[cfg(test)]
-mod i18n_display_tests {
-    use super::*;
-    use da20_core::types::FlightInputs;
-    use da20_core::types::WindComponents;
-    use da20_core::wind::wind_chart_panel_needs_crosswind_note;
-
-    #[test]
-    fn html_lang_follows_locale() {
-        assert_eq!(Locale::Es.html_lang(), "es");
-        assert_eq!(Locale::En.html_lang(), "en");
-    }
-
-    #[test]
-    fn crosswind_line_hidden_when_near_zero() {
-        assert!(format_crosswind_component(Locale::Es, 0.0).is_empty());
-        assert!(format_crosswind_component(Locale::En, 0.04).is_empty());
-    }
-
-    #[test]
-    fn along_runway_line_hidden_when_no_along_component() {
-        let comp = WindComponents {
-            headwind_kt: 0.0,
-            crosswind_kt: 8.0,
-            along_runway_headwind_kt: 0.0,
-        };
-        assert!(format_along_runway_component(Locale::Es, &comp).is_none());
-    }
-
-    #[test]
-    fn typed_near_pure_crosswind_triggers_strip_note() {
-        let inputs = FlightInputs {
-            runway: "190".into(),
-            wind_dir_deg: 280.0,
-            wind_speed_kt: 10.0,
-            ..Default::default()
-        };
-        assert!(wind_chart_panel_needs_crosswind_note(&inputs));
-    }
-}
-
 pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> String {
     if !w.message.is_empty() {
         return w.message.clone();
@@ -729,5 +688,46 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             }
         },
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod i18n_display_tests {
+    use super::*;
+    use da20_core::types::FlightInputs;
+    use da20_core::types::WindComponents;
+    use da20_core::wind::wind_chart_panel_needs_crosswind_note;
+
+    #[test]
+    fn html_lang_follows_locale() {
+        assert_eq!(Locale::Es.html_lang(), "es");
+        assert_eq!(Locale::En.html_lang(), "en");
+    }
+
+    #[test]
+    fn crosswind_line_hidden_when_near_zero() {
+        assert!(format_crosswind_component(Locale::Es, 0.0).is_empty());
+        assert!(format_crosswind_component(Locale::En, 0.04).is_empty());
+    }
+
+    #[test]
+    fn along_runway_line_hidden_when_no_along_component() {
+        let comp = WindComponents {
+            headwind_kt: 0.0,
+            crosswind_kt: 8.0,
+            along_runway_headwind_kt: 0.0,
+        };
+        assert!(format_along_runway_component(Locale::Es, &comp).is_none());
+    }
+
+    #[test]
+    fn typed_near_pure_crosswind_triggers_strip_note() {
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 280.0,
+            wind_speed_kt: 10.0,
+            ..Default::default()
+        };
+        assert!(wind_chart_panel_needs_crosswind_note(&inputs));
     }
 }
