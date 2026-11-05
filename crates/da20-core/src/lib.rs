@@ -17,6 +17,7 @@ pub mod provenance;
 pub mod rev29;
 pub mod takeoff;
 pub mod types;
+pub mod warnings;
 pub mod wind;
 pub mod wind_format;
 

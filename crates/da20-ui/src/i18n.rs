@@ -117,6 +117,7 @@ pub struct Copy {
     pub plot_hint: &'static str,
     pub plot_readout_chart: &'static str,
     pub plot_readout_core: &'static str,
+    pub readout_off_chart: &'static str,
     pub pa_override_chip: &'static str,
     pub pa_override_reset: &'static str,
     pub axis_hw_kt: &'static str,
@@ -240,6 +241,7 @@ const ES: Copy = Copy {
     plot_hint: "Arrastre el cursor sobre las curvas digitalizadas (no son copias del AFM). Compatible con puntero y táctil.",
     plot_readout_chart: "Lectura carta",
     plot_readout_core: "Resultado núcleo",
+    readout_off_chart: "Extrapolado / fuera de carta",
     pa_override_chip: "PA carta",
     pa_override_reset: "Restablecer PA",
     axis_hw_kt: "HW kt",
@@ -355,6 +357,7 @@ const EN: Copy = Copy {
     plot_hint: "Drag the cursor on digitized curves (not AFM scans). Pointer and touch supported.",
     plot_readout_chart: "Chart read",
     plot_readout_core: "Core result",
+    readout_off_chart: "Extrapolated / off chart",
     pa_override_chip: "Chart PA",
     pa_override_reset: "Reset PA",
     axis_hw_kt: "HW kt",
@@ -627,6 +630,23 @@ pub fn data_status_label(locale: Locale, status: &str) -> String {
     }
 }
 
+fn chart_range_warn(locale: Locale, below: bool, actual_m: &str, bound_m: &str) -> String {
+    match (locale, below) {
+        (Locale::Es, true) => format!(
+            "Fuera del rango de la carta ({actual_m} m < {bound_m} m mín.): se usa el mínimo de la carta, resultado conservador"
+        ),
+        (Locale::En, true) => format!(
+            "Below AFM chart range ({actual_m} m < {bound_m} m min.): chart minimum used, conservative result"
+        ),
+        (Locale::Es, false) => format!(
+            "Fuera del rango de la carta ({actual_m} m > {bound_m} m máx.): se usa el máximo de la carta, resultado conservador"
+        ),
+        (Locale::En, false) => format!(
+            "Above AFM chart range ({actual_m} m > {bound_m} m max.): chart maximum used, conservative result"
+        ),
+    }
+}
+
 pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> String {
     if !w.message.is_empty() {
         return w.message.clone();
@@ -636,8 +656,10 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
     let a1 = w.args.get(1).map(String::as_str).unwrap_or("");
     let a2 = w.args.get(2).map(String::as_str).unwrap_or("");
     match w.code.as_str() {
-        "CLAMP_LOW" => format!("{ctx}: {a1} < min {a2} (clamp)"),
-        "CLAMP_HIGH" => format!("{ctx}: {a1} > max {a2} (clamp)"),
+        "CHART_CLAMP_LOW" => chart_range_warn(locale, true, a1, a2),
+        "CHART_CLAMP_HIGH" => chart_range_warn(locale, false, a1, a2),
+        "CLAMP_LOW" => chart_range_warn(locale, true, a1, a2),
+        "CLAMP_HIGH" => chart_range_warn(locale, false, a1, a2),
         "EXTRAP_LOW" | "EXTRAP_HIGH" => format!("{ctx}: extrapolation ({a1})"),
         "ENDURANCE_DERIVED" => c.derived_not_afm.to_string(),
         "AFM_FUEL_CAPACITY" => match locale {
@@ -731,6 +753,19 @@ mod i18n_display_tests {
             along_runway_headwind_kt: 0.0,
         };
         assert!(format_along_runway_component(Locale::Es, &comp).is_none());
+    }
+
+    #[test]
+    fn chart_clamp_warning_plain_bilingual_text() {
+        let w = da20_core::types::CalculationWarning::with_args(
+            "CHART_CLAMP_LOW",
+            vec!["Fig 5.4 headwind panel".into(), "206".into(), "300".into()],
+        );
+        assert_eq!(
+            warn_text(Locale::En, &w),
+            "Below AFM chart range (206 m < 300 m min.): chart minimum used, conservative result"
+        );
+        assert!(warn_text(Locale::Es, &w).contains("206 m < 300 m"));
     }
 
     #[test]

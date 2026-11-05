@@ -195,6 +195,7 @@ pub struct TakeoffResult {
     pub distance_over_obstacle_conservative_ft: f64,
     pub distance_over_50ft_ft: f64,
     pub wind_correction_ft: f64,
+    pub chart_off_afm: bool,
     pub warnings: Vec<CalculationWarning>,
 }
 

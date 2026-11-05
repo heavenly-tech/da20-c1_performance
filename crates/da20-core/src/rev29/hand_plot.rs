@@ -18,6 +18,24 @@ pub const DIST_MAX_M: f64 = 1000.0;
 
 const PATH_STEPS: usize = 12;
 
+fn wind_panel_hw_distance(
+    data: &Rev29File,
+    entry_m: f64,
+    kt: f64,
+) -> (f64, Vec<CalculationWarning>) {
+    let (d, _, w) = wind_panel_hw_m(data, entry_m, kt);
+    (d, w)
+}
+
+fn wind_panel_tw_distance(
+    data: &Rev29File,
+    entry_m: f64,
+    kt: f64,
+) -> (f64, Vec<CalculationWarning>) {
+    let (d, _, w) = wind_panel_tw_m(data, entry_m, kt);
+    (d, w)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Panel {
     pub x: f64,
@@ -213,7 +231,7 @@ fn trace_headwind_guide(data: &Rev29File, after_weight_m: f64, hw_kt: f64) -> Ve
         after_weight_m,
         hw_kt,
         &data.hw_kt.value,
-        wind_panel_hw_m,
+        wind_panel_hw_distance,
         x_headwind_kt,
     )
 }
@@ -224,7 +242,7 @@ fn trace_tailwind_guide(data: &Rev29File, after_weight_m: f64, tw_kt: f64) -> Ve
         after_weight_m,
         tw_kt,
         &data.tw_kt.value,
-        wind_panel_tw_m,
+        wind_panel_tw_distance,
         x_tailwind_kt,
     )
 }
@@ -261,7 +279,7 @@ pub fn headwind_guide_polyline(data: &Rev29File, entry_line_m: f64) -> Vec<(f64,
         data,
         entry_line_m,
         &data.hw_kt.value,
-        wind_panel_hw_m,
+        wind_panel_hw_distance,
         x_headwind_kt,
     )
 }
@@ -271,7 +289,7 @@ pub fn tailwind_guide_polyline(data: &Rev29File, entry_line_m: f64) -> Vec<(f64,
         data,
         entry_line_m,
         &data.tw_kt.value,
-        wind_panel_tw_m,
+        wind_panel_tw_distance,
         x_tailwind_kt,
     )
 }
@@ -338,6 +356,8 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let weight_ref_x = TAKEOFF_WEIGHT.x;
     let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
     let after_wt_y = y_dist(core.after_weight_m);
+    let wind_row_m = core.wind_panel_entry_m;
+    let wind_row_y = y_dist(wind_row_m);
 
     let mut markers = Vec::with_capacity(8);
     push_turn_marker(&mut markers, (oat_x, STRIP_BOTTOM));
@@ -360,18 +380,22 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
         if (ly - after_wt_y).abs() > 0.5 {
             points.push((lx, after_wt_y));
         }
-        if (lx - wind_panel_left).abs() > 0.5 {
-            points.push((wind_panel_left, after_wt_y));
+        if (after_wt_y - wind_row_y).abs() > 0.5 {
+            let wx = points.last().map(|p| p.0).unwrap_or(lx);
+            points.push((wx, wind_row_y));
+        }
+        if (points.last().map(|p| p.0).unwrap_or(lx) - wind_panel_left).abs() > 0.5 {
+            points.push((wind_panel_left, wind_row_y));
         }
     }
-    push_turn_marker(&mut markers, (wind_panel_left, after_wt_y));
+    push_turn_marker(&mut markers, (wind_panel_left, wind_row_y));
 
     let wind_trace = if takeoff_wind_is_tailwind(hw, tw) {
-        trace_tailwind_guide(data, core.after_weight_m, tw)
+        trace_tailwind_guide(data, wind_row_m, tw)
     } else if hw > 0.0 {
-        trace_headwind_guide(data, core.after_weight_m, hw)
+        trace_headwind_guide(data, wind_row_m, hw)
     } else {
-        vec![(x_headwind_kt(0.0), y_dist(core.after_weight_m))]
+        vec![(x_headwind_kt(0.0), wind_row_y)]
     };
     append_segment(&mut points, &wind_trace);
     if let Some(wind_exit) = points.last().copied() {
@@ -386,24 +410,16 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
         }
     }
 
-    let obs_trace = trace_obstacle_guide(data, core.ground_roll_m, obs_m);
+    let obs_trace = trace_obstacle_guide(data, core.obstacle_panel_entry_m, obs_m);
     append_segment(&mut points, &obs_trace);
     if let Some(final_pt) = points.last().copied() {
         push_turn_marker(&mut markers, final_pt);
     }
 
-    let chart_ground = if takeoff_wind_is_tailwind(hw, tw) {
-        wind_panel_tw_m(data, core.after_weight_m, tw).0
-    } else if hw > 0.0 {
-        wind_panel_hw_m(data, core.after_weight_m, hw).0
-    } else {
-        core.after_weight_m
-    };
-
     TakeoffPath {
         points,
         markers,
-        chart_ground_m: chart_ground,
+        chart_ground_m: core.ground_roll_m,
         chart_over_obstacle_m: core.over_obstacle_m,
         core_ground_m: core.ground_roll_m,
         core_over_obstacle_m: core.over_obstacle_m,
@@ -642,12 +658,12 @@ mod tests {
     #[test]
     fn afm_tailwind_panel_reference_distances() {
         let data = Rev29File::production();
-        let (d331, _) = wind_panel_tw_m(&data, 300.0, 2.85);
+        let (d331, _, _) = wind_panel_tw_m(&data, 300.0, 2.85);
         assert!(
             (d331 - 331.0).abs() <= 1.0,
             "300 m + 2.85 kt TW expected ~331 m, got {d331}"
         );
-        let (d583, _) = wind_panel_tw_m(&data, 500.0, 4.84);
+        let (d583, _, _) = wind_panel_tw_m(&data, 500.0, 4.84);
         assert!(
             (d583 - 583.0).abs() <= 1.0,
             "500 m + 4.84 kt TW expected ~583 m, got {d583}"
@@ -798,7 +814,7 @@ mod tests {
     #[test]
     fn tailwind_chart_limit_emits_warning_no_silent_extrapolation() {
         let data = Rev29File::production();
-        let (_, w) = wind_panel_tw_m(&data, 400.0, 8.0);
+        let (_, _, w) = wind_panel_tw_m(&data, 400.0, 8.0);
         assert!(w.iter().any(|x| x.code == "TAILWIND_CHART_LIMIT"));
     }
 

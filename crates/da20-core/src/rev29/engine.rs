@@ -4,6 +4,63 @@ use crate::types::CalculationWarning;
 
 const M_TO_FT: f64 = 3.280839895;
 
+const CLAMP_TOLERANCE: f64 = 0.2;
+
+/// Clamp a chart distance query to the AFM axis; emit at most one conservative low/high warning.
+pub fn clamp_chart_distance_m(
+    axis: &[f64],
+    query_m: f64,
+    chart_label: &str,
+) -> (f64, Vec<CalculationWarning>) {
+    if axis.is_empty() {
+        return (query_m, vec![]);
+    }
+    let min = axis[0];
+    let max = axis[axis.len() - 1];
+    if query_m < min - CLAMP_TOLERANCE {
+        return (
+            min,
+            vec![CalculationWarning::with_args(
+                "CHART_CLAMP_LOW",
+                vec![
+                    chart_label.to_string(),
+                    format!("{:.0}", query_m.round()),
+                    format!("{:.0}", min.round()),
+                ],
+            )],
+        );
+    }
+    if query_m > max + CLAMP_TOLERANCE {
+        return (
+            max,
+            vec![CalculationWarning::with_args(
+                "CHART_CLAMP_HIGH",
+                vec![
+                    chart_label.to_string(),
+                    format!("{:.0}", query_m.round()),
+                    format!("{:.0}", max.round()),
+                ],
+            )],
+        );
+    }
+    (query_m, vec![])
+}
+
+fn linear_interp_quiet(axis: &[f64], values: &[f64], x: f64) -> f64 {
+    match interpolate_1d(axis, values, x, ExtrapolationPolicy::Strict) {
+        Ok((v, _)) => v,
+        Err(_) => {
+            if axis.is_empty() {
+                0.0
+            } else if x <= axis[0] {
+                values[0]
+            } else {
+                *values.last().unwrap_or(&values[0])
+            }
+        }
+    }
+}
+
 pub fn linear_interp(
     axis: &[f64],
     values: &[f64],
@@ -122,7 +179,7 @@ pub fn wind_panel_hw_m(
     data: &Rev29File,
     base_distance_m: f64,
     headwind_kt: f64,
-) -> (f64, Vec<CalculationWarning>) {
+) -> (f64, f64, Vec<CalculationWarning>) {
     wind_panel_kt_rows(
         &data.hw_lines.value,
         &data.hw_kt.value,
@@ -139,7 +196,7 @@ pub fn wind_panel_tw_m(
     data: &Rev29File,
     base_distance_m: f64,
     tailwind_kt: f64,
-) -> (f64, Vec<CalculationWarning>) {
+) -> (f64, f64, Vec<CalculationWarning>) {
     wind_panel_kt_rows(
         &data.tw_lines.value,
         &data.tw_kt.value,
@@ -163,26 +220,24 @@ fn wind_panel_kt_rows(
     label: &str,
     max_chart_kt: f64,
     limit_code: &str,
-) -> (f64, Vec<CalculationWarning>) {
-    let mut warnings = Vec::new();
+) -> (f64, f64, Vec<CalculationWarning>) {
+    let (entry_eff, clamp_w) = clamp_chart_distance_m(lines, entry_distance_m, label);
+    let mut warnings = clamp_w;
     let at_wind: Vec<f64> = grid
         .iter()
-        .map(|row| {
-            let (v, w) = linear_interp(lines, row, entry_distance_m, label);
-            warnings.extend(w);
-            v
-        })
+        .map(|row| linear_interp_quiet(lines, row, entry_eff))
         .collect();
-    wind_panel_delta(
+    let (ground, delta_w) = wind_panel_delta(
         wind_kt,
         &at_wind,
-        entry_distance_m,
+        entry_eff,
         wind_component_kt,
         label,
         max_chart_kt,
         limit_code,
         &mut warnings,
-    )
+    );
+    (ground, entry_eff, delta_w)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -226,23 +281,34 @@ pub fn obstacle_add_m(
     data: &Rev29File,
     ground_after_wind_m: f64,
     obstacle_m: f64,
-) -> (f64, Vec<CalculationWarning>) {
+) -> (f64, f64, Vec<CalculationWarning>) {
     if obstacle_m <= 0.0 {
-        return (ground_after_wind_m, vec![]);
+        return (ground_after_wind_m, ground_after_wind_m, vec![]);
     }
-    let (slope, w) = linear_interp(
+    let (ground_eff, clamp_w) = clamp_chart_distance_m(
+        &data.obs_lines.value,
+        ground_after_wind_m,
+        "Fig 5.4 obstacle panel",
+    );
+    let slope = linear_interp_quiet(
         &data.obs_lines.value,
         &data.obs_slope_m_per_m.value,
-        ground_after_wind_m,
-        "Fig 5.4 obstacle slope",
+        ground_eff,
     );
-    let warnings = w;
-    (ground_after_wind_m + slope * obstacle_m, warnings)
+    (
+        ground_after_wind_m + slope * obstacle_m,
+        ground_eff,
+        clamp_w,
+    )
 }
 
 pub struct TakeoffDistancesM {
     pub base_m: f64,
     pub after_weight_m: f64,
+    /// Distance row used on the wind panel (may be chart-clamped above `after_weight_m`).
+    pub wind_panel_entry_m: f64,
+    /// Ground-roll row used on the obstacle slope axis (may be chart-clamped).
+    pub obstacle_panel_entry_m: f64,
     pub ground_roll_m: f64,
     pub over_obstacle_m: f64,
     pub warnings: Vec<CalculationWarning>,
@@ -261,19 +327,22 @@ pub fn takeoff_distances_m(
     let (wf, w1) = weight_factor(data, weight_kg);
     warnings.extend(w1);
     let after_weight = base * wf;
-    let (ground, w2) = if headwind_kt > 0.0 {
+    let (ground, wind_panel_entry_m, w2) = if headwind_kt > 0.0 {
         wind_panel_hw_m(data, after_weight, headwind_kt)
     } else if tailwind_kt > 0.0 {
         wind_panel_tw_m(data, after_weight, tailwind_kt)
     } else {
-        (after_weight, vec![])
+        (after_weight, after_weight, vec![])
     };
     warnings.extend(w2);
-    let (over_obstacle, w3) = obstacle_add_m(data, ground, obstacle_m);
+    let (over_obstacle, obstacle_panel_entry_m, w3) = obstacle_add_m(data, ground, obstacle_m);
     warnings.extend(w3);
+    warnings = crate::warnings::dedupe_warnings(warnings);
     TakeoffDistancesM {
         base_m: base,
         after_weight_m: after_weight,
+        wind_panel_entry_m,
+        obstacle_panel_entry_m,
         ground_roll_m: ground,
         over_obstacle_m: over_obstacle,
         warnings,
@@ -350,9 +419,9 @@ mod tests {
     fn wind_panel_anchors_at_entry_distance() {
         let d = Rev29File::production();
         let entry = 296.0;
-        let (d0, _) = wind_panel_hw_m(&d, entry, 0.0);
-        assert!((d0 - entry).abs() < f64::EPSILON);
-        let (d4, _) = wind_panel_hw_m(&d, entry, 4.0);
+        let (d0, entry_eff, _) = wind_panel_hw_m(&d, entry, 0.0);
+        assert!((d0 - entry_eff).abs() < f64::EPSILON);
+        let (d4, _, _) = wind_panel_hw_m(&d, entry, 4.0);
         assert!(d4.is_finite() && d4 > 0.0);
     }
 
@@ -365,6 +434,48 @@ mod tests {
         let twice = wind_panel_hw_m(&d, entry, hw).0;
         assert_eq!(once, twice);
         assert!((once - entry - (wind_panel_hw_m(&d, entry, 4.0).0 - entry)).abs() > 0.0);
+    }
+
+    #[test]
+    fn headwind_panel_clamp_warning_emitted_once_not_per_row() {
+        let data = Rev29File::production();
+        let min_line = data.hw_lines.value[0];
+        let (_, _, single) = wind_panel_hw_m(&data, 206.0, 16.7);
+        let hw_clamps: Vec<_> = single
+            .iter()
+            .filter(|w| w.code == "CHART_CLAMP_LOW")
+            .collect();
+        assert_eq!(hw_clamps.len(), 1);
+
+        let cases = [
+            (2500.0, 15.0, 680.0),
+            (5000.0, 45.0, 600.0),
+            (1000.0, 50.0, 600.0),
+        ];
+        for (pa, oat, kg) in cases {
+            let dist = takeoff_distances_m(&data, pa, oat, kg, 16.7, 0.0, 10.0);
+            if dist.after_weight_m >= min_line {
+                continue;
+            }
+            let n = dist
+                .warnings
+                .iter()
+                .filter(|w| w.code == "CHART_CLAMP_LOW")
+                .count();
+            assert_eq!(n, 1, "takeoff_distances_m should emit one clamp warning");
+            return;
+        }
+    }
+
+    #[test]
+    fn chart_clamp_low_is_conservative_for_headwind_panel() {
+        let data = Rev29File::production();
+        let dist = takeoff_distances_m(&data, 2500.0, 15.0, 680.0, 16.7, 0.0, 10.0);
+        if dist.wind_panel_entry_m <= dist.after_weight_m + 0.01 {
+            return;
+        }
+        assert!(dist.wind_panel_entry_m >= dist.after_weight_m);
+        assert!(dist.ground_roll_m >= dist.after_weight_m);
     }
 
     #[test]

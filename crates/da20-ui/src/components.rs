@@ -140,6 +140,7 @@ pub fn WarningsList(
     locale: Locale,
     warnings: Vec<da20_core::types::CalculationWarning>,
 ) -> impl IntoView {
+    let warnings = da20_core::warnings::dedupe_warnings(warnings);
     let empty = warnings.is_empty();
     view! {
         {(!empty).then(|| {

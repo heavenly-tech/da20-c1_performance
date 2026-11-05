@@ -60,6 +60,7 @@ pub fn compute_takeoff(
 
     let mut warnings = dist.warnings;
     warnings.push(CalculationWarning::code_only("UNITS"));
+    let chart_off_afm = crate::warnings::takeoff_off_chart(&warnings);
 
     Ok(TakeoffResult {
         provenance: provenance_for(data.inner(), data.takeoff_source()),
@@ -71,6 +72,7 @@ pub fn compute_takeoff(
         distance_over_obstacle_conservative_ft: over_conservative_ft,
         distance_over_50ft_ft: over_raw_ft,
         wind_correction_ft: wind_delta_ft,
+        chart_off_afm,
         warnings,
     })
 }

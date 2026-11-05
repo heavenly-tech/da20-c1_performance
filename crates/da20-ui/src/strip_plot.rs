@@ -224,7 +224,9 @@ fn readout_line(
                 return format!("{}: — | {}: —", c.plot_readout_chart, c.plot_readout_core);
             }
             let path = takeoff_hand_path(inner, &inputs, pa);
-            let core = compute_takeoff(&data, &inputs)
+            let takeoff = compute_takeoff(&data, &inputs);
+            let core = takeoff
+                .as_ref()
                 .map(|t| {
                     format!(
                         "{} | {}",
@@ -246,7 +248,16 @@ fn readout_line(
                 path.chart_ground_m,
                 path.chart_over_obstacle_m,
             );
-            format!("{}: {chart} | {core}", c.plot_readout_chart,)
+            let off = takeoff.as_ref().map(|t| t.chart_off_afm).unwrap_or(false);
+            let off_lbl = if off {
+                format!(" · {}", c.readout_off_chart)
+            } else {
+                String::new()
+            };
+            format!(
+                "{}: {chart}{off_lbl} | {}: {core}",
+                c.plot_readout_chart, c.plot_readout_core
+            )
         }
         StripKind::Climb => {
             let path = climb_hand_path(inner, &inputs, pa);
