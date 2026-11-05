@@ -80,6 +80,21 @@ cd ../..
 cargo run -p da20-server
 ```
 
+## Docker
+
+Production image: multi-stage Alpine build (`Dockerfile`) — `da20-ui` WASM via Trunk, `da20-server` as a static **musl** binary copied into a `scratch` runtime.
+
+**Multi-arch (amd64 + arm64)** needs BuildKit and an explicit platform list so Docker sets `TARGETARCH` per variant:
+
+```bash
+docker buildx create --use   # once per machine
+docker buildx build --platform linux/amd64,linux/arm64 --progress=plain .
+```
+
+CI uses the same `buildx build --platform linux/amd64,linux/arm64` invocation. A plain `docker build .` without BuildKit may leave `TARGETARCH` empty; the Dockerfile then falls back to the builder host architecture (`uname -m` → `amd64` or `arm64`).
+
+`wasm-bindgen-cli` in the chef stage is pinned to the same version as `wasm-bindgen` in `Cargo.lock` (checked in CI via `scripts/check-wasm-bindgen-pin.sh`).
+
 ## License
 
 MIT — **Do not commit AFM/AMM PDFs or chart scans.**

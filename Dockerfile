@@ -27,16 +27,27 @@ FROM chef AS cacher
 ARG TARGETARCH
 WORKDIR /app
 COPY --from=planner /app/recipe.json recipe.json
-RUN case "${TARGETARCH}" in \
+# BuildKit (buildx --platform) sets TARGETARCH; plain docker build may not — fall back to host.
+RUN set -eu; \
+    arch="${TARGETARCH:-}"; \
+    if [ -z "${arch}" ]; then \
+      case "$(uname -m)" in \
+        x86_64) arch=amd64 ;; \
+        aarch64|arm64) arch=arm64 ;; \
+        *) echo "unsupported uname -m for TARGETARCH fallback: $(uname -m)" >&2; exit 1 ;; \
+      esac; \
+      echo "TARGETARCH unset — defaulting to host ${arch} (use: docker buildx build --platform linux/amd64[,linux/arm64] .)" >&2; \
+    fi; \
+    case "${arch}" in \
       amd64) MUSL_TARGET=x86_64-unknown-linux-musl ;; \
       arm64) MUSL_TARGET=aarch64-unknown-linux-musl ;; \
-      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac \
-    && echo "${MUSL_TARGET}" > /tmp/musl_target \
-    && rustup target add "$(cat /tmp/musl_target)" wasm32-unknown-unknown
+      *) echo "unsupported TARGETARCH: ${arch}" >&2; exit 1 ;; \
+    esac; \
+    echo "${MUSL_TARGET}" > /tmp/musl_target; \
+    rustup target add "${MUSL_TARGET}" wasm32-unknown-unknown
 RUN MUSL_TARGET="$(cat /tmp/musl_target)" \
-    && cargo chef cook --release --recipe-path recipe.json --target "${MUSL_TARGET}" \
-    && cargo chef cook --release --recipe-path recipe.json --target wasm32-unknown-unknown
+    && cargo chef cook --release --recipe-path recipe.json --target "${MUSL_TARGET}" -p da20-server \
+    && cargo chef cook --release --recipe-path recipe.json --target wasm32-unknown-unknown -p da20-ui
 
 # --- Application build (source changes only rebuild this stage + above invalidation) ---
 FROM cacher AS builder
