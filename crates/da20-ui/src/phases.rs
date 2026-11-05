@@ -4,8 +4,8 @@ use leptos::prelude::*;
 
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
-    copy, format_obstacle_over, format_takeoff_conservative_estimate,
-    format_takeoff_over_obstacle_result, Locale,
+    copy, format_along_runway_component, format_crosswind_component, format_obstacle_over,
+    format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
 };
 use crate::inputs::{
     input_value, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField, SharedAirfieldInputs,
@@ -14,6 +14,7 @@ use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, Lan
 use crate::storage::{compute_all, new_reading, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use da20_core::types::ChartPhase;
+use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -233,8 +234,12 @@ fn phase_results(
 ) -> impl IntoView {
     let c = copy(locale);
     match phase {
-        Phase::Takeoff => view! {
-            {match &b.takeoff {
+        Phase::Takeoff => {
+            let runway_ok =
+                runway_heading_status(&inputs.runway) == RunwayHeadingStatus::Valid;
+            view! {
+            {if runway_ok {
+                match &b.takeoff {
                 Some(t) => view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
@@ -254,14 +259,25 @@ fn phase_results(
                     </div>
                 }.into_any(),
                 None => view! { <p class="error">"—"</p> }.into_any(),
+            }} else {
+                view! { <p class="lab results-muted">{c.results_runway_required}</p> }.into_any()
             }}
-            {match &b.wind {
-                Some(w) => view! {
-                    <p class="mono">"HW "{w.components.headwind_kt.round()}" kt · XW "{w.components.crosswind_kt.round()}" kt"</p>
-                }.into_any(),
+            {runway_ok.then(|| match &b.wind {
+                Some(w) => {
+                    let along = format_along_runway_component(locale, &w.components);
+                    let cross = format_crosswind_component(locale, w.components.crosswind_kt);
+                    view! {
+                        <div class="wind-components">
+                            {along.map(|line| view! { <p class="mono">{line}</p> })}
+                            <p class="mono">{cross}</p>
+                        </div>
+                    }.into_any()
+                }
                 None => view! { <span></span> }.into_any(),
-            }}
-        }.into_any(),
+            })}
+            }
+            .into_any()
+        }
         Phase::Climb => view! {
             {match &b.climb {
                 Some(cl) => view! {

@@ -95,25 +95,16 @@ pub fn compute_wind(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<WindResult, WindError> {
-    let mut warnings = Vec::new();
     let status = runway_heading_status(&inputs.runway);
-    let rwy = match status {
-        RunwayHeadingStatus::Valid => runway_heading_deg(&inputs.runway).unwrap_or(0.0),
-        RunwayHeadingStatus::AmbiguousShort => {
-            warnings.push(CalculationWarning::with_args(
-                "RUNWAY_HEADING_AMBIGUOUS",
-                vec![inputs.runway.clone()],
-            ));
-            0.0
-        }
-        RunwayHeadingStatus::Empty | RunwayHeadingStatus::Invalid => {
-            warnings.push(CalculationWarning::with_args(
-                "RUNWAY_HEADING",
-                vec![inputs.runway.clone()],
-            ));
-            0.0
-        }
-    };
+    if status != RunwayHeadingStatus::Valid {
+        return Err(if status == RunwayHeadingStatus::AmbiguousShort {
+            WindError::AmbiguousRunwayHeading
+        } else {
+            WindError::InvalidRunwayHeading
+        });
+    }
+    let mut warnings = Vec::new();
+    let rwy = runway_heading_deg(&inputs.runway).expect("validated above");
     let components = wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy);
     if components.along_runway_headwind_kt < 0.0 {
         warnings.push(CalculationWarning::with_args(
@@ -133,6 +124,27 @@ pub fn compute_wind(
 pub enum WindError {
     #[error("wind calculation failed")]
     Failed,
+    #[error("invalid runway heading")]
+    InvalidRunwayHeading,
+    #[error("ambiguous runway heading")]
+    AmbiguousRunwayHeading,
+}
+
+/// One decimal place for component readout (kt).
+pub fn format_component_kt(kt: f64) -> String {
+    format!("{:.1}", kt)
+}
+
+pub fn along_runway_display_kt(components: &WindComponents) -> (bool, f64) {
+    let (hw, tw) = headwind_tailwind_kt(components);
+    const EPS: f64 = 0.05;
+    if hw >= EPS {
+        (true, hw)
+    } else if tw >= EPS {
+        (false, tw)
+    } else {
+        (true, 0.0)
+    }
 }
 
 #[cfg(test)]

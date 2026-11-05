@@ -123,13 +123,15 @@ pub fn wind_panel_hw_m(
     base_distance_m: f64,
     headwind_kt: f64,
 ) -> (f64, Vec<CalculationWarning>) {
-    wind_panel(
+    wind_panel_kt_rows(
         &data.hw_lines.value,
         &data.hw_kt.value,
         &data.hw_m.value,
         base_distance_m,
         headwind_kt,
         "Fig 5.4 headwind panel",
+        data.hw_kt.value.last().copied().unwrap_or(20.0),
+        "HEADWIND_CHART_LIMIT",
     )
 }
 
@@ -138,23 +140,28 @@ pub fn wind_panel_tw_m(
     base_distance_m: f64,
     tailwind_kt: f64,
 ) -> (f64, Vec<CalculationWarning>) {
-    wind_panel(
+    wind_panel_line_rows(
         &data.tw_lines.value,
         &data.tw_kt.value,
         &data.tw_m.value,
         base_distance_m,
         tailwind_kt,
         "Fig 5.4 tailwind panel",
+        data.tw_kt.value.last().copied().unwrap_or(5.0),
+        "TAILWIND_CHART_LIMIT",
     )
 }
 
-fn wind_panel(
+/// Headwind grid: each row is a wind speed; columns are distance guide lines.
+fn wind_panel_kt_rows(
     lines: &[f64],
     wind_kt: &[f64],
     grid: &[Vec<f64>],
     entry_distance_m: f64,
     wind_component_kt: f64,
     label: &str,
+    max_chart_kt: f64,
+    limit_code: &str,
 ) -> (f64, Vec<CalculationWarning>) {
     let mut warnings = Vec::new();
     let at_wind: Vec<f64> = grid
@@ -165,18 +172,86 @@ fn wind_panel(
             v
         })
         .collect();
+    wind_panel_delta(
+        wind_kt,
+        &at_wind,
+        entry_distance_m,
+        wind_component_kt,
+        label,
+        max_chart_kt,
+        limit_code,
+        &mut warnings,
+    )
+}
+
+/// Tailwind grid: each row is an entry-distance guide line; columns are wind speeds.
+fn wind_panel_line_rows(
+    lines: &[f64],
+    wind_kt: &[f64],
+    grid: &[Vec<f64>],
+    entry_distance_m: f64,
+    wind_component_kt: f64,
+    label: &str,
+    max_chart_kt: f64,
+    limit_code: &str,
+) -> (f64, Vec<CalculationWarning>) {
+    let mut warnings = Vec::new();
+    if wind_kt.is_empty() || grid.is_empty() {
+        return (entry_distance_m, warnings);
+    }
+    let mut at_wind = Vec::with_capacity(wind_kt.len());
+    for col in 0..wind_kt.len() {
+        let column: Vec<f64> = grid.iter().map(|row| row[col]).collect();
+        let (v, w) = linear_interp(lines, &column, entry_distance_m, label);
+        warnings.extend(w);
+        at_wind.push(v);
+    }
+    wind_panel_delta(
+        wind_kt,
+        &at_wind,
+        entry_distance_m,
+        wind_component_kt,
+        label,
+        max_chart_kt,
+        limit_code,
+        &mut warnings,
+    )
+}
+
+fn wind_panel_delta(
+    wind_kt: &[f64],
+    at_wind: &[f64],
+    entry_distance_m: f64,
+    wind_component_kt: f64,
+    label: &str,
+    max_chart_kt: f64,
+    limit_code: &str,
+    warnings: &mut Vec<CalculationWarning>,
+) -> (f64, Vec<CalculationWarning>) {
     let sample_at_kt = |kt: f64| -> (f64, Vec<CalculationWarning>) {
-        let (v, w) = linear_interp(wind_kt, &at_wind, kt, label);
+        let (v, w) = linear_interp(wind_kt, at_wind, kt, label);
         (v, w)
     };
     if wind_component_kt <= 0.0 {
-        return (entry_distance_m, warnings);
+        return (entry_distance_m, std::mem::take(warnings));
     }
+    let kt_sample = if wind_component_kt > max_chart_kt {
+        warnings.push(CalculationWarning::with_args(
+            limit_code,
+            vec![
+                format!("{:.1}", max_chart_kt),
+                format!("{:.1}", wind_component_kt),
+            ],
+        ));
+        max_chart_kt
+    } else {
+        wind_component_kt
+    };
     let (v0, w0) = sample_at_kt(0.0);
     warnings.extend(w0);
-    let (v_hw, w_hw) = sample_at_kt(wind_component_kt);
-    warnings.extend(w_hw);
-    (entry_distance_m + (v_hw - v0), warnings)
+    let (v_w, w_w) = sample_at_kt(kt_sample);
+    warnings.extend(w_w);
+    (entry_distance_m + (v_w - v0), std::mem::take(warnings))
 }
 
 pub fn obstacle_add_m(

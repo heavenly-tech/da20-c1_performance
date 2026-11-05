@@ -353,16 +353,29 @@ pub fn obstacle_guide_ys(data: &Rev29File, ground_line_m: f64, obstacle_h_m: f64
 }
 
 const TAKEOFF_GUIDE_HW_MAX_KT: f64 = 20.0;
+const TAKEOFF_GUIDE_TW_MAX_KT: f64 = 5.0;
 const TAKEOFF_GUIDE_OBS_MAX_M: f64 = 15.0;
 const TAKEOFF_GUIDE_LINE_COUNT: usize = 8;
+const TAKEOFF_TW_GUIDE_LINE_COUNT: usize = 7;
 const TAKEOFF_OBS_GUIDE_COUNT: usize = 6;
 
 /// Digitized Fig 5.4 guide geometry only — no flight inputs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TakeoffPanelGuides {
     pub weight_polylines: Vec<Vec<(f64, f64)>>,
-    pub wind_segments: Vec<((f64, f64), (f64, f64))>,
+    pub headwind_segments: Vec<((f64, f64), (f64, f64))>,
+    pub tailwind_segments: Vec<((f64, f64), (f64, f64))>,
     pub obstacle_ys: Vec<(f64, f64)>,
+}
+
+pub fn tailwind_panel_segment(
+    data: &Rev29File,
+    entry_distance_m: f64,
+    tailwind_max: f64,
+) -> ((f64, f64), (f64, f64)) {
+    let y0 = y_dist(entry_distance_m);
+    let y1 = y_dist(wind_panel_tw_m(data, entry_distance_m, tailwind_max).0);
+    ((x_tailwind_kt(0.0), y0), (x_tailwind_kt(tailwind_max), y1))
 }
 
 pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
@@ -373,12 +386,19 @@ pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
         .take(TAKEOFF_GUIDE_LINE_COUNT)
         .map(|&line_m| weight_guide_polyline(data, line_m))
         .collect();
-    let wind_segments = data
+    let headwind_segments = data
         .hw_lines
         .value
         .iter()
         .take(TAKEOFF_GUIDE_LINE_COUNT)
         .map(|&line_m| wind_panel_segment(data, line_m, TAKEOFF_GUIDE_HW_MAX_KT))
+        .collect();
+    let tailwind_segments = data
+        .tw_lines
+        .value
+        .iter()
+        .take(TAKEOFF_TW_GUIDE_LINE_COUNT)
+        .map(|&line_m| tailwind_panel_segment(data, line_m, TAKEOFF_GUIDE_TW_MAX_KT))
         .collect();
     let obstacle_ys = data
         .obs_lines
@@ -389,7 +409,8 @@ pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
         .collect();
     TakeoffPanelGuides {
         weight_polylines,
-        wind_segments,
+        headwind_segments,
+        tailwind_segments,
         obstacle_ys,
     }
 }
@@ -413,7 +434,7 @@ mod tests {
             .enumerate()
         {
             assert_eq!(
-                guides.wind_segments[i],
+                guides.headwind_segments[i],
                 wind_panel_segment(&data, line_m, TAKEOFF_GUIDE_HW_MAX_KT)
             );
             assert_eq!(
@@ -431,7 +452,7 @@ mod tests {
         let (wf, _) = crate::rev29::engine::weight_factor(&data, 650.0);
         let (wf_chart, _) = weight_factor(&data, defaults::TAKEOFF_CHART_WEIGHT_KG);
         let wrong = wind_panel_segment(&data, line_m * wf / wf_chart, TAKEOFF_GUIDE_HW_MAX_KT);
-        assert_ne!(guides.wind_segments[2], wrong);
+        assert_ne!(guides.headwind_segments[2], wrong);
     }
 
     #[test]
@@ -460,6 +481,80 @@ mod tests {
         let obs = obstacle_add_m(&data, g, h).0;
         assert_eq!(obs, obstacle_add_m(&data, g, h).0);
         assert!((obstacle_add_m(&data, g, 0.0).0 - g).abs() < 1e-9);
+    }
+
+    #[test]
+    fn tailwind_panel_continuity_and_magnitude_2_to_5_kt() {
+        let data = Rev29File::production();
+        let entry = 450.0;
+        let d0 = wind_panel_tw_m(&data, entry, 0.0).0;
+        assert!((d0 - entry).abs() < 2.0);
+        let mut prev = d0;
+        for tw in [2.0, 3.0, 4.0, 5.0] {
+            let d = wind_panel_tw_m(&data, entry, tw).0;
+            assert!(d >= prev - 0.5, "TW {tw} kt should not shorten distance");
+            let delta = d - prev;
+            assert!(delta < 35.0, "per-step jump {delta} m too large at {tw} kt");
+            prev = d;
+        }
+        let d5 = wind_panel_tw_m(&data, entry, 5.0).0;
+        assert!(
+            d5 - entry < 120.0,
+            "total TW correction should stay on chart scale"
+        );
+    }
+
+    #[test]
+    fn takeoff_distance_reasonable_with_tailwind_and_headwind_cases() {
+        use crate::data::PerformanceData;
+        use crate::takeoff::compute_takeoff;
+        let data = PerformanceData::production();
+        let tw_case = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            weight_lb: 1700.0,
+            obstacle_height_m: 0.0,
+            ..Default::default()
+        };
+        let tw = compute_takeoff(&data, &tw_case).expect("tw");
+        assert!(
+            tw.distance_over_obstacle_raw_ft < 2500.0,
+            "raw {} ft",
+            tw.distance_over_obstacle_raw_ft
+        );
+        let hw_case = FlightInputs {
+            runway: "360".into(),
+            wind_dir_deg: 200.0,
+            wind_speed_kt: 8.0,
+            weight_lb: defaults::WEIGHT_LB,
+            obstacle_height_m: 0.0,
+            ..Default::default()
+        };
+        let hw = compute_takeoff(&data, &hw_case).expect("hw");
+        assert!(
+            hw.distance_over_obstacle_raw_ft < 2500.0,
+            "raw {} ft (regression: chart-top snap)",
+            hw.distance_over_obstacle_raw_ft
+        );
+    }
+
+    #[test]
+    fn tailwind_chart_limit_emits_warning_no_silent_extrapolation() {
+        let data = Rev29File::production();
+        let (_, w) = wind_panel_tw_m(&data, 400.0, 8.0);
+        assert!(w.iter().any(|x| x.code == "TAILWIND_CHART_LIMIT"));
+    }
+
+    #[test]
+    fn along_runway_shows_headwind_or_tailwind_not_both() {
+        use crate::wind::{along_runway_display_kt, wind_components};
+        let hw_c = wind_components(350.0, 8.0, 360.0);
+        let (is_hw, kt) = along_runway_display_kt(&hw_c);
+        assert!(is_hw && kt > 0.5);
+        let tw_c = wind_components(10.0, 5.0, 190.0);
+        let (is_hw, kt) = along_runway_display_kt(&tw_c);
+        assert!(!is_hw && kt > 0.5);
     }
 
     #[test]

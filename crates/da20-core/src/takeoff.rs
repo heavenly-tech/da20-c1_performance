@@ -21,14 +21,20 @@ pub fn afm_conservative_distance_m_from_ft(conservative_ft: f64) -> f64 {
 pub enum TakeoffError {
     #[error("takeoff calculation failed")]
     Failed,
+    #[error("invalid runway heading")]
+    InvalidRunwayHeading,
 }
 
 pub fn compute_takeoff(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<TakeoffResult, TakeoffError> {
+    if crate::wind::runway_heading_status(&inputs.runway) != crate::wind::RunwayHeadingStatus::Valid
+    {
+        return Err(TakeoffError::InvalidRunwayHeading);
+    }
     let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Takeoff));
-    let rwy = runway_heading_deg(&inputs.runway).unwrap_or(0.0);
+    let rwy = runway_heading_deg(&inputs.runway).expect("validated above");
     let angle = (inputs.wind_dir_deg - rwy).to_radians();
     let headwind = inputs.wind_speed_kt * angle.cos();
     let headwind_kt = headwind.max(0.0);

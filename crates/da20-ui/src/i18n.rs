@@ -80,6 +80,8 @@ pub struct Copy {
     pub wind_head: &'static str,
     pub wind_tail: &'static str,
     pub wind_cross: &'static str,
+    pub wind_strip_crosswind_note: &'static str,
+    pub results_runway_required: &'static str,
     pub weight: &'static str,
     pub cruise_pa: &'static str,
     pub cruise_rpm: &'static str,
@@ -191,6 +193,9 @@ const ES: Copy = Copy {
     wind_head: "Viento de frente",
     wind_tail: "Viento de cola",
     wind_cross: "Viento cruzado",
+    wind_strip_crosswind_note:
+        "Viento casi cruzado: en la franja de viento solo se ajusta la intensidad (kt), no la dirección.",
+    results_runway_required: "Ingrese rumbo de pista válido (001–360) para ver resultados.",
     weight: "Peso (lb)",
     cruise_pa: "PA crucero (ft)",
     cruise_rpm: "RPM crucero",
@@ -295,6 +300,9 @@ const EN: Copy = Copy {
     wind_head: "Headwind",
     wind_tail: "Tailwind",
     wind_cross: "Crosswind",
+    wind_strip_crosswind_note:
+        "Nearly pure crosswind: strip wind drag adjusts speed (kt) only, not direction.",
+    results_runway_required: "Enter a valid runway heading (001–360) to show results.",
     weight: "Weight (lb)",
     cruise_pa: "Cruise PA (ft)",
     cruise_rpm: "Cruise RPM",
@@ -537,6 +545,34 @@ pub fn phase_slug_label(locale: Locale, slug: &str) -> String {
     }
 }
 
+pub fn format_along_runway_component(
+    locale: Locale,
+    components: &da20_core::types::WindComponents,
+) -> Option<String> {
+    use da20_core::wind::{along_runway_display_kt, format_component_kt};
+    let c = copy(locale);
+    let (is_hw, kt) = along_runway_display_kt(components);
+    if kt < 0.05 {
+        return None;
+    }
+    Some(if is_hw {
+        format!("{} {} kt", c.wind_head, format_component_kt(kt))
+    } else {
+        format!("{} {} kt", c.wind_tail, format_component_kt(kt))
+    })
+}
+
+pub fn format_crosswind_component(locale: Locale, crosswind_kt: f64) -> String {
+    use da20_core::wind::format_component_kt;
+    let mag = format_component_kt(crosswind_kt.abs());
+    match locale {
+        Locale::Es if crosswind_kt >= 0.0 => format!("Cruzado {mag} kt desde la derecha"),
+        Locale::Es => format!("Cruzado {mag} kt desde la izquierda"),
+        Locale::En if crosswind_kt >= 0.0 => format!("Crosswind {mag} kt from the right"),
+        Locale::En => format!("Crosswind {mag} kt from the left"),
+    }
+}
+
 pub fn data_status_label(locale: Locale, status: &str) -> String {
     match (locale, status) {
         (Locale::Es, "production") => "Producción".into(),
@@ -605,6 +641,20 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
         "TAILWIND" => match locale {
             Locale::Es => format!("Cola {a1} kt."),
             Locale::En => format!("Tailwind {a1} kt."),
+        },
+        "TAILWIND_CHART_LIMIT" => match locale {
+            Locale::Es => format!("Cola {a2} kt fuera de carta (máx {a1} kt); sin extrapolar."),
+            Locale::En => {
+                format!("Tailwind {a2} kt exceeds chart (max {a1} kt); not extrapolated.")
+            }
+        },
+        "HEADWIND_CHART_LIMIT" => match locale {
+            Locale::Es => {
+                format!("Viento de frente {a2} kt fuera de carta (máx {a1} kt); sin extrapolar.")
+            }
+            Locale::En => {
+                format!("Headwind {a2} kt exceeds chart (max {a1} kt); not extrapolated.")
+            }
         },
         other => other.to_string(),
     }

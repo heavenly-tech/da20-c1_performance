@@ -202,9 +202,17 @@ fn render_takeoff_strip(
         }
     });
 
-    let wind_guides = guides.wind_segments.iter().map(|(p0, p1)| {
+    let headwind_guides = guides.headwind_segments.iter().map(|(p0, p1)| {
         view! {
             <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1 class="chart-stroke-guide" opacity="0.7"/>
+        }
+    });
+
+    let tailwind_guides = guides.tailwind_segments.iter().map(|(p0, p1)| {
+        view! {
+            <line x1=p0.0 y1=p0.1 x2=p1.0 y2=p1.1
+                class="chart-stroke-guide" opacity="0.7"
+                stroke-dasharray="6 4"/>
         }
     });
 
@@ -230,7 +238,8 @@ fn render_takeoff_strip(
         {grid_lines()}
         {curve_paths.collect_view()}
         {weight_guides.collect_view()}
-        {wind_guides.collect_view()}
+        {headwind_guides.collect_view()}
+        {tailwind_guides.collect_view()}
         {obs_guides.collect_view()}
         <line x1=oat_x y1=STRIP_TOP x2=oat_x y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
         <line x1=x_weight_kg(kg) y1=STRIP_TOP x2=x_weight_kg(kg) y2=STRIP_BOTTOM class="chart-stroke-guide-active" stroke-dasharray="4 3"/>
@@ -360,11 +369,14 @@ fn apply_hit(
             } else if (TAKEOFF_WIND.x..TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
                 let hw = (sx - TAKEOFF_WIND.x) / TAKEOFF_WIND.w * 20.0;
                 inputs.update(|i| {
-                    let rwy = da20_core::wind::runway_heading_deg(&i.runway).unwrap_or(0.0);
-                    let (dir, speed, _clamp) =
+                    let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
+                        return;
+                    };
+                    let (dir, speed, clamp) =
                         da20_core::wind::back_solve_wind_for_headwind(i.wind_dir_deg, rwy, hw);
                     i.wind_dir_deg = dir;
                     i.wind_speed_kt = speed;
+                    i.wind_strip_crosswind_clamped = clamp;
                 });
             } else if sx >= TAKEOFF_OBS.x {
                 let obs = (sx - TAKEOFF_OBS.x) / TAKEOFF_OBS.w * 15.0;

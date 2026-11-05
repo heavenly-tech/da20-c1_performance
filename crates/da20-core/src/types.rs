@@ -95,6 +95,9 @@ pub struct FlightInputs {
     pub fuel_usable_us_gal: f64,
     #[serde(default = "default_fuel_reserve")]
     pub fuel_reserve_us_gal: f64,
+    /// UI-only: set when strip wind drag hits pure-crosswind clamp (not persisted).
+    #[serde(default, skip_serializing)]
+    pub wind_strip_crosswind_clamped: bool,
 }
 
 fn default_fuel_usable() -> f64 {
@@ -132,6 +135,7 @@ impl Default for FlightInputs {
             climb_figure: ClimbFigure::default(),
             fuel_usable_us_gal: defaults::FUEL_USABLE_US_GAL,
             fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
+            wind_strip_crosswind_clamped: false,
         }
     }
 }

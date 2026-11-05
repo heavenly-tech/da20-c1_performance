@@ -382,6 +382,11 @@ body {
   font-size: 12px;
 }
 
+.results-muted {
+  color: var(--mut);
+  font-style: italic;
+}
+
 .field-error {
   color: var(--warn, #c45c00);
   margin-top: 4px;

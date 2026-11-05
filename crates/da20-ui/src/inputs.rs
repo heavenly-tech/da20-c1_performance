@@ -6,13 +6,12 @@ use da20_core::pressure::{
 use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
-    headwind_tailwind_kt, runway_heading_deg, runway_heading_status, wind_components,
-    RunwayHeadingStatus,
+    runway_heading_deg, runway_heading_status, wind_components, RunwayHeadingStatus,
 };
 use da20_core::wind_format::{format_wind, parse_wind};
 use leptos::prelude::*;
 
-use crate::i18n::{copy, Locale};
+use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
 use crate::qnh_unit::QnhUnit;
 
 #[component]
@@ -248,6 +247,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                         inputs.update(|i| {
                             i.wind_dir_deg = d;
                             i.wind_speed_kt = s;
+                            i.wind_strip_crosswind_clamped = false;
                         });
                     }
                 }
@@ -257,6 +257,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                         inputs.update(|i| {
                             i.wind_dir_deg = d;
                             i.wind_speed_kt = s;
+                            i.wind_strip_crosswind_clamped = false;
                         });
                     }
                 }
@@ -269,20 +270,16 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                 }
                 let rwy = runway_heading_deg(&i.runway).unwrap_or(0.0);
                 let comp = wind_components(i.wind_dir_deg, i.wind_speed_kt, rwy);
-                let (hw, tw) = headwind_tailwind_kt(&comp);
-                let xw = comp.crosswind_kt;
+                let along = format_along_runway_component(locale.get(), &comp);
+                let cross = format_crosswind_component(locale.get(), comp.crosswind_kt);
                 view! {
-                    <p class="lab mono wind-components">
-                        {c.wind_head} " "
-                        {hw.round() as i64}
-                        " kt · "
-                        {c.wind_tail} " "
-                        {tw.round() as i64}
-                        " kt · "
-                        {c.wind_cross} " "
-                        {xw.round() as i64}
-                        " kt"
-                    </p>
+                    <div class="wind-components">
+                        {along.map(|line| view! { <p class="lab mono">{line}</p> })}
+                        <p class="lab mono">{cross}</p>
+                        {i.wind_strip_crosswind_clamped.then(|| view! {
+                            <p class="lab field-error">{c.wind_strip_crosswind_note}</p>
+                        })}
+                    </div>
                 }
                 .into_any()
             }}
