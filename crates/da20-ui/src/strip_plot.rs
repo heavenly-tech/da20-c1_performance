@@ -8,12 +8,11 @@ use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, take
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     back_solve_takeoff_wind_from_strip_x, chart_read_takeoff_base_m,
-    climb_fan_pa_curve_point_at_oat, climb_fan_pa_curve_strip_points_through_cursor,
-    climb_hand_path, headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path,
-    takeoff_oat_panel_pa_trace, takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt,
-    x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ,
-    CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW,
-    TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    climb_fan_pa_curve_point_at_oat, climb_fan_pa_curve_strip_points, climb_hand_path,
+    headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path, takeoff_oat_panel_pa_trace,
+    takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm,
+    x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
+    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::rev29::types::Rev29File;
 use da20_core::takeoff::compute_takeoff;
@@ -92,7 +91,7 @@ fn strip_climb_ea_cursor_with_pa_row(
     label: String,
 ) -> impl IntoView {
     let cursor = climb_fan_pa_curve_point_at_oat(inner, pa_ft, oat_c);
-    let pts: String = climb_fan_pa_curve_strip_points_through_cursor(inner, pa_ft, cursor)
+    let pts: String = climb_fan_pa_curve_strip_points(inner, pa_ft)
         .iter()
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
@@ -125,7 +124,7 @@ fn strip_climb_pa_curve_guide_overlay(
     color: &'static str,
 ) -> impl IntoView {
     let cursor = climb_fan_pa_curve_point_at_oat(inner, pa_ft, oat_c);
-    let pts: String = climb_fan_pa_curve_strip_points_through_cursor(inner, pa_ft, cursor)
+    let pts: String = climb_fan_pa_curve_strip_points(inner, pa_ft)
         .iter()
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()

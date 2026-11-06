@@ -542,75 +542,17 @@ pub fn climb_fan_pa_curve_point_at_oat(data: &Rev29File, pa_ft: f64, oat_c: f64)
     pts.last().copied().unwrap_or((x, STRIP_BOTTOM))
 }
 
-/// Fig 5.2: polyline samples along the chart-PA row **from the coldest OAT (left) through `cursor`**.
-/// `cursor` should match [`climb_fan_pa_curve_point_at_oat`] for the same `pa_ft` and OAT.
-pub fn climb_fan_pa_curve_strip_points_through_cursor(
-    data: &Rev29File,
-    pa_ft: f64,
-    cursor: (f64, f64),
-) -> Vec<(f64, f64)> {
-    let (cx, cy) = cursor;
-    let full = climb_fan_pa_curve_strip_points(data, pa_ft);
-    if full.is_empty() {
-        return vec![];
-    }
-    const EPS: f64 = 1e-4;
-    if full.len() == 1 {
-        return vec![(cx, cy)];
-    }
-    let mut out: Vec<(f64, f64)> = Vec::with_capacity(full.len() + 1);
-    out.push(full[0]);
-    if (cx - full[0].0).abs() <= EPS {
-        out[0] = (cx, cy);
-        return out;
-    }
-    for &b in full.iter().skip(1) {
-        if cx <= b.0 + EPS {
-            out.push((cx, cy));
-            return out;
-        }
-        out.push(b);
-    }
-    let last_x = full.last().unwrap().0;
-    if cx > last_x + EPS {
-        out.push((cx, cy));
-    }
-    out
-}
-
-/// Same geometry as [`climb_fan_pa_curve_strip_points_through_cursor`] in **chart coordinates**
-/// (OAT °C, EA ft) for the interactive Fig 5.2 view.
-pub fn climb_fan_pa_curve_chart_points_through_cursor(
-    data: &Rev29File,
-    pa_ft: f64,
-    oat_c: f64,
-) -> Vec<(f64, f64)> {
-    let (cursor_ea, _) = equivalent_altitude_ft(data, pa_ft, oat_c);
-    let cursor = (oat_c, cursor_ea);
-    let fan_t = &data.fan_t.value;
-    if fan_t.is_empty() {
-        return vec![];
-    }
-    let mut out: Vec<(f64, f64)> = Vec::with_capacity(fan_t.len() + 1);
-    let t0 = fan_t[0];
-    out.push((t0, equivalent_altitude_ft(data, pa_ft, t0).0));
-    const EPS: f64 = 1e-4;
-    if (oat_c - t0).abs() <= EPS {
-        out[0] = cursor;
-        return out;
-    }
-    for &t in fan_t.iter().skip(1) {
-        if oat_c <= t + EPS {
-            out.push(cursor);
-            return out;
-        }
-        out.push((t, equivalent_altitude_ft(data, pa_ft, t).0));
-    }
-    let last_t = *fan_t.last().unwrap();
-    if oat_c > last_t + EPS {
-        out.push(cursor);
-    }
-    out
+/// Fig 5.2 fan chart in **chart coordinates** (OAT °C, EA ft): full constant-PA isoline like the
+/// printed curves — every sample in `fan_t`, spanning the left panel.
+pub fn climb_fan_pa_curve_chart_points(data: &Rev29File, pa_ft: f64) -> Vec<(f64, f64)> {
+    data.fan_t
+        .value
+        .iter()
+        .map(|&t| {
+            let (ea, _) = equivalent_altitude_ft(data, pa_ft, t);
+            (t, ea)
+        })
+        .collect()
 }
 
 /// Sample wind-panel ground distance at a given headwind (follow guide line).
@@ -857,59 +799,38 @@ mod tests {
     }
 
     #[test]
-    fn climb_fan_pa_strip_through_cursor_ends_at_cursor_on_polyline() {
+    fn climb_fan_pa_live_row_matches_full_strip_isoline() {
         let data = Rev29File::production();
         let pa = 2500.0_f64;
         let full = climb_fan_pa_curve_strip_points(&data, pa);
         assert!(full.len() >= 2);
         let oat = 12.0_f64;
         let cursor = climb_fan_pa_curve_point_at_oat(&data, pa, oat);
-        let seg = climb_fan_pa_curve_strip_points_through_cursor(&data, pa, cursor);
-        assert!(!seg.is_empty());
         assert!(
-            (seg[0].0 - full[0].0).abs() < 1e-3 && (seg[0].1 - full[0].1).abs() < 1e-3,
-            "segment should start at cold-OAT end of fan row"
-        );
-        let last = *seg.last().unwrap();
-        assert!(
-            (last.0 - cursor.0).abs() < 1e-3 && (last.1 - cursor.1).abs() < 1e-3,
-            "segment should end at cursor {:?}, got {:?}",
-            cursor,
-            last
-        );
-        for &q in &seg {
-            let on_full = full.iter().any(|&v| (v.0 - q.0).hypot(v.1 - q.1) < 0.75)
+            full.iter()
+                .any(|&v| (v.0 - cursor.0).hypot(v.1 - cursor.1) < 0.75)
                 || full
                     .windows(2)
-                    .any(|w| point_near_segment(q, w[0], w[1], 0.75));
-            assert!(on_full, "point {:?} should lie on full PA polyline", q);
-        }
+                    .any(|w| point_near_segment(cursor, w[0], w[1], 0.75))
+        );
+        assert!((full.first().unwrap().0 - x_oat(*data.fan_t.value.first().unwrap())).abs() < 1e-6);
+        assert!((full.last().unwrap().0 - x_oat(*data.fan_t.value.last().unwrap())).abs() < 1e-6);
     }
 
     #[test]
-    fn climb_fan_pa_curve_chart_segment_matches_strip_geometry() {
+    fn climb_fan_pa_curve_chart_matches_strip_full_isoline() {
         let data = Rev29File::production();
         let pa = 2500.0_f64;
-        let oat = 12.0_f64;
-        let chart_pts = climb_fan_pa_curve_chart_points_through_cursor(&data, pa, oat);
-        assert!(!chart_pts.is_empty());
-        let strip_from_chart: Vec<(f64, f64)> = chart_pts
-            .iter()
-            .map(|(t, ea)| (x_oat(*t), y_ea_ft(*ea)))
-            .collect();
-        let cursor_strip = climb_fan_pa_curve_point_at_oat(&data, pa, oat);
-        let seg_strip = climb_fan_pa_curve_strip_points_through_cursor(&data, pa, cursor_strip);
-        assert_eq!(
-            strip_from_chart.len(),
-            seg_strip.len(),
-            "chart vs strip PA segment point count"
-        );
-        for (a, b) in strip_from_chart.iter().zip(seg_strip.iter()) {
+        let strip_pts = climb_fan_pa_curve_strip_points(&data, pa);
+        let chart_pts = climb_fan_pa_curve_chart_points(&data, pa);
+        assert_eq!(chart_pts.len(), strip_pts.len());
+        for ((t, ea), strip) in chart_pts.iter().zip(strip_pts.iter()) {
+            let mapped = (x_oat(*t), y_ea_ft(*ea));
             assert!(
-                (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3,
-                "chart-mapped point {:?} should match strip {:?}",
-                a,
-                b
+                (mapped.0 - strip.0).abs() < 1e-3 && (mapped.1 - strip.1).abs() < 1e-3,
+                "chart-mapped {:?} vs strip {:?}",
+                mapped,
+                strip
             );
         }
     }

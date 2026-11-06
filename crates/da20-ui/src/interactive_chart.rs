@@ -10,7 +10,7 @@ use da20_core::rev29::charts::{
 };
 use da20_core::rev29::ea_inverse::pressure_altitude_for_equivalent_altitude;
 use da20_core::rev29::engine::{equivalent_altitude_ft, lb_to_kg};
-use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points_through_cursor;
+use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points;
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{ChartPhase, FlightInputs};
 use da20_core::wind::{compute_wind, runway_heading_deg};
@@ -207,7 +207,7 @@ fn render_svg(
     );
 
     let climb_pa_guide: Option<(String, String)> = if kind == ChartKind::Climb {
-        let raw = climb_fan_pa_curve_chart_points_through_cursor(inner, pa, oat_x_data);
+        let raw = climb_fan_pa_curve_chart_points(inner, pa);
         if raw.is_empty() {
             None
         } else {
