@@ -56,7 +56,7 @@ fn unique_sorted_rpms(rows: &[Vec<f64>]) -> Vec<f64> {
     v
 }
 
-fn rows_at_rpm<'a>(rows: &'a [Vec<f64>], rpm: f64) -> Vec<&'a Vec<f64>> {
+fn rows_at_rpm(rows: &[Vec<f64>], rpm: f64) -> Vec<&Vec<f64>> {
     let mut v: Vec<_> = rows
         .iter()
         .filter(|r| row_valid(r) && (r[1] - rpm).abs() < RPM_MATCH_TOL)
@@ -322,7 +322,7 @@ fn lookup_table3(
     let tri = lerp_triple(s0.0, s1.0, t_rpm);
 
     if let Some(near) = nearest_level(rpm) {
-        if pas_for_rpm(rows, near).map_or(true, |pas| {
+        if pas_for_rpm(rows, near).is_none_or(|pas| {
             let mn = *pas.first().unwrap();
             let mx = *pas.last().unwrap();
             pa < mn - PA_MATCH_TOL || pa > mx + PA_MATCH_TOL
