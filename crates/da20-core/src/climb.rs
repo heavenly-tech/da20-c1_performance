@@ -3,6 +3,7 @@ use crate::data::PerformanceData;
 use crate::equivalent_altitude::equivalent_altitude_ft;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::rate_of_climb_fpm;
+use crate::afm_tag::climb_tag_from_warnings;
 use crate::types::{climb_roc_fairing_multiplier, CalculationWarning, ClimbResult, FlightInputs};
 
 pub const CLIMB_DERIVED_ESTIMATE_NOTE: &str =
@@ -36,9 +37,11 @@ pub fn compute_climb(
     };
 
     warnings.push(CalculationWarning::code_only("DERIVED_ESTIMATE"));
+    let afm_lookup_tag = climb_tag_from_warnings(&warnings);
 
     Ok(ClimbResult {
         provenance: provenance_for(data.inner(), data.climb_roc_source()),
+        afm_lookup_tag,
         equivalent_altitude_ft: eq,
         rate_of_climb_chart_fpm: Some(roc_base),
         rate_of_climb_fpm: roc,

@@ -32,6 +32,7 @@ pub fn compute_endurance(
 
     Ok(EnduranceResult {
         provenance: provenance_for(data.inner(), data.cruise_source()),
+        afm_lookup_tag: cruise.afm_lookup_tag,
         fuel_flow_us_gal_h: cruise.fuel_flow_us_gal_h,
         tas_kt: cruise.tas_kt,
         tas_chart_kt: cruise.tas_chart_kt,

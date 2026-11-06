@@ -1,3 +1,4 @@
+use da20_core::types::AfmLookupTag;
 use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
 
@@ -150,6 +151,16 @@ pub struct Copy {
     pub cruise_isa: &'static str,
     pub cruise_disa_minus20: &'static str,
     pub cruise_disa_plus10: &'static str,
+    /// AFM grid / interpolation tag (short, shown on results).
+    pub afm_tag_table: &'static str,
+    pub afm_tag_interpolated: &'static str,
+    pub afm_tag_extrapolated: &'static str,
+    pub cruise_tbl_group_disa_m20: &'static str,
+    pub cruise_tbl_group_isa: &'static str,
+    pub cruise_tbl_group_disa_p10: &'static str,
+    pub cruise_tbl_pct_bhp: &'static str,
+    pub cruise_tbl_ktas: &'static str,
+    pub cruise_tbl_gph: &'static str,
     pub obstacle_preset_afm: &'static str,
     pub obstacle_preset_screen: &'static str,
     pub strip_fig54_base: &'static str,
@@ -184,6 +195,15 @@ pub fn copy(locale: Locale) -> &'static Copy {
     match locale {
         Locale::Es => &ES,
         Locale::En => &EN,
+    }
+}
+
+pub fn afm_lookup_tag_label(locale: Locale, tag: AfmLookupTag) -> &'static str {
+    let c = copy(locale);
+    match tag {
+        AfmLookupTag::Table => c.afm_tag_table,
+        AfmLookupTag::Interpolated => c.afm_tag_interpolated,
+        AfmLookupTag::Extrapolated => c.afm_tag_extrapolated,
     }
 }
 
@@ -290,6 +310,15 @@ const ES: Copy = Copy {
     cruise_isa: "ISA",
     cruise_disa_minus20: "dISA −20",
     cruise_disa_plus10: "dISA +10",
+    afm_tag_table: "Tabla",
+    afm_tag_interpolated: "Interpolado",
+    afm_tag_extrapolated: "Extrapolado / fuera de carta",
+    cruise_tbl_group_disa_m20: "ΔISA −20",
+    cruise_tbl_group_isa: "ISA",
+    cruise_tbl_group_disa_p10: "ΔISA +10",
+    cruise_tbl_pct_bhp: "% BHP",
+    cruise_tbl_ktas: "TAS (kt)",
+    cruise_tbl_gph: "GPH",
     obstacle_preset_afm: "5 m / 16 ft (AFM)",
     obstacle_preset_screen: "15 m / 50 ft",
     strip_fig54_base: "Fig 5.4 · base",
@@ -421,6 +450,15 @@ const EN: Copy = Copy {
     cruise_isa: "ISA",
     cruise_disa_minus20: "dISA −20",
     cruise_disa_plus10: "dISA +10",
+    afm_tag_table: "Table",
+    afm_tag_interpolated: "Interpolated",
+    afm_tag_extrapolated: "Extrapolated / off chart",
+    cruise_tbl_group_disa_m20: "ΔISA −20",
+    cruise_tbl_group_isa: "ISA",
+    cruise_tbl_group_disa_p10: "ΔISA +10",
+    cruise_tbl_pct_bhp: "% BHP",
+    cruise_tbl_ktas: "TAS (kt)",
+    cruise_tbl_gph: "GPH",
     obstacle_preset_afm: "5 m / 16 ft (AFM)",
     obstacle_preset_screen: "15 m / 50 ft",
     strip_fig54_base: "Fig 5.4 · base",
@@ -481,8 +519,8 @@ const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
-        summary: "Fila por PA y RPM; banda OAT dISA−20 / ISA / dISA+10.",
-        interpolation: "Interpolación PA entre filas; banda por OAT−ISA.",
+        summary: "ΔISA = OAT − ISA en esa PA. Interpolación de %Potencia, TAS y GPH en altitud entre filas publicadas y en ΔISA entre columnas −20 / 0 / +10. Si el RPM cae entre niveles tabulados, interpolación entre esas superficies. Carenados: aplicar ~−5% TAS después de la consulta Tabla 3; sin escalar GPH.",
+        interpolation: "Trilineal: bilineal PA × ΔISA en cada banda de RPM y luego lineal en RPM entre niveles tabulados vecinos. La etiqueta refleja la tabla antes del factor de carenados.",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
@@ -503,7 +541,7 @@ const ES_METHODS: [MethodCopy; 8] = [
         title: "Autonomía y alcance (derivado)",
         afm: "AFM §1.8, §5.3.10 (duración máxima) + Tabla 3 GPH",
         summary: "(Combustible utilizable − reserva) / caudal Tabla 3; alcance = autonomía × TAS.",
-        interpolation: "Usa crucero interpolado de Tabla 3.",
+        interpolation: "Usa crucero (Tabla 3) con las mismas etiquetas Tabla / Interpolado / Extrapolado.",
         limitations: "Derivado, no carta AFM. Combustible utilizable 24,0 US gal (total 24,5; AFM §1.8). Placas: 21,3 / 19,8 gal. Ver AFM §5.3.10 duración máxima.",
     },
 ];
@@ -541,8 +579,8 @@ const EN_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
-        summary: "Row match on PA and RPM; OAT band dISA−20 / ISA / dISA+10.",
-        interpolation: "PA interpolation between rows.",
+        summary: "ΔISA = OAT − ISA at that PA. Interpolate %BHP, KTAS, and GPH in altitude between published rows and in ΔISA between the −20 / 0 / +10 columns. If RPM lies between tabulated levels, interpolate between those RPM surfaces. Wheel fairings: apply ~−5% TAS after the Table 3 lookup; do not scale GPH.",
+        interpolation: "Trilinear-style: bilinear PA × ΔISA within each RPM band, then linear in RPM between neighboring tabulated RPM levels. Tag reflects table lookup before the fairing factor.",
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
@@ -564,7 +602,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         title: "Endurance & range (derived)",
         afm: "AFM §1.8, §5.3.10 (Maximum Flight Duration) + Table 3 GPH",
         summary: "(Usable fuel − reserve) / Table 3 flow; range = endurance × TAS.",
-        interpolation: "Uses interpolated Table 3 cruise.",
+        interpolation: "Uses Table 3 cruise with the same Table / Interpolated / Extrapolated tag.",
         limitations: "Derived, not an AFM chart. Usable fuel 24.0 US gal (24.5 total per AFM §1.8). Placards: 21.3 / 19.8 gal. See AFM §5.3.10.",
     },
 ];
@@ -626,19 +664,21 @@ pub fn format_climb_readout_summary(
     penalized_roc_fpm: f64,
     chart_roc_fpm: Option<f64>,
     fairings_installed: bool,
+    afm_tag: AfmLookupTag,
 ) -> String {
     let c = copy(locale);
     let adj = penalized_roc_fpm.round() as i64;
     let chart = chart_roc_fpm.map(|x| x.round() as i64).unwrap_or(adj);
+    let tag = afm_lookup_tag_label(locale, afm_tag);
     if fairings_installed {
-        return format!("{chart} fpm");
+        return format!("{chart} fpm · {tag}");
     }
     let suffix = c.climb_roc_fairing_penalty_suffix;
     if chart_roc_fpm.is_none() {
-        return format!("{adj} fpm {suffix}");
+        return format!("{adj} fpm {suffix} · {tag}");
     }
     format!(
-        "{chart} fpm {suffix}\n{} {adj} fpm",
+        "{chart} fpm {suffix} · {tag}\n{} {adj} fpm",
         c.climb_roc_adjusted_label
     )
 }
@@ -649,16 +689,18 @@ pub fn format_climb_readout_interactive_pair(
     penalized_roc_fpm: f64,
     chart_roc_fpm: Option<f64>,
     fairings_installed: bool,
+    afm_tag: AfmLookupTag,
 ) -> (String, String) {
     let c = copy(locale);
     let adj = penalized_roc_fpm.round() as i64;
     let chart = chart_roc_fpm.map(|x| x.round() as i64).unwrap_or(adj);
+    let tag = afm_lookup_tag_label(locale, afm_tag);
     if fairings_installed {
-        let s = format!("{chart} fpm");
+        let s = format!("{chart} fpm · {tag}");
         return (s.clone(), s);
     }
     let suffix = c.climb_roc_fairing_penalty_suffix;
-    let chart_str = format!("{chart} fpm {suffix}");
+    let chart_str = format!("{chart} fpm {suffix} · {tag}");
     let core_str = format!("{adj} fpm");
     (chart_str, core_str)
 }
@@ -670,19 +712,25 @@ pub fn format_cruise_readout_summary(
     chart_tas_kt: Option<f64>,
     fairings_installed: bool,
     gph: f64,
+    pct_bhp: Option<f64>,
+    afm_tag: AfmLookupTag,
 ) -> String {
     let c = copy(locale);
     let pen = penalized_tas_kt.round() as i64;
     let chart = chart_tas_kt.map(|x| x.round() as i64).unwrap_or(pen);
+    let tag = afm_lookup_tag_label(locale, afm_tag);
+    let bhp = pct_bhp
+        .map(|p| format!(" · {:.2}% BHP", p))
+        .unwrap_or_default();
     if fairings_installed {
-        return format!("{chart} kt TAS · {gph:.1} gph");
+        return format!("{chart} kt TAS · {gph:.1} gph{bhp} · {tag}");
     }
     let suffix = c.cruise_tas_fairing_penalty_suffix;
     if chart_tas_kt.is_none() {
-        return format!("{pen} kt TAS {suffix} · {gph:.1} gph");
+        return format!("{pen} kt TAS {suffix} · {gph:.1} gph{bhp} · {tag}");
     }
     format!(
-        "{chart} kt TAS {suffix} · {gph:.1} gph\n{} {pen} kt TAS",
+        "{chart} kt TAS {suffix} · {gph:.1} gph{bhp} · {tag}\n{} {pen} kt TAS",
         c.cruise_tas_adjusted_label
     )
 }
@@ -698,14 +746,16 @@ pub fn format_endurance_readout_summary(
     tas_chart: Option<f64>,
     gph: f64,
     fairings_installed: bool,
+    afm_tag: AfmLookupTag,
 ) -> String {
     let c = copy(locale);
     let h = endurance_h;
     let g = gph;
+    let tag = afm_lookup_tag_label(locale, afm_tag);
     if fairings_installed {
         let t = tas_chart.unwrap_or(tas_pen).round() as i64;
         let r = range_chart_nm.unwrap_or(range_pen_nm).round() as i64;
-        return format!("{h:.1} h · {r} NM · {g:.1} gph @ {t} kt");
+        return format!("{h:.1} h · {r} NM · {g:.1} gph @ {t} kt · {tag}");
     }
     let suffix = c.cruise_tas_fairing_penalty_suffix;
     let tc = tas_chart
@@ -717,10 +767,10 @@ pub fn format_endurance_readout_summary(
     let tp = tas_pen.round() as i64;
     let rp = range_pen_nm.round() as i64;
     if tas_chart.is_none() || range_chart_nm.is_none() {
-        return format!("{h:.1} h · {rp} NM · {g:.1} gph @ {tp} kt {suffix}");
+        return format!("{h:.1} h · {rp} NM · {g:.1} gph @ {tp} kt {suffix} · {tag}");
     }
     format!(
-        "{h:.1} h · {rc} NM · {g:.1} gph @ {tc} kt {suffix}\n{} {rp} NM @ {tp} kt",
+        "{h:.1} h · {rc} NM · {g:.1} gph @ {tc} kt {suffix} · {tag}\n{} {rp} NM @ {tp} kt",
         c.endurance_range_adjusted_label
     )
 }

@@ -16,7 +16,7 @@ use da20_core::rev29::hand_plot::{
 };
 use da20_core::rev29::types::Rev29File;
 use da20_core::takeoff::compute_takeoff;
-use da20_core::types::{defaults, ChartPhase, FlightInputs};
+use da20_core::types::{defaults, AfmLookupTag, ChartPhase, FlightInputs};
 use da20_core::wind::runway_heading_status;
 use da20_core::PerformanceData;
 use leptos::prelude::*;
@@ -351,6 +351,7 @@ fn readout_line(
                         r.rate_of_climb_fpm,
                         r.rate_of_climb_chart_fpm,
                         inputs.wheel_fairings_installed,
+                        r.afm_lookup_tag,
                     );
                     format!("{penalized_line} @ EA {:.0} ft", r.equivalent_altitude_ft)
                 })
@@ -362,6 +363,7 @@ fn readout_line(
                         p.chart_roc_fpm,
                         Some(p.chart_roc_fpm),
                         inputs.wheel_fairings_installed,
+                        AfmLookupTag::Interpolated,
                     );
                     let chart = format!("{chart_roc_line} @ EA {:.0} ft", p.chart_ea_ft);
                     format!(

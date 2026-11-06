@@ -2,6 +2,7 @@
 //!
 //! All POH numeric tables are loaded from JSON; do not hard-code AFM values here.
 
+pub mod afm_tag;
 pub mod altitude;
 pub mod climb;
 pub mod cruise;

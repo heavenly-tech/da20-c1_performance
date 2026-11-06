@@ -2,6 +2,7 @@ use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::{ft_to_m, lb_to_kg, m_to_ft, takeoff_distances_m};
+use crate::afm_tag::takeoff_tag;
 use crate::types::{CalculationWarning, FlightInputs, TakeoffResult};
 use crate::wind::runway_heading_deg;
 
@@ -61,9 +62,11 @@ pub fn compute_takeoff(
     let mut warnings = dist.warnings;
     warnings.push(CalculationWarning::code_only("UNITS"));
     let chart_off_afm = crate::warnings::takeoff_off_chart(&warnings);
+    let afm_lookup_tag = takeoff_tag(chart_off_afm);
 
     Ok(TakeoffResult {
         provenance: provenance_for(data.inner(), data.takeoff_source()),
+        afm_lookup_tag,
         pressure_altitude_ft: pa,
         ground_roll_ft: ground_ft,
         distance_over_obstacle_raw_m: over_raw_m,

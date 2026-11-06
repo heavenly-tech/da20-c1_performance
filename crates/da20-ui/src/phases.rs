@@ -6,8 +6,9 @@ use leptos::prelude::*;
 
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
-    copy, format_along_runway_component, format_crosswind_component, format_obstacle_over,
-    format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
+    afm_lookup_tag_label, copy, format_along_runway_component, format_crosswind_component,
+    format_obstacle_over, format_takeoff_conservative_estimate,
+    format_takeoff_over_obstacle_result, Locale,
 };
 use crate::inputs::{
     AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField,
@@ -233,7 +234,7 @@ fn phase_chart(
         }
         .into_any(),
         Phase::Cruise => view! {
-            <CruiseTableView data=data inputs=inputs/>
+            <CruiseTableView locale=locale data=data inputs=inputs/>
         }
         .into_any(),
         Phase::Endurance => view! {
@@ -266,6 +267,7 @@ fn phase_results(
                 Some(t) => view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
+                        <p class="chip">{afm_lookup_tag_label(locale, t.afm_lookup_tag)}</p>
                         <p class="mono">{c.takeoff_ground_roll_at_chart_zero}" "{t.ground_roll_ft.round() as i64}" ft"</p>
                         <p class="mono">{format_takeoff_over_obstacle_result(
                             locale,
@@ -313,6 +315,7 @@ fn phase_results(
                     view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cl.provenance.clone()/>
+                        <p class="chip">{afm_lookup_tag_label(locale, cl.afm_lookup_tag)}</p>
                         {if fair_on {
                             view! {
                                 <p class="big">{chart_i}<span class="u">" fpm"</span></p>
@@ -347,20 +350,22 @@ fn phase_results(
                     let fair_on = inputs.wheel_fairings_installed;
                     let t_chart = tas_c.map(|x| x.round() as i64).unwrap_or(pen.round() as i64);
                     let t_pen = pen.round() as i64;
+                    let bhp = cr.percent_bhp.unwrap_or(0.0);
                     view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
+                        <p class="chip">{afm_lookup_tag_label(locale, cr.afm_lookup_tag)}</p>
                         {if fair_on {
                             view! {
                                 <>
-                                    <p class="big">{t_chart}<span class="u">" kt TAS"</span></p>
+                                    <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_chart}<span class="u">" kt TAS"</span></p>
                                     <p>{format!("{ff:.1}")}" US gal/h"</p>
                                 </>
                             }.into_any()
                         } else if tas_c.is_some() {
                             view! {
                                 <>
-                                    <p class="big mono">{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                    <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
                                     <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
                                     <p>{format!("{ff:.1}")}" US gal/h"</p>
                                 </>
@@ -368,7 +373,7 @@ fn phase_results(
                         } else {
                             view! {
                                 <>
-                                    <p class="big mono">{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                    <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
                                     <p>{format!("{ff:.1}")}" US gal/h"</p>
                                 </>
                             }.into_any()
@@ -396,6 +401,7 @@ fn phase_results(
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=e.provenance.clone()/>
                         <p class="chip">{copy(locale).derived_not_afm}</p>
+                        <p class="chip">{afm_lookup_tag_label(loc, e.afm_lookup_tag)}</p>
                         <p class="big">{format!("{h:.1}")}<span class="u">" h"</span></p>
                         {if fair_on {
                             let rc = r_chart.unwrap_or(r_pen).round() as i64;
@@ -433,6 +439,7 @@ fn phase_results(
                 Some(l) => view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=l.provenance.clone()/>
+                        <p class="chip">{afm_lookup_tag_label(locale, l.afm_lookup_tag)}</p>
                         <p class="big">{l.ground_roll_ft.round() as i64}<span class="u">" ft"</span></p>
                         <p>"50 ft: "{l.distance_over_50ft_ft.round() as i64}" ft"</p>
                         <WarningsList locale=locale warnings=l.warnings.clone()/>

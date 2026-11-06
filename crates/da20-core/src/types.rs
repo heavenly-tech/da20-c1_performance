@@ -1,5 +1,17 @@
 use serde::{Deserialize, Serialize};
 
+/// How a numeric result relates to the published AFM grid (Table 3 nodes, chart ticks, etc.).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum AfmLookupTag {
+    /// Published grid point (exact PA × RPM × temp column, or exact table altitude, etc.).
+    Table,
+    /// Between published points (interpolation within chart/table range).
+    #[default]
+    Interpolated,
+    /// Outside published range or RPM not tabulated in that region (extrapolation / off-chart).
+    Extrapolated,
+}
+
 /// Default flight-planning inputs for SCTB (Santa Clara County).
 pub mod defaults {
     pub const FIELD_ELEVATION_FT: f64 = 2130.0;
@@ -214,6 +226,8 @@ impl CalculationWarning {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TakeoffResult {
     pub provenance: ProvenanceBlock,
+    #[serde(default)]
+    pub afm_lookup_tag: AfmLookupTag,
     pub pressure_altitude_ft: f64,
     pub ground_roll_ft: f64,
     pub distance_over_obstacle_raw_m: f64,
@@ -229,6 +243,8 @@ pub struct TakeoffResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClimbResult {
     pub provenance: ProvenanceBlock,
+    #[serde(default)]
+    pub afm_lookup_tag: AfmLookupTag,
     pub equivalent_altitude_ft: f64,
     /// AFM chart ROC before optional wheel-fairing penalty (`rate_of_climb_fpm` includes that penalty).
     /// Omitted in v3 saved readouts; use `None` and show only `rate_of_climb_fpm` with the −3% note.
@@ -244,6 +260,11 @@ pub struct ClimbResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CruiseResult {
     pub provenance: ProvenanceBlock,
+    #[serde(default)]
+    pub afm_lookup_tag: AfmLookupTag,
+    /// % BHP from Table 3 (chart value; not scaled by wheel-fairing TAS note).
+    #[serde(default)]
+    pub percent_bhp: Option<f64>,
     /// Table 3 TAS (kt) before optional fairing penalty (`tas_kt` includes penalty when fairings off).
     #[serde(default)]
     pub tas_chart_kt: Option<f64>,
@@ -258,6 +279,8 @@ pub struct CruiseResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LandingResult {
     pub provenance: ProvenanceBlock,
+    #[serde(default)]
+    pub afm_lookup_tag: AfmLookupTag,
     pub ground_roll_ft: f64,
     pub distance_over_50ft_ft: f64,
     pub wind_correction_ft: f64,
@@ -282,6 +305,8 @@ pub struct WindResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EnduranceResult {
     pub provenance: ProvenanceBlock,
+    #[serde(default)]
+    pub afm_lookup_tag: AfmLookupTag,
     pub fuel_flow_us_gal_h: f64,
     pub tas_kt: f64,
     /// Table 3 TAS (kt) before fairing penalty, when applicable.
