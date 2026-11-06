@@ -1,12 +1,16 @@
-//! Pressure and density altitude from field elevation, QNH, and OAT.
+//! Performance pressure altitude and density altitude.
+//!
+//! Takeoff/climb tabs use **entered pressure altitude at standard pressure** (no QNH). Other uses
+//! share the same `FlightInputs::pressure_altitude_input_ft` (legacy JSON: `field_elevation_ft`).
 
-use crate::pressure::{HPA_TO_PA_FT, ISA_SEA_LEVEL_PRESSURE_HPA};
+use crate::pressure::ISA_SEA_LEVEL_PRESSURE_HPA;
 use crate::types::{ChartPhase, FlightInputs, PaOverride};
 
 const ISA_LAPSE_RATE_C_PER_FT: f64 = 0.0019812;
 
-/// Pressure altitude (ft) from field elevation and QNH (hPa).
-pub fn pressure_altitude_ft(field_elevation_ft: f64, qnh_hpa: f64) -> f64 {
+/// Physical pressure altitude (ft) from field elevation and QNH (hPa) — retained for tests only.
+pub fn pressure_altitude_ft_from_qnh(field_elevation_ft: f64, qnh_hpa: f64) -> f64 {
+    const HPA_TO_PA_FT: f64 = 30.0;
     field_elevation_ft + (ISA_SEA_LEVEL_PRESSURE_HPA - qnh_hpa) * HPA_TO_PA_FT
 }
 
@@ -25,7 +29,7 @@ fn resolved_override(inputs: &FlightInputs) -> Option<PaOverride> {
     })
 }
 
-/// Performance planning PA: chart override when active phase matches, else elev+QNH.
+/// Performance planning PA: chart override when active phase matches; else entered pressure altitude (standard day).
 pub fn effective_pressure_altitude_ft(inputs: &FlightInputs, phase: Option<ChartPhase>) -> f64 {
     if let Some(active) = phase {
         if let Some(o) = resolved_override(inputs) {
@@ -34,7 +38,7 @@ pub fn effective_pressure_altitude_ft(inputs: &FlightInputs, phase: Option<Chart
             }
         }
     }
-    pressure_altitude_ft(inputs.field_elevation_ft, inputs.qnh_hpa)
+    inputs.pressure_altitude_input_ft
 }
 
 pub fn clear_pa_override(inputs: &mut FlightInputs) {
@@ -54,7 +58,7 @@ mod tests {
 
     #[test]
     fn sctb_pressure_altitude_at_standard_qnh() {
-        let pa = pressure_altitude_ft(2130.0, 1013.0);
+        let pa = pressure_altitude_ft_from_qnh(2130.0, 1013.0);
         assert!((pa - (2130.0 + 7.5)).abs() < 1.0);
     }
 
@@ -71,8 +75,9 @@ mod tests {
             effective_pressure_altitude_ft(&i, Some(ChartPhase::Takeoff)),
             5000.0
         );
-        assert!(
-            (effective_pressure_altitude_ft(&i, Some(ChartPhase::Landing)) - 2137.5).abs() < 1.0
+        assert_eq!(
+            effective_pressure_altitude_ft(&i, Some(ChartPhase::Landing)),
+            2130.0
         );
     }
 }

@@ -21,7 +21,7 @@ pub fn all_methods() -> Vec<MethodEntry> {
             id: "pressure_altitude",
             title: "Pressure altitude",
             afm_reference: "AFM DA202-C1 Rev 29 — performance inputs",
-            summary: "PA (ft) = field elevation + (1013.25 − QNH_hPa) × 30. Used as the vertical axis for chart/table entry.",
+            summary: "Enter pressure altitude (ft) as for standard pressure (1013.25 hPa); this planner does not apply a QNH correction. Same value drives chart and table axes.",
             interpolation: "N/A — direct formula from inputs.",
             limitations: "Approximate hPa→ft conversion; verify against AFM examples.",
         },

@@ -5,6 +5,7 @@ use crate::rev29::engine::{
     takeoff_distances_m, weight_factor, wind_panel_hw_m, wind_panel_tw_m,
 };
 use crate::rev29::types::Rev29File;
+use crate::types::climb_roc_fairing_multiplier;
 use crate::types::defaults;
 use crate::types::CalculationWarning;
 use crate::types::FlightInputs;
@@ -441,11 +442,14 @@ pub struct ClimbPath {
 pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> Option<ClimbPath> {
     let key = inputs.climb_figure.roc_key();
     let (ea, _) = equivalent_altitude_ft(data, pa_ft, inputs.oat_c);
-    let (core_roc, _) = rate_of_climb_fpm(data, key, pa_ft, inputs.oat_c)?;
+    let (core_roc_base, _) = rate_of_climb_fpm(data, key, pa_ft, inputs.oat_c)?;
+    let fair_m = climb_roc_fairing_multiplier(inputs.wheel_fairings_installed);
+    let core_roc = core_roc_base * fair_m;
 
     let oat_x = x_oat(inputs.oat_c);
     let y_ea = y_ea_ft(ea);
     let fan_right = CLIMB_EQ.x + CLIMB_EQ.w;
+    // Chart line is AFM Fig 5.x read; optional fairing penalty applies in the numeric readout only.
     let chart_roc = chart_roc_fpm_at_ea(data, key, ea);
     let x_on_roc = x_roc_fpm(chart_roc);
 
@@ -493,6 +497,120 @@ pub fn takeoff_oat_panel_pa_trace(data: &Rev29File, pa_ft: f64, oat_c: f64) -> T
         oat_x: x_oat(oat_c),
         pa_ft,
     }
+}
+
+/// Fig 5.2 fan chart: OAT → (x,y) along the **constant chart pressure-altitude** row for `pa_ft`.
+pub fn climb_fan_pa_curve_strip_points(data: &Rev29File, pa_ft: f64) -> Vec<(f64, f64)> {
+    data.fan_t
+        .value
+        .iter()
+        .map(|&t| {
+            let (ea, _) = equivalent_altitude_ft(data, pa_ft, t);
+            (x_oat(t), y_ea_ft(ea))
+        })
+        .collect()
+}
+
+/// Point on the constant-PA fan curve at the current OAT strip position (for guide + vertical cursor).
+pub fn climb_fan_pa_curve_point_at_oat(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, f64) {
+    let x = x_oat(oat_c);
+    let pts = climb_fan_pa_curve_strip_points(data, pa_ft);
+    if pts.is_empty() {
+        return (x, STRIP_BOTTOM);
+    }
+    if pts.len() == 1 {
+        return pts[0];
+    }
+    if x <= pts[0].0 {
+        return pts[0];
+    }
+    if x >= pts.last().unwrap().0 {
+        return *pts.last().unwrap();
+    }
+    for w in pts.windows(2) {
+        let (x0, y0) = w[0];
+        let (x1, y1) = w[1];
+        if x >= x0 && x <= x1 {
+            let t = if (x1 - x0).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (x - x0) / (x1 - x0)
+            };
+            return (x, y0 + t * (y1 - y0));
+        }
+    }
+    pts.last().copied().unwrap_or((x, STRIP_BOTTOM))
+}
+
+/// Fig 5.2: polyline samples along the chart-PA row **from the coldest OAT (left) through `cursor`**.
+/// `cursor` should match [`climb_fan_pa_curve_point_at_oat`] for the same `pa_ft` and OAT.
+pub fn climb_fan_pa_curve_strip_points_through_cursor(
+    data: &Rev29File,
+    pa_ft: f64,
+    cursor: (f64, f64),
+) -> Vec<(f64, f64)> {
+    let (cx, cy) = cursor;
+    let full = climb_fan_pa_curve_strip_points(data, pa_ft);
+    if full.is_empty() {
+        return vec![];
+    }
+    const EPS: f64 = 1e-4;
+    if full.len() == 1 {
+        return vec![(cx, cy)];
+    }
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(full.len() + 1);
+    out.push(full[0]);
+    if (cx - full[0].0).abs() <= EPS {
+        out[0] = (cx, cy);
+        return out;
+    }
+    for &b in full.iter().skip(1) {
+        if cx <= b.0 + EPS {
+            out.push((cx, cy));
+            return out;
+        }
+        out.push(b);
+    }
+    let last_x = full.last().unwrap().0;
+    if cx > last_x + EPS {
+        out.push((cx, cy));
+    }
+    out
+}
+
+/// Same geometry as [`climb_fan_pa_curve_strip_points_through_cursor`] in **chart coordinates**
+/// (OAT °C, EA ft) for the interactive Fig 5.2 view.
+pub fn climb_fan_pa_curve_chart_points_through_cursor(
+    data: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+) -> Vec<(f64, f64)> {
+    let (cursor_ea, _) = equivalent_altitude_ft(data, pa_ft, oat_c);
+    let cursor = (oat_c, cursor_ea);
+    let fan_t = &data.fan_t.value;
+    if fan_t.is_empty() {
+        return vec![];
+    }
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(fan_t.len() + 1);
+    let t0 = fan_t[0];
+    out.push((t0, equivalent_altitude_ft(data, pa_ft, t0).0));
+    const EPS: f64 = 1e-4;
+    if (oat_c - t0).abs() <= EPS {
+        out[0] = cursor;
+        return out;
+    }
+    for &t in fan_t.iter().skip(1) {
+        if oat_c <= t + EPS {
+            out.push(cursor);
+            return out;
+        }
+        out.push((t, equivalent_altitude_ft(data, pa_ft, t).0));
+    }
+    let last_t = *fan_t.last().unwrap();
+    if oat_c > last_t + EPS {
+        out.push(cursor);
+    }
+    out
 }
 
 /// Sample wind-panel ground distance at a given headwind (follow guide line).
@@ -593,7 +711,9 @@ pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rev29::engine::{fahrenheit_to_celsius, m_to_ft, takeoff_distances_m};
+    use crate::rev29::engine::{
+        equivalent_altitude_ft, fahrenheit_to_celsius, m_to_ft, takeoff_distances_m,
+    };
     use crate::types::FlightInputs;
 
     #[test]
@@ -704,6 +824,94 @@ mod tests {
         let qx = ax + t * dx;
         let qy = ay + t * dy;
         (px - qx).hypot(py - qy) <= eps
+    }
+
+    #[test]
+    fn climb_fan_pa_curve_point_lies_on_strip_polyline_for_input_pa() {
+        let data = Rev29File::production();
+        let pa = 2500.0_f64;
+        let pts = climb_fan_pa_curve_strip_points(&data, pa);
+        assert!(pts.len() >= 2, "fan strip needs ≥2 OAT samples");
+
+        for &t in data.fan_t.value.iter() {
+            let (x, y) = climb_fan_pa_curve_point_at_oat(&data, pa, t);
+            let (ea, _) = equivalent_altitude_ft(&data, pa, t);
+            let want_y = y_ea_ft(ea);
+            assert!(
+                (x - x_oat(t)).abs() < 1e-6,
+                "curve point x should match OAT axis at sample OAT {t}"
+            );
+            assert!(
+                (y - want_y).abs() < 0.05,
+                "at OAT {t}°C expected EA row y≈{want_y}, got {y}"
+            );
+        }
+
+        let t_mid = (data.fan_t.value[0] + data.fan_t.value[1]) * 0.5;
+        let p = climb_fan_pa_curve_point_at_oat(&data, pa, t_mid);
+        assert!((p.0 - x_oat(t_mid)).abs() < 1e-6);
+        let on_curve = pts
+            .windows(2)
+            .any(|w| point_near_segment(p, w[0], w[1], 0.75));
+        assert!(on_curve, "mid-OAT point {:?} off PA fan polyline", p);
+    }
+
+    #[test]
+    fn climb_fan_pa_strip_through_cursor_ends_at_cursor_on_polyline() {
+        let data = Rev29File::production();
+        let pa = 2500.0_f64;
+        let full = climb_fan_pa_curve_strip_points(&data, pa);
+        assert!(full.len() >= 2);
+        let oat = 12.0_f64;
+        let cursor = climb_fan_pa_curve_point_at_oat(&data, pa, oat);
+        let seg = climb_fan_pa_curve_strip_points_through_cursor(&data, pa, cursor);
+        assert!(!seg.is_empty());
+        assert!(
+            (seg[0].0 - full[0].0).abs() < 1e-3 && (seg[0].1 - full[0].1).abs() < 1e-3,
+            "segment should start at cold-OAT end of fan row"
+        );
+        let last = *seg.last().unwrap();
+        assert!(
+            (last.0 - cursor.0).abs() < 1e-3 && (last.1 - cursor.1).abs() < 1e-3,
+            "segment should end at cursor {:?}, got {:?}",
+            cursor,
+            last
+        );
+        for &q in &seg {
+            let on_full = full.iter().any(|&v| (v.0 - q.0).hypot(v.1 - q.1) < 0.75)
+                || full
+                    .windows(2)
+                    .any(|w| point_near_segment(q, w[0], w[1], 0.75));
+            assert!(on_full, "point {:?} should lie on full PA polyline", q);
+        }
+    }
+
+    #[test]
+    fn climb_fan_pa_curve_chart_segment_matches_strip_geometry() {
+        let data = Rev29File::production();
+        let pa = 2500.0_f64;
+        let oat = 12.0_f64;
+        let chart_pts = climb_fan_pa_curve_chart_points_through_cursor(&data, pa, oat);
+        assert!(!chart_pts.is_empty());
+        let strip_from_chart: Vec<(f64, f64)> = chart_pts
+            .iter()
+            .map(|(t, ea)| (x_oat(*t), y_ea_ft(*ea)))
+            .collect();
+        let cursor_strip = climb_fan_pa_curve_point_at_oat(&data, pa, oat);
+        let seg_strip = climb_fan_pa_curve_strip_points_through_cursor(&data, pa, cursor_strip);
+        assert_eq!(
+            strip_from_chart.len(),
+            seg_strip.len(),
+            "chart vs strip PA segment point count"
+        );
+        for (a, b) in strip_from_chart.iter().zip(seg_strip.iter()) {
+            assert!(
+                (a.0 - b.0).abs() < 1e-3 && (a.1 - b.1).abs() < 1e-3,
+                "chart-mapped point {:?} should match strip {:?}",
+                a,
+                b
+            );
+        }
     }
 
     #[test]
@@ -866,7 +1074,7 @@ mod tests {
     fn takeoff_path_endpoints_match_core_distances() {
         let data = Rev29File::production();
         let inputs = FlightInputs {
-            field_elevation_ft: 1000.0,
+            pressure_altitude_input_ft: 1000.0,
             oat_c: fahrenheit_to_celsius(72.0),
             weight_lb: 1600.0,
             wind_dir_deg: 0.0,

@@ -9,7 +9,10 @@ use crate::i18n::{
     copy, format_along_runway_component, format_crosswind_component, format_obstacle_over,
     format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
 };
-use crate::inputs::{ClimbFlapToggle, CruiseInputs, NumField, ObstacleField, SharedAirfieldInputs};
+use crate::inputs::{
+    AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField,
+    SharedAirfieldInputs, SharedWheelFairingToggle,
+};
 use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, LandingTableView};
 use crate::phase_readouts::PhaseReadoutsPanel;
 use crate::storage::{compute_all, ReadingsStore, SavedBundle};
@@ -50,16 +53,25 @@ pub fn PhaseShell(
                     <NumField label=move || copy(locale.get()).weight.to_string()
                         get=move || inputs.get().weight_lb
                         set=move |v| inputs.update(|i| i.weight_lb = v)/>
-                    <ClimbFlapToggle locale=locale inputs=inputs/>
+                    <ClimbFlapToggle locale=locale inputs=inputs data=data/>
+                    <SharedWheelFairingToggle locale=locale inputs=inputs/>
+                    {move || {
+                        let c = copy(locale.get());
+                        (!inputs.get().wheel_fairings_installed).then(|| view! {
+                            <p class="lab warn afm-quote mono">{c.afm_wheel_fairings_note_climb}</p>
+                        })
+                    }}
                 </PhaseGrid>
             }.into_any(),
             Phase::Cruise => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Cruise airfield=false>
+                    <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     <CruiseInputs locale=locale inputs=inputs/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Endurance => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Endurance airfield=false>
+                    <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     <CruiseInputs locale=locale inputs=inputs/>
                     <NumField label=move || copy(locale.get()).fuel_usable.to_string()
                         get=move || inputs.get().fuel_usable_us_gal
@@ -108,6 +120,7 @@ fn PhaseGrid(
                             locale=locale
                             inputs=inputs
                             chart_phase=chart_phase_for(phase)
+                            mode=airfield_mode_for(phase)
                         />
                     })}
                     {(!airfield).then(|| view! { <span></span> })}
@@ -137,6 +150,14 @@ fn chart_phase_for(phase: Phase) -> Option<ChartPhase> {
         Phase::Climb => Some(ChartPhase::Climb),
         Phase::Landing => Some(ChartPhase::Landing),
         _ => None,
+    }
+}
+
+fn airfield_mode_for(phase: Phase) -> AirfieldInputsMode {
+    match phase {
+        Phase::Takeoff => AirfieldInputsMode::Takeoff,
+        Phase::Climb => AirfieldInputsMode::Climb,
+        _ => AirfieldInputsMode::Full,
     }
 }
 
@@ -282,41 +303,128 @@ fn phase_results(
         }
         Phase::Climb => view! {
             {match &b.climb {
-                Some(cl) => view! {
+                Some(cl) => {
+                    let c_loc = copy(locale);
+                    let chart_roc = cl.rate_of_climb_chart_fpm;
+                    let penalized = cl.rate_of_climb_fpm;
+                    let fair_on = inputs.wheel_fairings_installed;
+                    let chart_i = chart_roc.map(|x| x.round() as i64).unwrap_or(penalized.round() as i64);
+                    let adj_i = penalized.round() as i64;
+                    view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cl.provenance.clone()/>
-                        <p class="big">{cl.rate_of_climb_fpm.round() as i64}<span class="u">" fpm"</span></p>
+                        {if fair_on {
+                            view! {
+                                <p class="big">{chart_i}<span class="u">" fpm"</span></p>
+                            }.into_any()
+                        } else if chart_roc.is_some() {
+                            view! {
+                                <>
+                                    <p class="big mono">{chart_i}" fpm "{c_loc.climb_roc_fairing_penalty_suffix}</p>
+                                    <p class="big mono">{c_loc.climb_roc_adjusted_label}": "{adj_i}<span class="u">" fpm"</span></p>
+                                </>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <p class="big mono">{adj_i}" fpm "{c_loc.climb_roc_fairing_penalty_suffix}</p>
+                            }.into_any()
+                        }}
                         <p>"EA "{cl.equivalent_altitude_ft.round() as i64}" ft"</p>
                         <WarningsList locale=locale warnings=cl.warnings.clone()/>
                     </div>
-                }.into_any(),
+                    }.into_any()
+                },
                 None => view! { <p class="error">"—"</p> }.into_any(),
             }}
         }.into_any(),
         Phase::Cruise => view! {
             {match &b.cruise {
-                Some(cr) => view! {
+                Some(cr) => {
+                    let c_loc = copy(locale);
+                    let tas_c = cr.tas_chart_kt;
+                    let pen = cr.tas_kt;
+                    let ff = cr.fuel_flow_us_gal_h;
+                    let fair_on = inputs.wheel_fairings_installed;
+                    let t_chart = tas_c.map(|x| x.round() as i64).unwrap_or(pen.round() as i64);
+                    let t_pen = pen.round() as i64;
+                    view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
-                        <p class="big">{cr.tas_kt.round() as i64}<span class="u">" kt TAS"</span></p>
-                        <p>{format!("{:.1}", cr.fuel_flow_us_gal_h)}" US gal/h"</p>
+                        {if fair_on {
+                            view! {
+                                <>
+                                    <p class="big">{t_chart}<span class="u">" kt TAS"</span></p>
+                                    <p>{format!("{ff:.1}")}" US gal/h"</p>
+                                </>
+                            }.into_any()
+                        } else if tas_c.is_some() {
+                            view! {
+                                <>
+                                    <p class="big mono">{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                    <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
+                                    <p>{format!("{ff:.1}")}" US gal/h"</p>
+                                </>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <>
+                                    <p class="big mono">{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                    <p>{format!("{ff:.1}")}" US gal/h"</p>
+                                </>
+                            }.into_any()
+                        }}
                         <WarningsList locale=locale warnings=cr.warnings.clone()/>
                     </div>
-                }.into_any(),
+                    }.into_any()
+                },
                 None => view! { <p class="error">"—"</p> }.into_any(),
             }}
         }.into_any(),
         Phase::Endurance => view! {
             {match &b.endurance {
-                Some(e) => view! {
+                Some(e) => {
+                    let loc = locale;
+                    let c_loc = copy(loc);
+                    let fair_on = inputs.wheel_fairings_installed;
+                    let h = e.endurance_h;
+                    let g = e.fuel_flow_us_gal_h;
+                    let r_pen = e.range_nm;
+                    let r_chart = e.range_chart_nm;
+                    let t_pen = e.tas_kt;
+                    let t_chart = e.tas_chart_kt;
+                    view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=e.provenance.clone()/>
                         <p class="chip">{copy(locale).derived_not_afm}</p>
-                        <p class="big">{format!("{:.1}", e.endurance_h)}<span class="u">" h"</span></p>
-                        <p>{format!("{:.0}", e.range_nm)}" NM · "{format!("{:.1}", e.fuel_flow_us_gal_h)}" gph @ "{e.tas_kt.round()}" kt"</p>
+                        <p class="big">{format!("{h:.1}")}<span class="u">" h"</span></p>
+                        {if fair_on {
+                            let rc = r_chart.unwrap_or(r_pen).round() as i64;
+                            let tc = t_chart.unwrap_or(t_pen).round() as i64;
+                            view! {
+                                <p>{format!("{rc}")}" NM · "{format!("{g:.1}")}" gph @ "{tc}" kt"</p>
+                            }.into_any()
+                        } else if t_chart.is_some() && r_chart.is_some() {
+                            let rc = r_chart.unwrap().round() as i64;
+                            let rp = r_pen.round() as i64;
+                            let tc = t_chart.unwrap().round() as i64;
+                            let tp = t_pen.round() as i64;
+                            view! {
+                                <>
+                                    <p class="mono">{format!("{rc}")}" NM · "{format!("{g:.1}")}" gph @ "{tc}" kt "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                    <p class="mono">{c_loc.endurance_range_adjusted_label}": "{format!("{rp}")}" NM @ "{tp}" kt"</p>
+                                </>
+                            }.into_any()
+                        } else {
+                            let rp = r_pen.round() as i64;
+                            let tp = t_pen.round() as i64;
+                            view! {
+                                <p class="mono">{format!("{rp}")}" NM · "{format!("{g:.1}")}" gph @ "{tp}" kt "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                            }.into_any()
+                        }}
                         <WarningsList locale=locale warnings=e.warnings.clone()/>
                     </div>
-                }.into_any(),
+                    }.into_any()
+                },
                 None => view! { <p class="error">"—"</p> }.into_any(),
             }}
         }.into_any(),

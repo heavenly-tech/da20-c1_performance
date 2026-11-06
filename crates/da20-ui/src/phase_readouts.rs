@@ -2,13 +2,15 @@
 
 use std::collections::HashSet;
 
-use da20_core::pressure::format_qnh_dual;
-use da20_core::types::FlightInputs;
+use da20_core::altitude::effective_pressure_altitude_ft;
+use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind_format::format_wind;
 use leptos::prelude::*;
 
 use crate::i18n::{
-    copy, format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result, Locale,
+    copy, format_climb_readout_summary, format_cruise_readout_summary,
+    format_endurance_readout_summary, format_takeoff_conservative_estimate,
+    format_takeoff_over_obstacle_result, Locale,
 };
 use crate::phases::{phase_default_label, phase_storage_name, Phase};
 use crate::storage::{compute_all, format_readout_timestamp, new_reading, ReadingsStore};
@@ -106,7 +108,8 @@ pub fn PhaseReadoutsPanel(
                         let id_overlay_toggle = id.clone();
                         let phase_key_restore = phase_key_for_list.clone();
                         let phase_key_del = phase_key_for_list.clone();
-                        let summary = readout_inputs_summary(&r.inputs);
+                        let summary =
+                            readout_inputs_summary_for_phase(loc, phase, &r.inputs);
                         let results = readout_results_summary(loc, phase, &r);
                         let checked = overlay_ids.get().contains(&id);
                         view! {
@@ -153,13 +156,51 @@ pub fn PhaseReadoutsPanel(
     }
 }
 
-pub fn readout_inputs_summary(inputs: &FlightInputs) -> String {
+pub fn readout_inputs_summary_for_phase(
+    locale: Locale,
+    phase: Phase,
+    inputs: &FlightInputs,
+) -> String {
+    let c = copy(locale);
     let wind = format_wind(inputs.wind_dir_deg, inputs.wind_speed_kt);
-    let qnh = format_qnh_dual(inputs.qnh_hpa);
-    format!(
-        "OAT {:.0} °C · {qnh} · {:.0} lb · {wind} · RWY {}",
-        inputs.oat_c, inputs.weight_lb, inputs.runway
-    )
+    let fair_on = inputs.wheel_fairings_installed;
+    let fair_lbl = if fair_on {
+        c.wheel_fairings_installed_yes
+    } else {
+        c.wheel_fairings_installed_no
+    };
+    match phase {
+        Phase::Takeoff | Phase::Landing => {
+            format!(
+                "PA {:.0} ft · OAT {:.0} °C · {:.0} lb · {wind} · RWY {}",
+                inputs.pressure_altitude_input_ft, inputs.oat_c, inputs.weight_lb, inputs.runway
+            )
+        }
+        Phase::Climb => {
+            let pa = effective_pressure_altitude_ft(inputs, Some(ChartPhase::Climb));
+            let flap = match inputs.climb_figure {
+                ClimbFigure::Fig56TakeoffFlaps => c.climb_flaps_to,
+                ClimbFigure::Fig55CruiseFlaps => c.climb_flaps_up,
+                ClimbFigure::Fig58BalkedLanding => c.climb_flaps_ldg,
+            };
+            format!(
+                "OAT {:.0} °C · PA {:.0} ft · {:.0} lb · {flap} · {} ({})",
+                inputs.oat_c, pa, inputs.weight_lb, fair_lbl, c.wheel_fairings_label_short,
+            )
+        }
+        Phase::Cruise | Phase::Endurance => {
+            format!(
+                "Cr OAT {:.0} °C · PA {:.0} ft · {:.0} RPM · {:.0} lb · {} ({})",
+                inputs.cruise_oat_c,
+                inputs.cruise_pressure_alt_ft,
+                inputs.cruise_rpm,
+                inputs.weight_lb,
+                fair_lbl,
+                c.wheel_fairings_label_short,
+            )
+        }
+        Phase::Manual => String::new(),
+    }
 }
 
 pub fn readout_results_summary(
@@ -193,21 +234,43 @@ pub fn readout_results_summary(
             .climb
             .as_ref()
             .map(|cl| {
-                format!(
-                    "{:.0} fpm · EA {:.0} ft",
-                    cl.rate_of_climb_fpm, cl.equivalent_altitude_ft
-                )
+                let roc = format_climb_readout_summary(
+                    locale,
+                    cl.rate_of_climb_fpm,
+                    cl.rate_of_climb_chart_fpm,
+                    r.inputs.wheel_fairings_installed,
+                );
+                format!("{roc} · EA {:.0} ft", cl.equivalent_altitude_ft)
             })
             .unwrap_or_else(|| c.results_unavailable.to_string()),
         Phase::Cruise => r
             .cruise
             .as_ref()
-            .map(|cr| format!("{:.0} kt TAS · {:.1} gph", cr.tas_kt, cr.fuel_flow_us_gal_h))
+            .map(|cr| {
+                format_cruise_readout_summary(
+                    locale,
+                    cr.tas_kt,
+                    cr.tas_chart_kt,
+                    r.inputs.wheel_fairings_installed,
+                    cr.fuel_flow_us_gal_h,
+                )
+            })
             .unwrap_or_else(|| c.results_unavailable.to_string()),
         Phase::Endurance => r
             .endurance
             .as_ref()
-            .map(|e| format!("{:.1} h · {:.0} NM", e.endurance_h, e.range_nm))
+            .map(|e| {
+                format_endurance_readout_summary(
+                    locale,
+                    e.endurance_h,
+                    e.range_nm,
+                    e.range_chart_nm,
+                    e.tas_kt,
+                    e.tas_chart_kt,
+                    e.fuel_flow_us_gal_h,
+                    r.inputs.wheel_fairings_installed,
+                )
+            })
             .unwrap_or_else(|| c.results_unavailable.to_string()),
         Phase::Landing => r
             .landing
@@ -254,9 +317,19 @@ mod tests {
             weight_lb: defaults::WEIGHT_LB,
             ..Default::default()
         };
-        let s = readout_inputs_summary(&inputs);
+        let s = readout_inputs_summary_for_phase(Locale::En, Phase::Takeoff, &inputs);
         assert!(s.contains("22"));
         assert!(s.contains("190"));
         assert!(s.contains("200"));
+    }
+
+    #[test]
+    fn climb_readout_summary_omits_wind() {
+        let inputs = FlightInputs {
+            wind_speed_kt: 25.0,
+            ..Default::default()
+        };
+        let s = readout_inputs_summary_for_phase(Locale::En, Phase::Climb, &inputs);
+        assert!(!s.contains("25"));
     }
 }

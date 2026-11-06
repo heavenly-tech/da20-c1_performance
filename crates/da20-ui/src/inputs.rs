@@ -1,8 +1,5 @@
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
 use da20_core::cruise::isa_temp_c_at_pa;
-use da20_core::pressure::{
-    format_qnh_hpa_trim, pressure_altitude_derivation, qnh_hpa_to_inhg, qnh_inhg_to_hpa,
-};
 use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
@@ -10,10 +7,19 @@ use da20_core::wind::{
     wind_components, RunwayHeadingStatus,
 };
 use da20_core::wind_format::{format_wind, parse_wind};
+use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
-use crate::qnh_unit::QnhUnit;
+
+/// Takeoff vs climb vs landing (full) airfield blocks.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum AirfieldInputsMode {
+    #[default]
+    Full,
+    Takeoff,
+    Climb,
+}
 
 #[component]
 pub fn NumField(
@@ -41,6 +47,7 @@ pub fn SharedAirfieldInputs(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     chart_phase: Option<ChartPhase>,
+    #[prop(default = AirfieldInputsMode::Full)] mode: AirfieldInputsMode,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -51,46 +58,47 @@ pub fn SharedAirfieldInputs(
                 i.pa_override.as_ref().is_some_and(|o| o.phase == p)
             });
             view! {
-                <NumField label=move || c.field_elev.to_string()
-                    get=move || inputs.get().field_elevation_ft
+                <NumField label=move || c.pressure_altitude_ft.to_string()
+                    get=move || inputs.get().pressure_altitude_input_ft
                     set=move |v| {
                         inputs.update(|i| {
-                            i.field_elevation_ft = v;
+                            i.pressure_altitude_input_ft = v;
                             clear_pa_override(i);
                         });
                     }/>
-                <QnhField locale=locale inputs=inputs/>
                 <NumField label=move || c.oat.to_string()
                     get=move || inputs.get().oat_c
                     set=move |v| inputs.update(|i| i.oat_c = v)/>
-                <div class="f">
-                    <label>{c.runway}</label>
-                    <input class="mono" maxlength="3"
-                        prop:value=move || inputs.get().runway.clone()
-                        on:input=move |ev| inputs.update(|i| i.runway = input_value(&ev))/>
-                    {move || {
-                        let c = copy(locale.get());
-                        match runway_heading_status(&inputs.get().runway) {
-                            RunwayHeadingStatus::AmbiguousShort => view! {
-                                <p class="lab field-error">{c.runway_heading_ambiguous}</p>
-                            }.into_any(),
-                            RunwayHeadingStatus::Invalid => view! {
-                                <p class="lab field-error">{c.runway_heading_invalid}</p>
-                            }.into_any(),
-                            _ => ().into_any(),
-                        }
-                    }}
-                </div>
-                <WindField locale=locale inputs=inputs/>
-                {(!override_active).then(|| {
-                    let deriv = pressure_altitude_derivation(i.field_elevation_ft, i.qnh_hpa);
-                    view! { <p class="lab mono pa-deriv">{deriv}</p> }
+                {(mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full).then(|| {
+                    view! {
+                        <div class="f">
+                            <label>{c.runway}</label>
+                            <input class="mono" maxlength="3"
+                                prop:value=move || inputs.get().runway.clone()
+                                on:input=move |ev| inputs.update(|i| i.runway = input_value(&ev))/>
+                            {move || {
+                                let c = copy(locale.get());
+                                match runway_heading_status(&inputs.get().runway) {
+                                    RunwayHeadingStatus::AmbiguousShort => view! {
+                                        <p class="lab field-error">{c.runway_heading_ambiguous}</p>
+                                    }.into_any(),
+                                    RunwayHeadingStatus::Invalid => view! {
+                                        <p class="lab field-error">{c.runway_heading_invalid}</p>
+                                    }.into_any(),
+                                    _ => ().into_any(),
+                                }
+                            }}
+                        </div>
+                        <WindField locale=locale inputs=inputs/>
+                    }
                 })}
-                <p class="lab mono">
-                    "PA "
-                    {pa.round() as i64}
-                    " ft"
-                </p>
+                {(!override_active).then(|| view! {
+                    <p class="lab mono">
+                        "PA "
+                        {pa.round() as i64}
+                        " ft"
+                    </p>
+                })}
                 {override_active.then(|| {
                     let pa_ov = i.pa_override.as_ref().map(|o| o.pa_ft.round() as i64).unwrap_or(0);
                     view! {
@@ -108,49 +116,29 @@ pub fn SharedAirfieldInputs(
     }
 }
 
+/// Wheel fairings: one shared `FlightInputs` flag (climb −3% ROC; cruise −5% TAS per AFM).
 #[component]
-pub fn QnhField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> impl IntoView {
-    let unit = RwSignal::new(QnhUnit::load());
+pub fn SharedWheelFairingToggle(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+) -> impl IntoView {
     view! {
         {move || {
             let c = copy(locale.get());
-            let u = unit.get();
-            let hpa = inputs.get().qnh_hpa;
             view! {
-                <div class="f qnh-field">
-                    <label>{c.qnh}" ("{u.label()}")"</label>
-                    <div class="qnh-row">
-                        <input type="number" step="any" class="mono"
-                            prop:value=move || match unit.get() {
-                                QnhUnit::Hpa => format_qnh_hpa_trim(hpa),
-                                QnhUnit::InHg => format!("{:.2}", qnh_hpa_to_inhg(hpa)),
-                            }
-                            on:input=move |ev| {
-                                if let Ok(v) = input_value(&ev).parse::<f64>() {
-                                    inputs.update(|i| {
-                                        i.qnh_hpa = match unit.get() {
-                                            QnhUnit::Hpa => v,
-                                            QnhUnit::InHg => qnh_inhg_to_hpa(v),
-                                        };
-                                        clear_pa_override(i);
-                                    });
-                                }
-                            }
-                        />
+                <div class="f wheel-fairings-shared">
+                    <label>{c.wheel_fairings_toggle_label}</label>
+                    <div class="toggle-row wheel-fairings-row">
                         <button type="button" class="btn g"
-                            class:on=move || unit.get() == QnhUnit::Hpa
-                            on:click=move |_| {
-                                let next = QnhUnit::Hpa;
-                                unit.set(next);
-                                next.save();
-                            }>"hPa"</button>
+                            class:on=move || inputs.get().wheel_fairings_installed
+                            on:click=move |_| inputs.update(|i| i.wheel_fairings_installed = true)>
+                            {c.wheel_fairings_installed_yes}
+                        </button>
                         <button type="button" class="btn g"
-                            class:on=move || unit.get() == QnhUnit::InHg
-                            on:click=move |_| {
-                                let next = QnhUnit::InHg;
-                                unit.set(next);
-                                next.save();
-                            }>"inHg"</button>
+                            class:on=move || !inputs.get().wheel_fairings_installed
+                            on:click=move |_| inputs.update(|i| i.wheel_fairings_installed = false)>
+                            {c.wheel_fairings_installed_no}
+                        </button>
                     </div>
                 </div>
             }
@@ -213,6 +201,13 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                 <NumField label=move || c.cruise_rpm.to_string()
                     get=move || inputs.get().cruise_rpm
                     set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                {move || {
+                    let c = copy(locale.get());
+                    let installed = inputs.get().wheel_fairings_installed;
+                    (!installed).then(|| view! {
+                        <p class="lab warn afm-quote">{c.afm_wheel_fairings_note_cruise}</p>
+                    })
+                }}
                 <div class="toggle-row">
                     <button type="button" class="btn g"
                         on:click=move |_| set_cruise_oat_from_isa(0.0)>
@@ -292,11 +287,21 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
 }
 
 #[component]
-pub fn ClimbFlapToggle(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> impl IntoView {
+pub fn ClimbFlapToggle(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    data: RwSignal<PerformanceData>,
+) -> impl IntoView {
     view! {
         <div class="toggle-row">
             {move || {
                 let c = copy(locale.get());
+                let has_balked = data
+                    .get()
+                    .inner()
+                    .roc
+                    .value
+                    .contains_key("balked_5_8");
                 view! {
                     <button type="button"
                         class="btn g"
@@ -313,8 +318,20 @@ pub fn ClimbFlapToggle(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>)
                     <button type="button"
                         class="btn g"
                         class:on=move || inputs.get().climb_figure == ClimbFigure::Fig58BalkedLanding
-                        on:click=move |_| inputs.update(|i| i.climb_figure = ClimbFigure::Fig58BalkedLanding)>
-                        {c.climb_fig_58}
+                        prop:disabled=move || !has_balked
+                        prop:title=move || {
+                            if has_balked {
+                                String::new()
+                            } else {
+                                c.climb_flaps_balked_unavailable.to_string()
+                            }
+                        }
+                        on:click=move |_| {
+                            if has_balked {
+                                inputs.update(|i| i.climb_figure = ClimbFigure::Fig58BalkedLanding);
+                            }
+                        }>
+                        {c.climb_flaps_ldg}
                     </button>
                 }
             }}

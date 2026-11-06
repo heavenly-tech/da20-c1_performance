@@ -1,7 +1,7 @@
 use crate::data::PerformanceData;
 use crate::interpolation::lerp;
 use crate::provenance::provenance_for;
-use crate::types::{CalculationWarning, CruiseResult, FlightInputs};
+use crate::types::{cruise_fairing_multiplier, CalculationWarning, CruiseResult, FlightInputs};
 
 pub const CRUISE_TABLE3_GPH_NOTE: &str = "Table 3 GPH values are transcribed as printed in AFM Rev 29 (includes known oddities, e.g. 2000 ft / 2700 RPM ISA 6.8 GPH vs −20 °C 7.7 GPH; 4000 ft / 2800 RPM +10 °C 6.8 GPH).";
 
@@ -88,14 +88,18 @@ pub fn compute_cruise(
     let pa = inputs.cruise_pressure_alt_ft;
     let rpm = inputs.cruise_rpm;
     let rows = &data.inner().cruise_table.value.rows;
-    let (tas, ff) = interpolate_cruise_at(rows, pa, rpm, inputs.cruise_oat_c)?;
+    let (tas_base, ff_base) = interpolate_cruise_at(rows, pa, rpm, inputs.cruise_oat_c)?;
+    let m = cruise_fairing_multiplier(inputs.wheel_fairings_installed);
+    let tas = tas_base * m;
 
     let warnings = vec![CalculationWarning::code_only("TABLE3_GPH")];
 
     Ok(CruiseResult {
         provenance: provenance_for(data.inner(), data.cruise_source()),
+        tas_chart_kt: Some(tas_base),
         tas_kt: tas,
-        fuel_flow_us_gal_h: ff,
+        fuel_flow_chart_us_gal_h: Some(ff_base),
+        fuel_flow_us_gal_h: ff_base,
         warnings,
     })
 }
@@ -141,5 +145,23 @@ mod tests {
         inputs.oat_c = -10.0;
         let r2 = compute_cruise(&data, &inputs).unwrap();
         assert!((r1.tas_kt - r2.tas_kt).abs() < 1e-9);
+    }
+
+    #[test]
+    fn cruise_without_fairings_reduces_tas_five_percent_not_fuel_flow() {
+        let data = PerformanceData::production();
+        let inputs_on = FlightInputs::default();
+        let on = compute_cruise(&data, &inputs_on).unwrap();
+        let inputs_off = FlightInputs {
+            wheel_fairings_installed: false,
+            ..FlightInputs::default()
+        };
+        let off = compute_cruise(&data, &inputs_off).unwrap();
+        let chart_tas = off.tas_chart_kt.expect("chart TAS");
+        assert!((off.tas_kt - chart_tas * 0.95).abs() < 1e-6);
+        let chart_ff = off.fuel_flow_chart_us_gal_h.expect("chart FF");
+        assert!((off.fuel_flow_us_gal_h - chart_ff).abs() < 1e-9);
+        assert!((on.tas_kt - chart_tas).abs() < 1e-6);
+        assert!((on.fuel_flow_us_gal_h - chart_ff).abs() < 1e-6);
     }
 }

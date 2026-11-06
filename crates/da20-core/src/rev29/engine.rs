@@ -46,7 +46,7 @@ pub fn clamp_chart_distance_m(
     (query_m, vec![])
 }
 
-fn linear_interp_quiet(axis: &[f64], values: &[f64], x: f64) -> f64 {
+pub(crate) fn linear_interp_quiet(axis: &[f64], values: &[f64], x: f64) -> f64 {
     match interpolate_1d(axis, values, x, ExtrapolationPolicy::Strict) {
         Ok((v, _)) => v,
         Err(_) => {

@@ -4,6 +4,7 @@ use crate::rev29::engine::{
     equivalent_altitude_ft, landing_lookup_ft, rate_of_climb_fpm, takeoff_base_m,
 };
 use crate::rev29::types::Rev29File;
+use crate::types::FlightInputs;
 
 pub struct Polyline {
     pub points: Vec<(f64, f64)>,
@@ -99,6 +100,16 @@ pub fn sample_roc_fpm(data: &Rev29File, key: &str, pa_ft: f64, oat_c: f64) -> f6
     rate_of_climb_fpm(data, key, pa_ft, oat_c)
         .map(|(v, _)| v)
         .unwrap_or(0.0)
+}
+
+/// Chart ROC (fpm) at chart PA and OAT (AFM figure value; optional fairing penalty is not applied here).
+pub fn sample_roc_fpm_with_inputs(
+    data: &Rev29File,
+    key: &str,
+    pa_ft: f64,
+    inputs: &FlightInputs,
+) -> f64 {
+    sample_roc_fpm(data, key, pa_ft, inputs.oat_c)
 }
 
 pub fn sample_landing_ft(data: &Rev29File, pa_ft: f64) -> (f64, f64) {

@@ -80,9 +80,8 @@ pub struct Copy {
     pub results_unavailable: &'static str,
     pub export_csv: &'static str,
     pub export_json: &'static str,
-    pub field_elev: &'static str,
-    pub qnh: &'static str,
-    pub qnh_dual: &'static str,
+    /// Primary chart PA input (standard pressure); same string in ES/EN per placard.
+    pub pressure_altitude_ft: &'static str,
     pub oat: &'static str,
     pub runway: &'static str,
     pub runway_heading_ambiguous: &'static str,
@@ -103,6 +102,20 @@ pub struct Copy {
     pub climb_fig_58: &'static str,
     pub climb_flaps_to: &'static str,
     pub climb_flaps_up: &'static str,
+    pub climb_flaps_ldg: &'static str,
+    pub climb_flaps_balked_unavailable: &'static str,
+    pub wheel_fairings_installed_yes: &'static str,
+    pub wheel_fairings_installed_no: &'static str,
+    /// Shared climb/cruise toggle legend (short placard label).
+    pub wheel_fairings_toggle_label: &'static str,
+    pub wheel_fairings_label_short: &'static str,
+    pub climb_roc_fairing_penalty_suffix: &'static str,
+    pub climb_roc_adjusted_label: &'static str,
+    pub cruise_tas_fairing_penalty_suffix: &'static str,
+    pub cruise_tas_adjusted_label: &'static str,
+    pub endurance_range_adjusted_label: &'static str,
+    pub afm_wheel_fairings_note_climb: &'static str,
+    pub afm_wheel_fairings_note_cruise: &'static str,
     pub fuel_usable: &'static str,
     pub fuel_reserve: &'static str,
     pub derived_not_afm: &'static str,
@@ -150,6 +163,8 @@ pub struct Copy {
     pub strip_panel_obstacle: &'static str,
     /// Fig 5.2 ROC panel bottom x-axis (Pablo).
     pub strip_climb_roc_x_axis: &'static str,
+    /// ROC panel right edge: shared equivalent altitude axis (same scale as fan chart).
+    pub strip_climb_roc_ea_y_axis: &'static str,
     pub strip_fig52_ea: &'static str,
     pub strip_fig55_roc: &'static str,
     pub strip_fig56_roc: &'static str,
@@ -202,9 +217,7 @@ const ES: Copy = Copy {
     results_unavailable: "—",
     export_csv: "Exportar CSV",
     export_json: "Exportar JSON",
-    field_elev: "Elevación del aeródromo (ft)",
-    qnh: "QNH",
-    qnh_dual: "QNH (hPa / inHg)",
+    pressure_altitude_ft: "Altitud de presión (ft)",
     oat: "OAT (°C)",
     runway: "Orientación pista",
     runway_heading_ambiguous:
@@ -225,8 +238,24 @@ const ES: Copy = Copy {
     climb_fig_55: "Fig 5.5 — flaps crucero",
     climb_fig_56: "Fig 5.6 — flaps despegue",
     climb_fig_58: "Fig 5.8 — aterrizaje abortado",
-    climb_flaps_to: "Flaps DES",
-    climb_flaps_up: "Flaps UP",
+    climb_flaps_to: "Flaps T/O",
+    climb_flaps_up: "Flaps UP/CRUISE",
+    climb_flaps_ldg: "Flaps LDG - Balked Landing",
+    climb_flaps_balked_unavailable:
+        "Datos Fig 5.8 (aterrizaje abortado) no disponibles en el archivo de rendimiento.",
+    wheel_fairings_installed_yes: "Cubiertas de rueda instaladas",
+    wheel_fairings_installed_no: "Sin cubiertas de rueda",
+    wheel_fairings_toggle_label: "Carenados de rueda / Wheel fairings",
+    wheel_fairings_label_short: "cubiertas",
+    climb_roc_fairing_penalty_suffix: "-3% (sin carenados)",
+    climb_roc_adjusted_label: "Ajustada",
+    cruise_tas_fairing_penalty_suffix: "-5% (sin carenados)",
+    cruise_tas_adjusted_label: "TAS ajustada",
+    endurance_range_adjusted_label: "Rango ajustado",
+    afm_wheel_fairings_note_climb:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE CLIMB PERFORMANCE IS REDUCED BY APPROXIMATELY 3%.",
+    afm_wheel_fairings_note_cruise:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE MAXIMUM CRUISING SPEED IS REDUCED BY APPROXIMATELY 5%.",
     fuel_usable: "Combustible utilizable (US gal)",
     fuel_reserve: "Reserva (US gal)",
     derived_not_afm: "Derivado, no es carta AFM",
@@ -273,6 +302,7 @@ const ES: Copy = Copy {
     strip_panel_tw: "Viento de cola (kt)",
     strip_panel_obstacle: "Obstáculo",
     strip_climb_roc_x_axis: "Razón de ascenso (fpm)",
+    strip_climb_roc_ea_y_axis: "Altitud equivalente (ft)",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
     strip_fig56_roc: "Fig 5.6 ROC",
@@ -318,9 +348,7 @@ const EN: Copy = Copy {
     results_unavailable: "—",
     export_csv: "Export CSV",
     export_json: "Export JSON",
-    field_elev: "Field elevation (ft)",
-    qnh: "QNH",
-    qnh_dual: "QNH (hPa / inHg)",
+    pressure_altitude_ft: "Pressure altitude (ft)",
     oat: "OAT (°C)",
     runway: "Runway heading",
     runway_heading_ambiguous:
@@ -341,8 +369,24 @@ const EN: Copy = Copy {
     climb_fig_55: "Fig 5.5 — cruise flaps",
     climb_fig_56: "Fig 5.6 — takeoff flaps",
     climb_fig_58: "Fig 5.8 — balked landing",
-    climb_flaps_to: "T/O flaps",
-    climb_flaps_up: "UP flaps",
+    climb_flaps_to: "Flaps T/O",
+    climb_flaps_up: "Flaps UP/CRUISE",
+    climb_flaps_ldg: "Flaps LDG - Balked Landing",
+    climb_flaps_balked_unavailable:
+        "Fig 5.8 (balked landing) performance data missing from performance file.",
+    wheel_fairings_installed_yes: "Wheel fairings installed",
+    wheel_fairings_installed_no: "Wheel fairings not installed",
+    wheel_fairings_toggle_label: "Wheel fairings / Carenados de rueda",
+    wheel_fairings_label_short: "fairings",
+    climb_roc_fairing_penalty_suffix: "-3% (no fairings)",
+    climb_roc_adjusted_label: "Adjusted",
+    cruise_tas_fairing_penalty_suffix: "-5% (no fairings)",
+    cruise_tas_adjusted_label: "Adjusted TAS",
+    endurance_range_adjusted_label: "Adjusted range",
+    afm_wheel_fairings_note_climb:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE CLIMB PERFORMANCE IS REDUCED BY APPROXIMATELY 3%.",
+    afm_wheel_fairings_note_cruise:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE MAXIMUM CRUISING SPEED IS REDUCED BY APPROXIMATELY 5%.",
     fuel_usable: "Usable fuel (US gal)",
     fuel_reserve: "Reserve (US gal)",
     derived_not_afm: "Derived, not an AFM chart",
@@ -389,6 +433,7 @@ const EN: Copy = Copy {
     strip_panel_tw: "Tailwind (kt)",
     strip_panel_obstacle: "Obstacle",
     strip_climb_roc_x_axis: "Rate of climb (fpm)",
+    strip_climb_roc_ea_y_axis: "Equivalent altitude (ft)",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
     strip_fig56_roc: "Fig 5.6 ROC",
@@ -408,7 +453,7 @@ const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
         afm: "AFM DA202-C1 Rev 29 — entradas de rendimiento",
-        summary: "PA (ft) = elevación + (1013,25 − QNH) × 30. La PA directa de carta anula elevación/QNH.",
+        summary: "Se ingresa altitud de presión (ft) como si el día fuera estándar (1013,25 hPa); sin corrección por QNH. La PA de carta directa (cursor) anula el valor escrito.",
         interpolation: "Fórmula directa; cartas usan interpolación lineal.",
         limitations: "Conversión hPa→ft aproximada; verifique con ejemplos del AFM.",
     },
@@ -468,7 +513,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         title: "Pressure & density altitude",
         afm: "AFM DA202-C1 Rev 29 — performance inputs",
         summary:
-            "PA (ft) = elevation + (1013.25 − QNH) × 30. Direct chart PA overrides elevation/QNH.",
+            "Pressure altitude (ft) is entered as for a standard day (1013.25 hPa); no QNH correction. Direct chart PA from the cursor overrides the typed value.",
         interpolation: "Direct formula; charts use linear interpolation.",
         limitations: "Approximate hPa→ft conversion.",
     },
@@ -566,13 +611,118 @@ pub fn format_strip_chart_roll_obs(locale: Locale, roll_m: f64, obs_m: f64) -> S
     }
 }
 
-/// AFM-style label on the takeoff OAT/PA panel PA trace (horizontal guide).
+/// Strip PA guide label (OAT/PA takeoff panel and Fig 5.2 PA-curve trace) — ES: **AP**, EN: **PA**.
 pub fn format_takeoff_strip_pa_trace_label(locale: Locale, pa_ft: f64) -> String {
     let ft = pa_ft.round();
     match locale {
         Locale::Es => format!("AP {ft:.0} ft"),
         Locale::En => format!("PA {ft:.0} ft"),
     }
+}
+
+/// Saved readout / phase summary: chart ROC, penalty tag, optional second line for −3% value.
+pub fn format_climb_readout_summary(
+    locale: Locale,
+    penalized_roc_fpm: f64,
+    chart_roc_fpm: Option<f64>,
+    fairings_installed: bool,
+) -> String {
+    let c = copy(locale);
+    let adj = penalized_roc_fpm.round() as i64;
+    let chart = chart_roc_fpm.map(|x| x.round() as i64).unwrap_or(adj);
+    if fairings_installed {
+        return format!("{chart} fpm");
+    }
+    let suffix = c.climb_roc_fairing_penalty_suffix;
+    if chart_roc_fpm.is_none() {
+        return format!("{adj} fpm {suffix}");
+    }
+    format!(
+        "{chart} fpm {suffix}\n{} {adj} fpm",
+        c.climb_roc_adjusted_label
+    )
+}
+
+/// Interactive chart cursor line: chart ROC (unpenalized) vs penalized when fairings off.
+pub fn format_climb_readout_interactive_pair(
+    locale: Locale,
+    penalized_roc_fpm: f64,
+    chart_roc_fpm: Option<f64>,
+    fairings_installed: bool,
+) -> (String, String) {
+    let c = copy(locale);
+    let adj = penalized_roc_fpm.round() as i64;
+    let chart = chart_roc_fpm.map(|x| x.round() as i64).unwrap_or(adj);
+    if fairings_installed {
+        let s = format!("{chart} fpm");
+        return (s.clone(), s);
+    }
+    let suffix = c.climb_roc_fairing_penalty_suffix;
+    let chart_str = format!("{chart} fpm {suffix}");
+    let core_str = format!("{adj} fpm");
+    (chart_str, core_str)
+}
+
+/// Saved readout / list: Table 3 TAS (chart vs −5%) and unscaled GPH.
+pub fn format_cruise_readout_summary(
+    locale: Locale,
+    penalized_tas_kt: f64,
+    chart_tas_kt: Option<f64>,
+    fairings_installed: bool,
+    gph: f64,
+) -> String {
+    let c = copy(locale);
+    let pen = penalized_tas_kt.round() as i64;
+    let chart = chart_tas_kt.map(|x| x.round() as i64).unwrap_or(pen);
+    if fairings_installed {
+        return format!("{chart} kt TAS · {gph:.1} gph");
+    }
+    let suffix = c.cruise_tas_fairing_penalty_suffix;
+    if chart_tas_kt.is_none() {
+        return format!("{pen} kt TAS {suffix} · {gph:.1} gph");
+    }
+    format!(
+        "{chart} kt TAS {suffix} · {gph:.1} gph\n{} {pen} kt TAS",
+        c.cruise_tas_adjusted_label
+    )
+}
+
+/// Endurance/range line: uses chart TAS for “raw” NM when fairings off; penalized TAS on adjusted line.
+#[allow(clippy::too_many_arguments)]
+pub fn format_endurance_readout_summary(
+    locale: Locale,
+    endurance_h: f64,
+    range_pen_nm: f64,
+    range_chart_nm: Option<f64>,
+    tas_pen: f64,
+    tas_chart: Option<f64>,
+    gph: f64,
+    fairings_installed: bool,
+) -> String {
+    let c = copy(locale);
+    let h = endurance_h;
+    let g = gph;
+    if fairings_installed {
+        let t = tas_chart.unwrap_or(tas_pen).round() as i64;
+        let r = range_chart_nm.unwrap_or(range_pen_nm).round() as i64;
+        return format!("{h:.1} h · {r} NM · {g:.1} gph @ {t} kt");
+    }
+    let suffix = c.cruise_tas_fairing_penalty_suffix;
+    let tc = tas_chart
+        .map(|x| x.round() as i64)
+        .unwrap_or(tas_pen.round() as i64);
+    let rc = range_chart_nm
+        .map(|x| x.round() as i64)
+        .unwrap_or(range_pen_nm.round() as i64);
+    let tp = tas_pen.round() as i64;
+    let rp = range_pen_nm.round() as i64;
+    if tas_chart.is_none() || range_chart_nm.is_none() {
+        return format!("{h:.1} h · {rp} NM · {g:.1} gph @ {tp} kt {suffix}");
+    }
+    format!(
+        "{h:.1} h · {rc} NM · {g:.1} gph @ {tc} kt {suffix}\n{} {rp} NM @ {tp} kt",
+        c.endurance_range_adjusted_label
+    )
 }
 
 #[allow(dead_code)]
@@ -807,6 +957,14 @@ mod i18n_display_tests {
     }
 
     #[test]
+    fn pressure_altitude_input_label_es_en_distinct() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.pressure_altitude_ft, "Altitud de presión (ft)");
+        assert_eq!(en.pressure_altitude_ft, "Pressure altitude (ft)");
+    }
+
+    #[test]
     fn typed_near_pure_crosswind_triggers_strip_note() {
         let inputs = FlightInputs {
             runway: "190".into(),
@@ -815,5 +973,22 @@ mod i18n_display_tests {
             ..Default::default()
         };
         assert!(wind_chart_panel_needs_crosswind_note(&inputs));
+    }
+
+    #[test]
+    fn climb_flap_toggle_placard_labels_same_es_en_three_options() {
+        const TO: &str = "Flaps T/O";
+        const UP: &str = "Flaps UP/CRUISE";
+        const LDG: &str = "Flaps LDG - Balked Landing";
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.climb_flaps_to, TO);
+        assert_eq!(es.climb_flaps_up, UP);
+        assert_eq!(es.climb_flaps_ldg, LDG);
+        assert_eq!(en.climb_flaps_to, TO);
+        assert_eq!(en.climb_flaps_up, UP);
+        assert_eq!(en.climb_flaps_ldg, LDG);
+        assert_ne!(TO, UP);
+        assert_ne!(UP, LDG);
     }
 }

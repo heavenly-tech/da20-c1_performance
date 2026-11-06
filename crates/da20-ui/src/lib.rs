@@ -11,7 +11,6 @@ mod interactive_chart;
 mod palette;
 mod phase_readouts;
 mod phases;
-mod qnh_unit;
 mod routing;
 mod storage;
 mod strip_plot;

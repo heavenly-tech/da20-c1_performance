@@ -32,6 +32,18 @@ fn major_hline(x0: f64, x1: f64, y: f64) -> impl IntoView {
     }
 }
 
+fn thin_vline(x: f64, y0: f64, y1: f64) -> impl IntoView {
+    view! {
+        <line x1=x y1=y0 x2=x y2=y1 class="chart-stroke-grid"/>
+    }
+}
+
+fn thin_hline(x0: f64, x1: f64, y: f64) -> impl IntoView {
+    view! {
+        <line x1=x0 y1=y x2=x1 y2=y class="chart-stroke-grid"/>
+    }
+}
+
 fn strip_distance_hlines(x0: f64, x1: f64) -> impl IntoView {
     view! {
         {(0..=8).map(|i| {
@@ -60,17 +72,24 @@ pub fn takeoff_strip_major_grid() -> impl IntoView {
 }
 
 pub fn climb_strip_major_grid() -> impl IntoView {
-    let roc_x1 = CLIMB_ROC.x + CLIMB_ROC.w;
+    let roc_right = CLIMB_ROC.x + CLIMB_ROC.w;
     view! {
         {EA_TICKS_FT.into_iter().map(|ea| {
-            major_hline(CLIMB_EQ.x, roc_x1, y_ea_ft(ea))
+            let y = y_ea_ft(ea);
+            view! {
+                <>
+                    // Same EA level as Fig 5.2 fan chart; split at panel join so lines align exactly.
+                    {thin_hline(CLIMB_EQ.x, CLIMB_ROC.x, y)}
+                    {thin_hline(CLIMB_ROC.x, roc_right, y)}
+                </>
+            }
         }).collect_view()}
         {OAT_TICKS_C.into_iter().map(|t| {
             let x = CLIMB_EQ.x + (t + 20.0) / 75.0 * CLIMB_EQ.w;
-            major_vline(x, STRIP_TOP, STRIP_BOTTOM)
+            thin_vline(x, STRIP_TOP, STRIP_BOTTOM)
         }).collect_view()}
         {ROC_TICKS_FPM.into_iter().map(|roc| {
-            major_vline(x_roc_fpm(roc), STRIP_TOP, STRIP_BOTTOM)
+            thin_vline(x_roc_fpm(roc), STRIP_TOP, STRIP_BOTTOM)
         }).collect_view()}
     }
 }
@@ -98,13 +117,14 @@ pub fn interactive_chart_major_grid(
 fn interactive_tick_values(kind: crate::interactive_chart::ChartKind) -> (Vec<f64>, Vec<f64>) {
     let x_vals = match kind {
         crate::interactive_chart::ChartKind::Takeoff => OAT_TICKS_C.to_vec(),
-        crate::interactive_chart::ChartKind::Climb => EA_TICKS_FT.to_vec(),
+        // Climb preview: OAT (x) vs EA (y) on Fig 5.2 fan chart.
+        crate::interactive_chart::ChartKind::Climb => OAT_TICKS_C.to_vec(),
         crate::interactive_chart::ChartKind::Landing => vec![0.0, 1750.0, 3500.0, 5250.0, 7000.0],
         crate::interactive_chart::ChartKind::Wind => vec![0.0, 30.0, 60.0, 90.0],
     };
     let y_vals = match kind {
         crate::interactive_chart::ChartKind::Takeoff => vec![150.0, 400.0, 650.0, 900.0],
-        crate::interactive_chart::ChartKind::Climb => ROC_TICKS_FPM.to_vec(),
+        crate::interactive_chart::ChartKind::Climb => EA_TICKS_FT.to_vec(),
         crate::interactive_chart::ChartKind::Landing => vec![600.0, 900.0, 1200.0, 1600.0],
         crate::interactive_chart::ChartKind::Wind => vec![0.0, 3.0, 6.0, 9.0, 12.0],
     };
@@ -161,13 +181,26 @@ pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
                 LabelAnchor::End,
             )
         }).collect_view()}
+        {EA_TICKS_FT.into_iter().map(|ea| {
+            guide_line_label(
+                CLIMB_ROC.x + CLIMB_ROC.w + 3.0,
+                y_ea_ft(ea),
+                format!("{ea:.0} ft"),
+                LabelAnchor::Start,
+            )
+        }).collect_view()}
         {ROC_TICKS_FPM.into_iter().map(|roc| {
             strip_tick(x_roc_fpm(roc), STRIP_TICK_Y, format!("{roc:.0} fpm"))
         }).collect_view()}
         {strip_tick(
             CLIMB_EQ.x - 18.0,
             (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.axis_ea_ft.to_string(),
+            c.strip_climb_roc_ea_y_axis.to_string(),
+        )}
+        {strip_tick(
+            CLIMB_ROC.x + CLIMB_ROC.w + 18.0,
+            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
+            c.strip_climb_roc_ea_y_axis.to_string(),
         )}
     }
 }
@@ -183,13 +216,13 @@ pub fn interactive_chart_axis_ticks(
     let (x_vals, y_vals) = interactive_tick_values(kind);
     let x_fmt = |v: f64| match kind {
         crate::interactive_chart::ChartKind::Takeoff => format!("{v:.0} °C"),
-        crate::interactive_chart::ChartKind::Climb => format!("{v:.0} ft"),
+        crate::interactive_chart::ChartKind::Climb => format!("{v:.0} °C"),
         crate::interactive_chart::ChartKind::Landing => format!("{v:.0} ft"),
         crate::interactive_chart::ChartKind::Wind => format!("{v:.0}°"),
     };
     let y_fmt = |v: f64| match kind {
         crate::interactive_chart::ChartKind::Takeoff => format!("{v:.0} m"),
-        crate::interactive_chart::ChartKind::Climb => format!("{v:.0} fpm"),
+        crate::interactive_chart::ChartKind::Climb => format!("{v:.0} ft"),
         crate::interactive_chart::ChartKind::Landing => format!("{v:.0} ft"),
         crate::interactive_chart::ChartKind::Wind => format!("{v:.0} kt"),
     };
@@ -220,7 +253,7 @@ pub fn climb_strip_panel_titles(c: &Copy, roc_title: &'static str) -> impl IntoV
     view! {
         <text x=CLIMB_EQ.x+CLIMB_EQ.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_oat_c}</text>
         <text x=CLIMB_ROC.x+CLIMB_ROC.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_climb_roc_x_axis}</text>
-        <text x=CLIMB_EQ.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.axis_ea_ft}</text>
+        <text x=CLIMB_EQ.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.strip_climb_roc_ea_y_axis}</text>
         <text x=CLIMB_ROC.x + 8.0 y="36" class="chart-axis-title" text-anchor="start">{roc_title}</text>
     }
 }
@@ -275,8 +308,28 @@ mod tests {
     }
 
     #[test]
+    fn climb_strip_ea_y_axis_title_full_es_en() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.strip_climb_roc_ea_y_axis, "Altitud equivalente (ft)");
+        assert_eq!(en.strip_climb_roc_ea_y_axis, "Equivalent altitude (ft)");
+    }
+
+    #[test]
     fn climb_major_grid_includes_roc_verticals_at_same_ticks() {
         assert_eq!(ROC_TICKS_FPM.len(), EA_TICKS_FT.len());
+    }
+
+    #[test]
+    fn climb_roc_panel_ea_tick_y_matches_fan_ea_axis() {
+        for &ea in &EA_TICKS_FT {
+            let y_fan = y_ea_ft(ea);
+            let y_roc_right = y_ea_ft(ea);
+            assert!(
+                (y_fan - y_roc_right).abs() < 1e-9,
+                "EA {ea} ft: fan and ROC EA ticks must share y_ea_ft"
+            );
+        }
     }
 
     #[test]

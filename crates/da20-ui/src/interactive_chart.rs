@@ -4,10 +4,13 @@ use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
 use da20_core::climb::compute_climb;
 use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
-    climb_roc_vs_ea, landing_table_curves, map_to_svg, sample_landing_ft, sample_roc_fpm,
-    sample_takeoff_base_m, takeoff_base_curves, wind_headwind_vs_angle, Polyline,
+    equivalent_altitude_curves, landing_table_curves, map_to_svg, sample_landing_ft,
+    sample_roc_fpm_with_inputs, sample_takeoff_base_m, takeoff_base_curves, wind_headwind_vs_angle,
+    Polyline,
 };
-use da20_core::rev29::engine::lb_to_kg;
+use da20_core::rev29::ea_inverse::pressure_altitude_for_equivalent_altitude;
+use da20_core::rev29::engine::{equivalent_altitude_ft, lb_to_kg};
+use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points_through_cursor;
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{ChartPhase, FlightInputs};
 use da20_core::wind::{compute_wind, runway_heading_deg};
@@ -18,7 +21,9 @@ use wasm_bindgen::JsCast;
 use crate::chart_axes::{interactive_chart_axis_ticks, interactive_chart_major_grid};
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
-use crate::i18n::{copy, Locale};
+use crate::i18n::{
+    copy, format_climb_readout_interactive_pair, format_takeoff_strip_pa_trace_label, Locale,
+};
 use crate::inputs::set_chart_pa;
 
 fn chart_phase(kind: ChartKind) -> Option<ChartPhase> {
@@ -61,8 +66,8 @@ pub fn InteractiveChart(
             }
             ChartKind::Climb => {
                 let fan_t = &inner.fan_t.value;
-                let fan_pa = &inner.fan_pa.value;
-                (norm_axis(fan_t, i.oat_c), norm_axis(fan_pa, pa))
+                let (ea, _) = equivalent_altitude_ft(inner, pa, i.oat_c);
+                (norm_axis(fan_t, i.oat_c), norm_axis_ea(ea))
             }
             ChartKind::Landing => {
                 let alts = &inner.land_alt.value;
@@ -146,7 +151,7 @@ pub fn InteractiveChart(
                     let c = copy(locale.get());
                     let d = data.get();
                     let i = inputs.get();
-                    let (chart, core) = readout_pair(kind, &d, &i);
+                    let (chart, core) = readout_pair(locale.get(), kind, &d, &i);
                     format!(
                         "{}: {chart} | {}: {core}",
                         c.plot_readout_chart,
@@ -175,6 +180,12 @@ fn norm_axis(axis: &[f64], value: f64) -> f64 {
     ((value - min) / (max - min)).clamp(0.0, 1.0)
 }
 
+fn norm_axis_ea(ea_ft: f64) -> f64 {
+    const EA_MIN: f64 = 0.0;
+    const EA_MAX: f64 = 14_000.0;
+    ((ea_ft - EA_MIN) / (EA_MAX - EA_MIN)).clamp(0.0, 1.0)
+}
+
 fn render_svg(
     kind: ChartKind,
     locale: Locale,
@@ -194,6 +205,27 @@ fn render_svg(
     let (oat_sx, _) = map_to_svg(
         oat_x_data, y_min, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0,
     );
+
+    let climb_pa_guide: Option<(String, String)> = if kind == ChartKind::Climb {
+        let raw = climb_fan_pa_curve_chart_points_through_cursor(inner, pa, oat_x_data);
+        if raw.is_empty() {
+            None
+        } else {
+            let pts: String = raw
+                .iter()
+                .map(|(t, ea)| {
+                    let (sx, sy) = map_to_svg(
+                        *t, *ea, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0,
+                    );
+                    format!("{sx:.1},{sy:.1}")
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            Some((pts, format_takeoff_strip_pa_trace_label(locale, pa)))
+        }
+    } else {
+        None
+    };
 
     let paths = polylines.into_iter().enumerate().map(|(idx, pl)| {
         let class = if Some(idx) == highlight_idx {
@@ -226,18 +258,72 @@ fn render_svg(
         map_to_svg(x, y, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0)
     };
 
+    let ea_at_cursor = y_min + cy * (y_max - y_min);
+    let (ea_gx1, ea_gy) = map_to_svg(
+        x_min,
+        ea_at_cursor,
+        x_min,
+        x_max,
+        y_min,
+        y_max,
+        40.0,
+        20.0,
+        340.0,
+        250.0,
+    );
+    let (ea_gx2, _) = map_to_svg(
+        x_max,
+        ea_at_cursor,
+        x_min,
+        x_max,
+        y_min,
+        y_max,
+        40.0,
+        20.0,
+        340.0,
+        250.0,
+    );
+
     view! {
         <rect x="40" y="20" width="340" height="250" class="chart-panel"/>
         {interactive_chart_major_grid(kind, x_min, x_max, y_min, y_max)}
         {paths.collect_view()}
-        <line x1=oat_sx y1="20" x2=oat_sx y2="270" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+        {match kind {
+            ChartKind::Climb => view! {
+                <line
+                    x1=ea_gx1
+                    y1=ea_gy
+                    x2=ea_gx2
+                    y2=ea_gy
+                    class="chart-stroke-guide"
+                    stroke-dasharray="3 4"
+                    opacity="0.92"
+                />
+            }.into_any(),
+            _ => view! { <g/> }.into_any(),
+        }}
+        {climb_pa_guide.as_ref().map(|(pts, _)| view! {
+            <polyline points=pts.clone() fill="none" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+        })}
+        {(kind != ChartKind::Climb).then(|| view! {
+            <line x1=oat_sx y1="20" x2=oat_sx y2="270" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+        })}
+        {climb_pa_guide.map(|(_, lbl)| view! {
+            <>
+                <line x1=gx y1="20" x2=gx y2="270" class="chart-stroke-guide-active" stroke-dasharray="5 4"/>
+                {guide_line_label(gx + 4.0, gy, lbl, LabelAnchor::Start)}
+            </>
+        })}
         <circle cx=gx cy=gy r="6" class="chart-handle"/>
         <text x="200" y="292" class="chart-axis-title" text-anchor="middle">{x_label}</text>
         <text x="44" y="16" class="chart-axis-title" text-anchor="start">{y_label}</text>
         <text x="50" y="288" fill="var(--chart-label)" font-size="10">
             {match kind {
-                ChartKind::Takeoff | ChartKind::Climb => {
+                ChartKind::Takeoff => {
                     format!("OAT {:.0} °C · PA {:.0} ft", inputs.oat_c, pa)
+                }
+                ChartKind::Climb => {
+                    format!("OAT {:.0} °C", inputs.oat_c)
                 }
                 _ => String::new(),
             }}
@@ -313,6 +399,7 @@ fn takeoff_overlays(
 }
 
 fn readout_pair(
+    locale: Locale,
     kind: ChartKind,
     data: &PerformanceData,
     inputs: &FlightInputs,
@@ -325,10 +412,18 @@ fn readout_pair(
             "{:.0} m base",
             sample_takeoff_base_m(inner, pa, inputs.oat_c)
         ),
-        ChartKind::Climb => format!(
-            "{:.0} fpm",
-            sample_roc_fpm(inner, inputs.climb_figure.roc_key(), pa, inputs.oat_c)
-        ),
+        ChartKind::Climb => {
+            let (ea, _) = equivalent_altitude_ft(inner, pa, inputs.oat_c);
+            let roc_u =
+                sample_roc_fpm_with_inputs(inner, inputs.climb_figure.roc_key(), pa, inputs);
+            let (chart_line, _) = format_climb_readout_interactive_pair(
+                locale,
+                roc_u,
+                Some(roc_u),
+                inputs.wheel_fairings_installed,
+            );
+            format!("{:.0} ft EA · {chart_line}", ea.round())
+        }
         ChartKind::Landing => {
             let (r, d) = da20_core::rev29::charts::sample_landing_ft(inner, pa);
             format!("{:.0} / {:.0} ft", r, d)
@@ -344,7 +439,15 @@ fn readout_pair(
             .map(|t| format!("{:.0} ft roll", t.ground_roll_ft))
             .unwrap_or_else(|_| "—".into()),
         ChartKind::Climb => compute_climb(data, inputs, inputs.cruise_pressure_alt_ft)
-            .map(|c| format!("{:.0} fpm", c.rate_of_climb_fpm))
+            .map(|cl| {
+                let (_, core) = format_climb_readout_interactive_pair(
+                    locale,
+                    cl.rate_of_climb_fpm,
+                    cl.rate_of_climb_chart_fpm,
+                    inputs.wheel_fairings_installed,
+                );
+                core
+            })
             .unwrap_or_else(|_| "—".into()),
         ChartKind::Landing => compute_landing(data, inputs)
             .map(|l| format!("{:.0} ft", l.distance_over_50ft_ft))
@@ -365,7 +468,7 @@ fn chart_axis_labels(locale: Locale, kind: ChartKind) -> (&'static str, &'static
     let c = copy(locale);
     match kind {
         ChartKind::Takeoff => (c.axis_oat_c, c.axis_dist_m),
-        ChartKind::Climb => (c.axis_ea_ft, c.axis_roc_fpm),
+        ChartKind::Climb => (c.axis_oat_c, c.strip_climb_roc_ea_y_axis),
         ChartKind::Landing => (c.axis_pa_ft, c.axis_dist_ft),
         ChartKind::Wind => (c.axis_angle_deg, c.axis_hw_kt),
     }
@@ -384,14 +487,11 @@ fn chart_spec(
             let hi = nearest_pa_index(&inner.to_pa.value, pa);
             (pl, -20.0, 55.0, 150.0, 1000.0, hi)
         }
-        ChartKind::Climb => (
-            vec![climb_roc_vs_ea(inner, inputs.climb_figure.roc_key())],
-            0.0,
-            14_000.0,
-            0.0,
-            1100.0,
-            None,
-        ),
+        ChartKind::Climb => {
+            let pl = equivalent_altitude_curves(inner);
+            let hi = nearest_pa_index(&inner.fan_pa.value, pa);
+            (pl, -20.0, 55.0, 0.0, 14_000.0, hi)
+        }
         ChartKind::Landing => {
             let (roll, dist) = landing_table_curves(inner);
             (vec![roll, dist], 0.0, 7000.0, 600.0, 1600.0, None)
@@ -436,9 +536,11 @@ fn apply_drag(
             });
         }
         ChartKind::Climb => {
-            let pa = lerp_axis(&inner.fan_pa.value, ny);
+            let oat_c = lerp_axis(&inner.fan_t.value, nx);
+            let ea = ny * 14_000.0;
+            let pa = pressure_altitude_for_equivalent_altitude(inner, ea, oat_c);
             inputs.update(|i| {
-                i.oat_c = lerp_axis(&inner.fan_t.value, nx);
+                i.oat_c = oat_c;
                 set_pa_override(i, pa, ChartPhase::Climb);
             });
         }

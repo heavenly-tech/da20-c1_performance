@@ -23,7 +23,7 @@ pub fn equivalent_altitude_with_provenance(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::altitude::{effective_pressure_altitude_ft, pressure_altitude_ft};
+    use crate::altitude::effective_pressure_altitude_ft;
     use crate::data::PerformanceData;
 
     #[test]
@@ -33,7 +33,6 @@ mod tests {
         let pa = effective_pressure_altitude_ft(&inputs, None);
         let (eq, _) = equivalent_altitude_ft(&data, pa, 20.0);
         assert!(eq.is_finite());
-        let pa2 = pressure_altitude_ft(2130.0, 1013.0);
-        assert!((pa - pa2).abs() < 1.0);
+        assert!((pa - inputs.pressure_altitude_input_ft).abs() < f64::EPSILON);
     }
 }

@@ -392,6 +392,11 @@ body {
   font-size: 12px;
 }
 
+/* AFM CAUTION blocks quoted in the UI */
+.afm-quote {
+  white-space: pre-line;
+}
+
 .results-muted {
   color: var(--mut);
   font-style: italic;

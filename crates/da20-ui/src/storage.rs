@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
-use da20_core::pressure::qnh_hpa_to_inhg;
-use da20_core::types::FlightInputs;
+use da20_core::types::{climb_roc_fairing_multiplier, cruise_fairing_multiplier, FlightInputs};
 use da20_core::wind_format::format_wind;
 use da20_core::PerformanceData;
 use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
 
+const KEY_V4: &str = "da20_performance_readings_v4";
+const KEY_V3: &str = "da20_performance_readings_v3";
 const KEY_V2: &str = "da20_performance_readings_v2";
 const KEY_V1: &str = "da20_performance_readings_v1";
 
@@ -21,17 +22,116 @@ struct ReadingsStoreV1 {
     readings: Vec<da20_core::types::SavedReading>,
 }
 
+/// v3 → v4: backfill `climb.rate_of_climb_chart_fpm` when missing (default = no separate chart field).
+fn backfill_climb_chart_roc(store: &mut ReadingsStore) {
+    for readings in store.by_phase.values_mut() {
+        for r in readings.iter_mut() {
+            if let Some(ref mut c) = r.climb {
+                if c.rate_of_climb_chart_fpm.is_none() {
+                    let m = climb_roc_fairing_multiplier(r.inputs.wheel_fairings_installed);
+                    c.rate_of_climb_chart_fpm = Some(if m < 1.0 - 1e-9 {
+                        c.rate_of_climb_fpm / m
+                    } else {
+                        c.rate_of_climb_fpm
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// Backfill Table 3 chart TAS / fuel flow when missing (v4 saved before separate `tas_chart_kt`).
+fn backfill_cruise_chart_values(store: &mut ReadingsStore) {
+    for readings in store.by_phase.values_mut() {
+        for r in readings.iter_mut() {
+            if let Some(ref mut c) = r.cruise {
+                let m = cruise_fairing_multiplier(r.inputs.wheel_fairings_installed);
+                if c.tas_chart_kt.is_none() {
+                    c.tas_chart_kt = Some(if m < 1.0 - 1e-9 {
+                        c.tas_kt / m
+                    } else {
+                        c.tas_kt
+                    });
+                }
+                if c.fuel_flow_chart_us_gal_h.is_none() {
+                    c.fuel_flow_chart_us_gal_h = Some(c.fuel_flow_us_gal_h);
+                }
+            }
+        }
+    }
+}
+
+fn backfill_endurance_chart_range(store: &mut ReadingsStore) {
+    for readings in store.by_phase.values_mut() {
+        for r in readings.iter_mut() {
+            let Some(ref cr) = r.cruise else {
+                continue;
+            };
+            let Some(ref mut e) = r.endurance else {
+                continue;
+            };
+            if e.tas_chart_kt.is_none() {
+                e.tas_chart_kt = cr.tas_chart_kt;
+            }
+            if e.range_chart_nm.is_none() && e.endurance_h > 0.0 {
+                let tas_c = e.tas_chart_kt.or(cr.tas_chart_kt).unwrap_or(e.tas_kt);
+                e.range_chart_nm = Some(e.endurance_h * tas_c);
+            }
+        }
+    }
+}
+
+fn backfill_fairing_chart_fields(store: &mut ReadingsStore) {
+    backfill_climb_chart_roc(store);
+    backfill_cruise_chart_values(store);
+    backfill_endurance_chart_range(store);
+}
+
+/// Migrate saved readout JSON: `field_elevation_ft` → `pressure_altitude_input_ft`; drop `qnh_hpa`.
+fn migrate_legacy_readings_json(mut v: serde_json::Value) -> Option<serde_json::Value> {
+    let by_phase = v.get_mut("by_phase")?.as_object_mut()?;
+    for (_, readings_val) in by_phase.iter_mut() {
+        let readings = readings_val.as_array_mut()?;
+        for reading in readings {
+            let inputs = reading.get_mut("inputs")?.as_object_mut()?;
+            if let Some(elev) = inputs.remove("field_elevation_ft") {
+                inputs.insert("pressure_altitude_input_ft".to_string(), elev);
+            }
+            inputs.remove("qnh_hpa");
+        }
+    }
+    Some(v)
+}
+
 impl ReadingsStore {
     pub fn save(&self) {
         if cfg!(target_arch = "wasm32") {
-            let _ = LocalStorage::set(KEY_V2, self);
+            let _ = LocalStorage::set(KEY_V4, self);
         }
     }
 
     pub fn load() -> Self {
         if cfg!(target_arch = "wasm32") {
-            if let Ok(store) = LocalStorage::get::<ReadingsStore>(KEY_V2) {
+            if let Ok(mut store) = LocalStorage::get::<ReadingsStore>(KEY_V4) {
+                backfill_fairing_chart_fields(&mut store);
+                store.save();
                 return store;
+            }
+            if let Ok(mut store) = LocalStorage::get::<ReadingsStore>(KEY_V3) {
+                backfill_fairing_chart_fields(&mut store);
+                LocalStorage::delete(KEY_V3);
+                store.save();
+                return store;
+            }
+            if let Ok(v) = LocalStorage::get::<serde_json::Value>(KEY_V2) {
+                if let Some(migrated) = migrate_legacy_readings_json(v) {
+                    if let Ok(mut store) = serde_json::from_value::<ReadingsStore>(migrated) {
+                        LocalStorage::delete(KEY_V2);
+                        backfill_fairing_chart_fields(&mut store);
+                        store.save();
+                        return store;
+                    }
+                }
             }
             let mut store = ReadingsStore::default();
             if let Ok(legacy) = LocalStorage::get::<ReadingsStoreV1>(KEY_V1) {
@@ -91,13 +191,12 @@ impl ReadingsStore {
 
 fn export_csv_rows(readings: &[da20_core::types::SavedReading]) -> String {
     let mut out = String::from(
-        "id,label,phase,created_at,field_elev,qnh_hpa,qnh_inhg,oat,runway,wind,wind_kt,weight,climb_figure,obstacle_m,cruise_oat,takeoff_ground_ft,takeoff_over_obstacle_ft,climb_roc_fpm,cruise_tas,cruise_ff,landing_ground,landing_50ft,endurance_h,range_nm\n",
+        "id,label,phase,created_at,pa_ft,oat,runway,wind,wind_kt,weight,climb_figure,obstacle_m,cruise_oat,takeoff_ground_ft,takeoff_over_obstacle_ft,climb_roc_fpm,cruise_tas,cruise_ff,landing_ground,landing_50ft,endurance_h,range_nm\n",
     );
     for r in readings {
         let i = &r.inputs;
         let wind = format_wind(i.wind_dir_deg, i.wind_speed_kt);
         let climb_fig = format!("{:?}", i.climb_figure);
-        let qnh_inhg = format!("{:.2}", qnh_hpa_to_inhg(i.qnh_hpa));
         let t_gr = r.takeoff.as_ref().map(|t| t.ground_roll_ft);
         let t_50 = r.takeoff.as_ref().map(|t| t.distance_over_50ft_ft);
         let roc = r.climb.as_ref().map(|c| c.rate_of_climb_fpm);
@@ -110,14 +209,12 @@ fn export_csv_rows(readings: &[da20_core::types::SavedReading]) -> String {
         let oat_csv = format!("{:.1}", i.oat_c);
         let cruise_oat_csv = format!("{:.1}", i.cruise_oat_c);
         out.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             r.id,
             escape_csv(&r.label),
             escape_csv(&r.phase),
             r.created_at_iso,
-            i.field_elevation_ft,
-            i.qnh_hpa,
-            qnh_inhg,
+            i.pressure_altitude_input_ft,
             oat_csv,
             i.runway,
             wind,
@@ -240,7 +337,9 @@ fn format_iso_now() -> String {
 mod tests {
     use super::*;
     use crate::i18n::Locale;
+    use da20_core::climb::compute_climb;
     use da20_core::types::{defaults, FlightInputs};
+    use da20_core::PerformanceData;
 
     fn sample_reading(phase: &str, id: &str) -> SavedReading {
         SavedReading {
@@ -261,6 +360,49 @@ mod tests {
             wind: None,
             endurance: None,
         }
+    }
+
+    #[test]
+    fn migrate_v2_json_drops_qnh_and_renames_field() {
+        let raw = r#"{
+            "by_phase": {
+                "takeoff": [{
+                    "id": "1",
+                    "label": "t",
+                    "phase": "takeoff",
+                    "created_at_iso": "2026-01-01T00:00:00.000Z",
+                    "inputs": {
+                        "field_elevation_ft": 3000.0,
+                        "qnh_hpa": 980.0,
+                        "oat_c": 20.0,
+                        "runway": "190",
+                        "wind_dir_deg": 200.0,
+                        "wind_speed_kt": 8.0,
+                        "weight_lb": 1764.0,
+                        "cruise_pressure_alt_ft": 6500.0,
+                        "cruise_rpm": 2600.0,
+                        "cruise_oat_c": 10.0,
+                        "obstacle_height_m": 5.0,
+                        "pa_override": null,
+                        "climb_figure": "Fig55CruiseFlaps",
+                        "wheel_fairings_installed": true,
+                        "fuel_usable_us_gal": 24.0,
+                        "fuel_reserve_us_gal": 4.5
+                    },
+                    "takeoff": null,
+                    "climb": null,
+                    "cruise": null,
+                    "landing": null,
+                    "wind": null,
+                    "endurance": null
+                }]
+            }
+        }"#;
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let migrated = migrate_legacy_readings_json(v).expect("migrate");
+        let store: ReadingsStore = serde_json::from_value(migrated).expect("parse store");
+        let i = &store.for_phase("takeoff")[0].inputs;
+        assert_eq!(i.pressure_altitude_input_ft, 3000.0);
     }
 
     #[test]
@@ -306,6 +448,7 @@ mod tests {
         assert!(csv.lines().count() >= 2);
         assert!(csv.contains("1"));
         assert!(csv.contains("takeoff"));
+        assert!(csv.contains("pa_ft"));
     }
 
     #[test]
@@ -315,6 +458,45 @@ mod tests {
         let raw = serde_json::to_string(&store).unwrap();
         let back: ReadingsStore = serde_json::from_str(&raw).unwrap();
         assert_eq!(store, back);
+    }
+
+    /// v4 schema: `climb.rate_of_climb_chart_fpm` optional; migration backfills from penalized ROC.
+    #[test]
+    fn climb_saved_reading_without_chart_roc_backfills_on_load() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            wheel_fairings_installed: false,
+            ..Default::default()
+        };
+        let mut climbing = compute_climb(&data, &inputs, inputs.cruise_pressure_alt_ft).unwrap();
+        climbing.rate_of_climb_chart_fpm = None;
+
+        let mut store = ReadingsStore::default();
+        store.by_phase.insert(
+            "climb".into(),
+            vec![SavedReading {
+                id: "c1".into(),
+                label: String::new(),
+                phase: "climb".into(),
+                created_at_iso: "2026-01-01T00:00:00.000Z".into(),
+                inputs,
+                takeoff: None,
+                climb: Some(climbing),
+                cruise: None,
+                landing: None,
+                wind: None,
+                endurance: None,
+            }],
+        );
+
+        backfill_fairing_chart_fields(&mut store);
+        let cl = store
+            .for_phase("climb")
+            .first()
+            .and_then(|r| r.climb.as_ref())
+            .expect("climb block");
+        let chart = cl.rate_of_climb_chart_fpm.expect("backfilled chart ROC");
+        assert!((chart * 0.97 - cl.rate_of_climb_fpm).abs() < 1e-6);
     }
 
     #[test]

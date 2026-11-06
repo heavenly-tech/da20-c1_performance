@@ -65,10 +65,30 @@ impl ClimbFigure {
     }
 }
 
+/// Performance penalty multipliers when optional wheel fairings are not installed (AFM note).
+pub fn climb_roc_fairing_multiplier(installed: bool) -> f64 {
+    if installed {
+        1.0
+    } else {
+        0.97
+    }
+}
+
+/// TAS multiplier when optional wheel fairings are not installed (AFM: ~5% lower maximum cruising speed).
+/// Fuel flow from Table 3 is not multiplied by this (penalty applies to speed, not the tabulated GPH).
+pub fn cruise_fairing_multiplier(installed: bool) -> f64 {
+    if installed {
+        1.0
+    } else {
+        0.95
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FlightInputs {
-    pub field_elevation_ft: f64,
-    pub qnh_hpa: f64,
+    /// Chart pressure altitude (ft) at **standard pressure** (1013.25 hPa) — no QNH correction.
+    #[serde(alias = "field_elevation_ft")]
+    pub pressure_altitude_input_ft: f64,
     pub oat_c: f64,
     pub runway: String,
     pub wind_dir_deg: f64,
@@ -90,6 +110,9 @@ pub struct FlightInputs {
     pub direct_pressure_altitude_ft: Option<f64>,
     #[serde(default)]
     pub climb_figure: ClimbFigure,
+    /// Standard wheel fairings installed (AFM baseline performance).
+    #[serde(default = "default_wheel_fairings_installed")]
+    pub wheel_fairings_installed: bool,
     /// Usable fuel for derived endurance (AFM Sec 1 default).
     #[serde(default = "default_fuel_usable")]
     pub fuel_usable_us_gal: f64,
@@ -116,11 +139,14 @@ fn default_cruise_oat_c() -> f64 {
     crate::cruise::isa_temp_c_at_pa(defaults::CRUISE_PRESSURE_ALT_FT)
 }
 
+fn default_wheel_fairings_installed() -> bool {
+    true
+}
+
 impl Default for FlightInputs {
     fn default() -> Self {
         Self {
-            field_elevation_ft: defaults::FIELD_ELEVATION_FT,
-            qnh_hpa: defaults::QNH_HPA,
+            pressure_altitude_input_ft: defaults::FIELD_ELEVATION_FT,
             oat_c: defaults::OAT_C,
             runway: defaults::RUNWAY.to_string(),
             wind_dir_deg: defaults::WIND_DIR_DEG,
@@ -133,6 +159,7 @@ impl Default for FlightInputs {
             pa_override: None,
             direct_pressure_altitude_ft: None,
             climb_figure: ClimbFigure::default(),
+            wheel_fairings_installed: default_wheel_fairings_installed(),
             fuel_usable_us_gal: defaults::FUEL_USABLE_US_GAL,
             fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
             wind_strip_crosswind_clamped: false,
@@ -203,6 +230,10 @@ pub struct TakeoffResult {
 pub struct ClimbResult {
     pub provenance: ProvenanceBlock,
     pub equivalent_altitude_ft: f64,
+    /// AFM chart ROC before optional wheel-fairing penalty (`rate_of_climb_fpm` includes that penalty).
+    /// Omitted in v3 saved readouts; use `None` and show only `rate_of_climb_fpm` with the −3% note.
+    #[serde(default)]
+    pub rate_of_climb_chart_fpm: Option<f64>,
     pub rate_of_climb_fpm: f64,
     pub time_to_altitude_min: Option<f64>,
     pub fuel_to_altitude_us_gal: Option<f64>,
@@ -213,7 +244,13 @@ pub struct ClimbResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CruiseResult {
     pub provenance: ProvenanceBlock,
+    /// Table 3 TAS (kt) before optional fairing penalty (`tas_kt` includes penalty when fairings off).
+    #[serde(default)]
+    pub tas_chart_kt: Option<f64>,
     pub tas_kt: f64,
+    /// Table 3 fuel flow (US gal/h); not scaled by the fairing note (see `cruise_fairing_multiplier`).
+    #[serde(default)]
+    pub fuel_flow_chart_us_gal_h: Option<f64>,
     pub fuel_flow_us_gal_h: f64,
     pub warnings: Vec<CalculationWarning>,
 }
@@ -247,8 +284,14 @@ pub struct EnduranceResult {
     pub provenance: ProvenanceBlock,
     pub fuel_flow_us_gal_h: f64,
     pub tas_kt: f64,
+    /// Table 3 TAS (kt) before fairing penalty, when applicable.
+    #[serde(default)]
+    pub tas_chart_kt: Option<f64>,
     pub endurance_h: f64,
     pub range_nm: f64,
+    /// Range at Table 3 TAS (NM); `range_nm` uses penalized TAS when fairings off.
+    #[serde(default)]
+    pub range_chart_nm: Option<f64>,
     pub usable_us_gal: f64,
     pub reserve_us_gal: f64,
     pub warnings: Vec<CalculationWarning>,

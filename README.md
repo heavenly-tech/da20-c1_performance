@@ -39,7 +39,7 @@ Official publications (Diamond partners portal):
 
 ## SCTB defaults
 
-- Field elevation 2130 ft, QNH 1013 hPa, OAT 20 °C  
+- Pressure altitude 2130 ft (standard pressure), OAT 20 °C  
 - Runway 19, wind 200° / 8 kt  
 - Weight 1764 lb, cruise **6500 ft PA** @ 2600 RPM (Table 3 interpolated between 6000 and 8000 ft rows)  
 - Obstacle height **5 m** (16 ft — AFM Fig 5.4 worked example)

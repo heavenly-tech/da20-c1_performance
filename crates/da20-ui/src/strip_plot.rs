@@ -7,12 +7,15 @@ use da20_core::climb::compute_climb;
 use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
 use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
-    back_solve_takeoff_wind_from_strip_x, chart_read_takeoff_base_m, climb_hand_path,
-    headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path, takeoff_oat_panel_pa_trace,
-    takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm,
-    x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
-    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    back_solve_takeoff_wind_from_strip_x, chart_read_takeoff_base_m,
+    climb_fan_pa_curve_point_at_oat, climb_fan_pa_curve_strip_points_through_cursor,
+    climb_hand_path, headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path,
+    takeoff_oat_panel_pa_trace, takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt,
+    x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ,
+    CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW,
+    TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
+use da20_core::rev29::types::Rev29File;
 use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{defaults, ChartPhase, FlightInputs};
 use da20_core::wind::runway_heading_status;
@@ -27,8 +30,9 @@ use crate::chart_axes::{
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
-    copy, format_strip_chart_roll_obs, format_takeoff_conservative_estimate,
-    format_takeoff_over_obstacle_result, format_takeoff_strip_pa_trace_label, Locale,
+    copy, format_climb_readout_interactive_pair, format_strip_chart_roll_obs,
+    format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
+    format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::phase_readouts::OVERLAY_STROKE_COLORS;
 use crate::storage::ReadingsStore;
@@ -77,6 +81,86 @@ fn strip_oat_pa_trace_guide(y: f64, oat_x: f64, label: String) -> impl IntoView 
             label,
             LabelAnchor::Start,
         )}
+    }
+}
+
+/// Fig 5.2: PA row polyline from chart left **through the cursor** + vertical EA cursor + label at cursor.
+fn strip_climb_ea_cursor_with_pa_row(
+    inner: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+    label: String,
+) -> impl IntoView {
+    let cursor = climb_fan_pa_curve_point_at_oat(inner, pa_ft, oat_c);
+    let pts: String = climb_fan_pa_curve_strip_points_through_cursor(inner, pa_ft, cursor)
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let (cx, cy) = cursor;
+    view! {
+        <polyline
+            points=pts
+            fill="none"
+            class="chart-stroke-guide-active"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        <line
+            x1=cx
+            y1=STRIP_TOP
+            x2=cx
+            y2=STRIP_BOTTOM
+            class="chart-stroke-guide-active"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        {guide_line_label(cx + 4.0, cy, label, LabelAnchor::Start)}
+    }
+}
+
+fn strip_climb_pa_curve_guide_overlay(
+    inner: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+    label: String,
+    color: &'static str,
+) -> impl IntoView {
+    let cursor = climb_fan_pa_curve_point_at_oat(inner, pa_ft, oat_c);
+    let pts: String = climb_fan_pa_curve_strip_points_through_cursor(inner, pa_ft, cursor)
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let (cx, cy) = cursor;
+    view! {
+        <polyline
+            points=pts
+            fill="none"
+            stroke=color
+            stroke-width="2.5"
+            opacity="0.88"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        <line
+            x1=cx
+            y1=STRIP_TOP
+            x2=cx
+            y2=STRIP_BOTTOM
+            stroke=color
+            stroke-width="2.5"
+            opacity="0.88"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        <text
+            x=cx + 4.0
+            y=cy
+            fill=color
+            font-size="9"
+            text-anchor="start"
+            dominant-baseline="middle"
+            opacity="0.92"
+        >
+            {label}
+        </text>
     }
 }
 
@@ -263,15 +347,24 @@ fn readout_line(
             let path = climb_hand_path(inner, &inputs, pa);
             let core = compute_climb(&data, &inputs, inputs.cruise_pressure_alt_ft)
                 .map(|r| {
-                    format!(
-                        "{:.0} fpm @ EA {:.0} ft",
-                        r.rate_of_climb_fpm, r.equivalent_altitude_ft
-                    )
+                    let (_, penalized_line) = format_climb_readout_interactive_pair(
+                        locale,
+                        r.rate_of_climb_fpm,
+                        r.rate_of_climb_chart_fpm,
+                        inputs.wheel_fairings_installed,
+                    );
+                    format!("{penalized_line} @ EA {:.0} ft", r.equivalent_altitude_ft)
                 })
                 .unwrap_or_else(|_| "—".into());
             match path {
                 Some(p) => {
-                    let chart = format!("{:.0} fpm @ EA {:.0} ft", p.chart_roc_fpm, p.chart_ea_ft);
+                    let (chart_roc_line, _) = format_climb_readout_interactive_pair(
+                        locale,
+                        p.chart_roc_fpm,
+                        Some(p.chart_roc_fpm),
+                        inputs.wheel_fairings_installed,
+                    );
+                    let chart = format!("{chart_roc_line} @ EA {:.0} ft", p.chart_ea_ft);
                     format!(
                         "{}: {chart} | {}: {core}",
                         c.plot_readout_chart, c.plot_readout_core
@@ -550,13 +643,13 @@ fn render_climb_strip(
             .join(" ")
     });
 
-    let oat_x = x_oat(inputs.oat_c);
-
     let roc_label = match inputs.climb_figure {
         da20_core::types::ClimbFigure::Fig55CruiseFlaps => c.strip_fig55_roc,
         da20_core::types::ClimbFigure::Fig56TakeoffFlaps => c.strip_fig56_roc,
         da20_core::types::ClimbFigure::Fig58BalkedLanding => c.strip_fig58_roc,
     };
+    let pa_label = format_takeoff_strip_pa_trace_label(locale, pa);
+    let oat_x = x_oat(inputs.oat_c);
 
     view! {
         <rect x=CLIMB_EQ.x y=STRIP_TOP width=CLIMB_EQ.w height=STRIP_BOTTOM-STRIP_TOP class="chart-panel"/>
@@ -565,6 +658,7 @@ fn render_climb_strip(
         {climb_strip_major_grid()}
         {eq_paths.collect_view()}
         <polyline points=roc_pts class="chart-stroke-line"/>
+        {strip_climb_ea_cursor_with_pa_row(inner, pa, inputs.oat_c, pa_label)}
         {strip_input_cursor(oat_x)}
         {path.as_ref().and_then(|p| p.points.last().copied()).map(|(roc_x, _)| view! {
             {strip_input_cursor(roc_x)}
@@ -629,17 +723,31 @@ fn saved_path_overlays(
                         .collect::<Vec<_>>()
                         .join(" ");
                     let color = OVERLAY_STROKE_COLORS[idx % OVERLAY_STROKE_COLORS.len()];
-                    let pa_guide = (kind == StripKind::Takeoff).then(|| {
-                        let trace =
-                            takeoff_oat_panel_pa_trace(inner, pa, r.inputs.oat_c);
-                        let label = format_takeoff_strip_pa_trace_label(locale, pa);
-                        strip_oat_pa_trace_guide_overlay(
-                            trace.y,
-                            trace.oat_x,
-                            label,
-                            color,
-                        )
-                    });
+                    let pa_guide = match kind {
+                        StripKind::Takeoff => {
+                            let trace =
+                                takeoff_oat_panel_pa_trace(inner, pa, r.inputs.oat_c);
+                            let label = format_takeoff_strip_pa_trace_label(locale, pa);
+                            strip_oat_pa_trace_guide_overlay(
+                                trace.y,
+                                trace.oat_x,
+                                label,
+                                color,
+                            )
+                            .into_any()
+                        }
+                        StripKind::Climb => {
+                            let label = format_takeoff_strip_pa_trace_label(locale, pa);
+                            strip_climb_pa_curve_guide_overlay(
+                                inner,
+                                pa,
+                                r.inputs.oat_c,
+                                label,
+                                color,
+                            )
+                            .into_any()
+                        }
+                    };
                     Some(view! {
                         <>
                             {pa_guide}

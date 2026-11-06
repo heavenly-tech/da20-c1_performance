@@ -11,7 +11,9 @@
   "data_status": "production",
   "technical_publications_url": "https://partners.diamondaircraft.com/s/technical-publications",
   "afm_official_url": "https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000001DbNmIAK?operationContext=S1",
-  "amm_official_url": "https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000003HViPIAW?operationContext=S1"
+  "amm_official_url": "https://partners.diamondaircraft.com/sfc/servlet.shepherd/document/download/069Tb000003HViPIAW?operationContext=S1",
+  "afm_ch5_wheel_fairings_climb_note": "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE CLIMB PERFORMANCE IS REDUCED BY APPROXIMATELY 3%.",
+  "afm_ch5_wheel_fairings_cruise_note": "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE MAXIMUM CRUISING SPEED IS REDUCED BY APPROXIMATELY 5%."
  },
  "worked_examples": {
   "takeoff_5_4": {
