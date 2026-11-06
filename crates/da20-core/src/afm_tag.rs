@@ -4,7 +4,11 @@ use crate::types::AfmLookupTag;
 use crate::types::CalculationWarning;
 
 /// Landing Table 4: clamp to table edge counts as extrapolated/off-chart; interior interpolation otherwise.
-pub fn landing_tag_from_pa(warnings: &[CalculationWarning], pa_ft: f64, published_pa: &[f64]) -> AfmLookupTag {
+pub fn landing_tag_from_pa(
+    warnings: &[CalculationWarning],
+    pa_ft: f64,
+    published_pa: &[f64],
+) -> AfmLookupTag {
     let clamped = warnings.iter().any(|w| {
         matches!(w.code.as_str(), "CLAMP_LOW" | "CLAMP_HIGH")
             && w.args
@@ -15,9 +19,7 @@ pub fn landing_tag_from_pa(warnings: &[CalculationWarning], pa_ft: f64, publishe
     if clamped {
         return AfmLookupTag::Extrapolated;
     }
-    let exact = published_pa
-        .iter()
-        .any(|p| (p - pa_ft).abs() < 0.5);
+    let exact = published_pa.iter().any(|p| (p - pa_ft).abs() < 0.5);
     if exact {
         AfmLookupTag::Table
     } else {

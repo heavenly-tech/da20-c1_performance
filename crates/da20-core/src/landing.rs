@@ -1,8 +1,8 @@
+use crate::afm_tag::landing_tag_from_pa;
 use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::landing_lookup_ft;
-use crate::afm_tag::landing_tag_from_pa;
 use crate::types::{CalculationWarning, FlightInputs, LandingResult};
 
 pub const LANDING_TABLE_50FT_M_NOTE: &str =
@@ -26,8 +26,7 @@ pub fn compute_landing(
 
     warnings.push(CalculationWarning::code_only("LANDING_TABLE_50FT"));
     warnings.push(CalculationWarning::code_only("LANDING_NO_WIND"));
-    let afm_lookup_tag =
-        landing_tag_from_pa(&warnings, pa, &data.inner().land_alt.value);
+    let afm_lookup_tag = landing_tag_from_pa(&warnings, pa, &data.inner().land_alt.value);
 
     Ok(LandingResult {
         provenance: provenance_for(data.inner(), data.landing_source()),

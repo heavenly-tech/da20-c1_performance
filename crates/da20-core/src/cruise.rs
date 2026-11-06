@@ -287,8 +287,14 @@ fn lookup_table3(
         return Ok((tri, tag, f));
     }
 
-    let below = levels.iter().filter(|l| **l < rpm).max_by(|a, b| a.partial_cmp(b).unwrap());
-    let above = levels.iter().filter(|l| **l > rpm).min_by(|a, b| a.partial_cmp(b).unwrap());
+    let below = levels
+        .iter()
+        .filter(|l| **l < rpm)
+        .max_by(|a, b| a.partial_cmp(b).unwrap());
+    let above = levels
+        .iter()
+        .filter(|l| **l > rpm)
+        .min_by(|a, b| a.partial_cmp(b).unwrap());
 
     let (r0, r1, t_rpm, rpm_extrap) = match (below, above) {
         (Some(&b), Some(&a)) => (b, a, (rpm - b) / (a - b), false),
@@ -329,13 +335,7 @@ fn lookup_table3(
     Ok((tri, tag, f))
 }
 
-fn resolve_tag(
-    pa: f64,
-    rpm: f64,
-    disa: f64,
-    rows: &[Vec<f64>],
-    f: &LookupFlags,
-) -> AfmLookupTag {
+fn resolve_tag(pa: f64, rpm: f64, disa: f64, rows: &[Vec<f64>], f: &LookupFlags) -> AfmLookupTag {
     if f.rpm_band_gap || f.rpm_extrap || f.disa_extrap || f.pa_extrap {
         return AfmLookupTag::Extrapolated;
     }

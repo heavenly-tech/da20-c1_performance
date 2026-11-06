@@ -1,8 +1,8 @@
+use crate::afm_tag::takeoff_tag;
 use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::{ft_to_m, lb_to_kg, m_to_ft, takeoff_distances_m};
-use crate::afm_tag::takeoff_tag;
 use crate::types::{CalculationWarning, FlightInputs, TakeoffResult};
 use crate::wind::runway_heading_deg;
 

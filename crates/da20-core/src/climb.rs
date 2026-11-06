@@ -1,9 +1,9 @@
+use crate::afm_tag::climb_tag_from_warnings;
 use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::equivalent_altitude::equivalent_altitude_ft;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::rate_of_climb_fpm;
-use crate::afm_tag::climb_tag_from_warnings;
 use crate::types::{climb_roc_fairing_multiplier, CalculationWarning, ClimbResult, FlightInputs};
 
 pub const CLIMB_DERIVED_ESTIMATE_NOTE: &str =
