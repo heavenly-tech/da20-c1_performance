@@ -1,0 +1,994 @@
+use gloo_storage::{LocalStorage, Storage};
+use serde::{Deserialize, Serialize};
+
+const LOCALE_KEY: &str = "da20_locale_v1";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Locale {
+    #[default]
+    Es,
+    En,
+}
+
+impl Locale {
+    pub fn load() -> Self {
+        LocalStorage::get(LOCALE_KEY).unwrap_or(Self::Es)
+    }
+
+    pub fn save(self) {
+        let _ = LocalStorage::set(LOCALE_KEY, self);
+    }
+
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::Es => Self::En,
+            Self::En => Self::Es,
+        }
+    }
+
+    pub fn html_lang(self) -> &'static str {
+        match self {
+            Self::Es => "es",
+            Self::En => "en",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Es => "ES",
+            Self::En => "EN",
+        }
+    }
+}
+
+pub struct MethodCopy {
+    pub title: &'static str,
+    pub afm: &'static str,
+    pub summary: &'static str,
+    pub interpolation: &'static str,
+    pub limitations: &'static str,
+}
+
+#[allow(dead_code)]
+pub struct Copy {
+    pub disclaimer: &'static str,
+    pub logo_suffix: &'static str,
+    pub tab_takeoff: &'static str,
+    pub tab_climb: &'static str,
+    pub tab_cruise: &'static str,
+    pub tab_endurance: &'static str,
+    pub tab_landing: &'static str,
+    pub tab_method: &'static str,
+    pub lang_toggle: &'static str,
+    pub theme_toggle: &'static str,
+    pub theme_system: &'static str,
+    pub theme_light: &'static str,
+    pub theme_dark: &'static str,
+    pub palette_toggle: &'static str,
+    pub palette_okabe_ito: &'static str,
+    pub palette_vfr_chart: &'static str,
+    pub palette_mono_amber: &'static str,
+    pub palette_cividis: &'static str,
+    pub subtitle: &'static str,
+    pub inputs_title: &'static str,
+    pub results_title: &'static str,
+    pub save_readout: &'static str,
+    pub readouts_title: &'static str,
+    pub readout_label_hint: &'static str,
+    pub clear_readouts: &'static str,
+    pub overlay_on_chart: &'static str,
+    pub results_unavailable: &'static str,
+    pub export_csv: &'static str,
+    pub export_json: &'static str,
+    /// Primary chart PA input (standard pressure); same string in ES/EN per placard.
+    pub pressure_altitude_ft: &'static str,
+    pub oat: &'static str,
+    pub runway: &'static str,
+    pub runway_heading_ambiguous: &'static str,
+    pub runway_heading_invalid: &'static str,
+    pub wind: &'static str,
+    pub wind_head: &'static str,
+    pub wind_tail: &'static str,
+    pub wind_cross: &'static str,
+    pub wind_strip_crosswind_note: &'static str,
+    pub results_runway_required: &'static str,
+    pub weight: &'static str,
+    pub cruise_pa: &'static str,
+    pub cruise_rpm: &'static str,
+    pub obstacle_m: &'static str,
+    pub climb_figure: &'static str,
+    pub climb_fig_55: &'static str,
+    pub climb_fig_56: &'static str,
+    pub climb_fig_58: &'static str,
+    pub climb_flaps_to: &'static str,
+    pub climb_flaps_up: &'static str,
+    pub climb_flaps_ldg: &'static str,
+    pub climb_flaps_balked_unavailable: &'static str,
+    pub wheel_fairings_installed_yes: &'static str,
+    pub wheel_fairings_installed_no: &'static str,
+    /// Shared climb/cruise toggle legend (short placard label).
+    pub wheel_fairings_toggle_label: &'static str,
+    pub wheel_fairings_label_short: &'static str,
+    pub climb_roc_fairing_penalty_suffix: &'static str,
+    pub climb_roc_adjusted_label: &'static str,
+    pub cruise_tas_fairing_penalty_suffix: &'static str,
+    pub cruise_tas_adjusted_label: &'static str,
+    pub endurance_range_adjusted_label: &'static str,
+    pub afm_wheel_fairings_note_climb: &'static str,
+    pub afm_wheel_fairings_note_cruise: &'static str,
+    pub fuel_usable: &'static str,
+    pub fuel_reserve: &'static str,
+    pub derived_not_afm: &'static str,
+    pub landing_no_corr: &'static str,
+    pub takeoff: &'static str,
+    pub climb: &'static str,
+    pub cruise: &'static str,
+    pub landing: &'static str,
+    pub wind_card: &'static str,
+    pub unavailable: &'static str,
+    pub derived_time: &'static str,
+    pub plot_hint: &'static str,
+    pub plot_readout_chart: &'static str,
+    pub plot_readout_core: &'static str,
+    pub readout_off_chart: &'static str,
+    pub pa_override_chip: &'static str,
+    pub pa_override_reset: &'static str,
+    pub axis_hw_kt: &'static str,
+    pub axis_oat_c: &'static str,
+    pub axis_base_roll_m: &'static str,
+    pub axis_ea_ft: &'static str,
+    pub axis_roc_fpm: &'static str,
+    pub axis_pa_ft: &'static str,
+    pub axis_dist_ft: &'static str,
+    pub axis_angle_deg: &'static str,
+    pub axis_weight_kg: &'static str,
+    pub axis_tailwind_kt: &'static str,
+    pub axis_obstacle_m: &'static str,
+    pub axis_dist_m: &'static str,
+    pub provenance_rev: &'static str,
+    pub cruise_oat: &'static str,
+    pub cruise_isa: &'static str,
+    pub cruise_disa_minus20: &'static str,
+    pub cruise_disa_plus10: &'static str,
+    pub obstacle_preset_afm: &'static str,
+    pub obstacle_preset_screen: &'static str,
+    pub strip_fig54_base: &'static str,
+    pub strip_fig54_wt: &'static str,
+    pub strip_fig54_hw: &'static str,
+    pub strip_fig54_tw: &'static str,
+    pub strip_panel_oat_pa: &'static str,
+    pub strip_panel_weight: &'static str,
+    pub strip_panel_hw: &'static str,
+    pub strip_panel_tw: &'static str,
+    pub strip_panel_obstacle: &'static str,
+    /// Fig 5.2 ROC panel bottom x-axis (Pablo).
+    pub strip_climb_roc_x_axis: &'static str,
+    /// ROC panel right edge: shared equivalent altitude axis (same scale as fan chart).
+    pub strip_climb_roc_ea_y_axis: &'static str,
+    pub strip_fig52_ea: &'static str,
+    pub strip_fig55_roc: &'static str,
+    pub strip_fig56_roc: &'static str,
+    pub strip_fig58_roc: &'static str,
+    pub takeoff_ground_roll: &'static str,
+    pub takeoff_ground_roll_at_chart_zero: &'static str,
+    pub takeoff_over_obstacle: &'static str,
+    pub manual_title: &'static str,
+    pub manual_intro: &'static str,
+    pub afm_link: &'static str,
+    pub portal_link: &'static str,
+    pub amm_link: &'static str,
+    pub methods: &'static [MethodCopy],
+}
+
+pub fn copy(locale: Locale) -> &'static Copy {
+    match locale {
+        Locale::Es => &ES,
+        Locale::En => &EN,
+    }
+}
+
+const ES: Copy = Copy {
+    disclaimer: "No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. Valores digitalizados y aproximados. El AFM aprobado rige toda la planificación de vuelo.",
+    logo_suffix: "Rendimiento",
+    tab_takeoff: "Despegue",
+    tab_climb: "Ascenso",
+    tab_cruise: "Crucero y potencia",
+    tab_endurance: "Autonomía y alcance",
+    tab_landing: "Aterrizaje",
+    tab_method: "Método",
+    lang_toggle: "Idioma",
+    theme_toggle: "Tema",
+    theme_system: "Sistema",
+    theme_light: "Claro",
+    theme_dark: "Oscuro",
+    palette_toggle: "Paleta",
+    palette_okabe_ito: "Okabe-Ito",
+    palette_vfr_chart: "Carta VFR",
+    palette_mono_amber: "Mono alto contraste + ámbar",
+    palette_cividis: "Derivado Cividis",
+    subtitle: "AFM DA202-C1 Rev 29 (30 jun 2021) — Capítulo 5 digitalizado",
+    inputs_title: "Entradas",
+    results_title: "Resultados",
+    save_readout: "Guardar lectura",
+    readouts_title: "Lecturas guardadas",
+    readout_label_hint: "Etiqueta (opcional)",
+    clear_readouts: "Borrar todas",
+    overlay_on_chart: "Superponer en gráfico",
+    results_unavailable: "—",
+    export_csv: "Exportar CSV",
+    export_json: "Exportar JSON",
+    pressure_altitude_ft: "Altitud de presión (ft)",
+    oat: "OAT (°C)",
+    runway: "Orientación pista",
+    runway_heading_ambiguous:
+        "Use 3 dígitos magnéticos (001–360). «19» es ambiguo (¿019?).",
+    runway_heading_invalid: "Rumbo inválido: ingrese 001–360 (3 dígitos).",
+    wind: "Viento (° / kt)",
+    wind_head: "Viento de frente",
+    wind_tail: "Viento de cola",
+    wind_cross: "Viento cruzado",
+    wind_strip_crosswind_note:
+        "Viento casi cruzado: en la franja de viento solo se ajusta la intensidad (kt), no la dirección.",
+    results_runway_required: "Ingrese rumbo de pista válido (001–360) para ver resultados.",
+    weight: "Peso (lb)",
+    cruise_pa: "PA crucero (ft)",
+    cruise_rpm: "RPM crucero",
+    obstacle_m: "Altura obstáculo (m)",
+    climb_figure: "Configuración de trepada (AFM)",
+    climb_fig_55: "Fig 5.5 — flaps crucero",
+    climb_fig_56: "Fig 5.6 — flaps despegue",
+    climb_fig_58: "Fig 5.8 — aterrizaje abortado",
+    climb_flaps_to: "Flaps T/O",
+    climb_flaps_up: "Flaps UP/CRUISE",
+    climb_flaps_ldg: "Flaps LDG - Balked Landing",
+    climb_flaps_balked_unavailable:
+        "Datos Fig 5.8 (aterrizaje abortado) no disponibles en el archivo de rendimiento.",
+    wheel_fairings_installed_yes: "Cubiertas de rueda instaladas",
+    wheel_fairings_installed_no: "Sin cubiertas de rueda",
+    wheel_fairings_toggle_label: "Carenados de rueda / Wheel fairings",
+    wheel_fairings_label_short: "cubiertas",
+    climb_roc_fairing_penalty_suffix: "-3% (sin carenados)",
+    climb_roc_adjusted_label: "Ajustada",
+    cruise_tas_fairing_penalty_suffix: "-5% (sin carenados)",
+    cruise_tas_adjusted_label: "TAS ajustada",
+    endurance_range_adjusted_label: "Rango ajustado",
+    afm_wheel_fairings_note_climb:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE CLIMB PERFORMANCE IS REDUCED BY APPROXIMATELY 3%.",
+    afm_wheel_fairings_note_cruise:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE MAXIMUM CRUISING SPEED IS REDUCED BY APPROXIMATELY 5%.",
+    fuel_usable: "Combustible utilizable (US gal)",
+    fuel_reserve: "Reserva (US gal)",
+    derived_not_afm: "Derivado, no es carta AFM",
+    landing_no_corr: "Sin corrección por viento, temperatura ni peso (Tabla 4).",
+    takeoff: "Despegue (Fig 5.4)",
+    climb: "Trepada (via Fig 5.2)",
+    cruise: "Crucero (Tabla 3)",
+    landing: "Aterrizaje (Tabla 4)",
+    wind_card: "Viento (Fig 5.3)",
+    unavailable: "No disponible",
+    derived_time: "Tiempo estimado (sin carta AFM): ",
+    plot_hint: "Arrastre el cursor sobre las curvas digitalizadas (no son copias del AFM). Compatible con puntero y táctil.",
+    plot_readout_chart: "Lectura carta",
+    plot_readout_core: "Resultado núcleo",
+    readout_off_chart: "Extrapolado / fuera de carta",
+    pa_override_chip: "PA carta",
+    pa_override_reset: "Restablecer PA",
+    axis_hw_kt: "HW kt",
+    axis_oat_c: "OAT °C",
+    axis_base_roll_m: "Rodaje base m",
+    axis_ea_ft: "EA ft",
+    axis_roc_fpm: "ROC fpm",
+    axis_pa_ft: "PA ft",
+    axis_dist_ft: "ft",
+    axis_angle_deg: "Ángulo °",
+    axis_weight_kg: "Peso (kg)",
+    axis_tailwind_kt: "Viento de cola (kt)",
+    axis_obstacle_m: "Obstáculo (m)",
+    axis_dist_m: "m",
+    provenance_rev: " rev ",
+    cruise_oat: "OAT crucero (°C)",
+    cruise_isa: "ISA",
+    cruise_disa_minus20: "dISA −20",
+    cruise_disa_plus10: "dISA +10",
+    obstacle_preset_afm: "5 m / 16 ft (AFM)",
+    obstacle_preset_screen: "15 m / 50 ft",
+    strip_fig54_base: "Fig 5.4 · base",
+    strip_fig54_wt: "Peso",
+    strip_fig54_hw: "Viento de frente",
+    strip_fig54_tw: "Viento de cola",
+    strip_panel_oat_pa: "OAT / PA",
+    strip_panel_weight: "Peso",
+    strip_panel_hw: "Viento de frente (kt)",
+    strip_panel_tw: "Viento de cola (kt)",
+    strip_panel_obstacle: "Obstáculo",
+    strip_climb_roc_x_axis: "Razón de ascenso (fpm)",
+    strip_climb_roc_ea_y_axis: "Altitud equivalente (ft)",
+    strip_fig52_ea: "Fig 5.2 EA",
+    strip_fig55_roc: "Fig 5.5 ROC",
+    strip_fig56_roc: "Fig 5.6 ROC",
+    strip_fig58_roc: "Fig 5.8 ROC",
+    takeoff_ground_roll: "Rodaje",
+    takeoff_ground_roll_at_chart_zero: "Rodaje (0 m)",
+    takeoff_over_obstacle: "Sobre obstáculo de",
+    manual_title: "Manual de métodos",
+    manual_intro: "Cada cálculo, fuente AFM, interpolación y limitaciones.",
+    afm_link: "AFM oficial Rev 29",
+    portal_link: "Publicaciones técnicas Diamond",
+    amm_link: "AMM DA201-C1 Rev 25",
+    methods: &ES_METHODS,
+};
+
+const EN: Copy = Copy {
+    disclaimer: "Not an official source. Not approved by Diamond Aircraft or DGAC. Digitized, approximate values. The approved AFM governs all flight planning.",
+    logo_suffix: "Performance",
+    tab_takeoff: "Takeoff",
+    tab_climb: "Climb",
+    tab_cruise: "Cruise & power",
+    tab_endurance: "Endurance & range",
+    tab_landing: "Landing",
+    tab_method: "Method",
+    lang_toggle: "Language",
+    theme_toggle: "Theme",
+    theme_system: "System",
+    theme_light: "Light",
+    theme_dark: "Dark",
+    palette_toggle: "Palette",
+    palette_okabe_ito: "Okabe-Ito",
+    palette_vfr_chart: "Aviation chart (VFR)",
+    palette_mono_amber: "High-contrast mono + amber",
+    palette_cividis: "Cividis-derived",
+    subtitle: "AFM DA202-C1 Rev 29 (30 Jun 2021) — digitized Chapter 5",
+    inputs_title: "Inputs",
+    results_title: "Results",
+    save_readout: "Save readout",
+    readouts_title: "Saved readouts",
+    readout_label_hint: "Label (optional)",
+    clear_readouts: "Clear all",
+    overlay_on_chart: "Overlay on chart",
+    results_unavailable: "—",
+    export_csv: "Export CSV",
+    export_json: "Export JSON",
+    pressure_altitude_ft: "Pressure altitude (ft)",
+    oat: "OAT (°C)",
+    runway: "Runway heading",
+    runway_heading_ambiguous:
+        "Use a 3-digit magnetic heading (001–360). “19” is ambiguous (019?).",
+    runway_heading_invalid: "Invalid heading: enter 001–360 as three digits.",
+    wind: "Wind (° / kt)",
+    wind_head: "Headwind",
+    wind_tail: "Tailwind",
+    wind_cross: "Crosswind",
+    wind_strip_crosswind_note:
+        "Nearly pure crosswind: strip wind drag adjusts speed (kt) only, not direction.",
+    results_runway_required: "Enter a valid runway heading (001–360) to show results.",
+    weight: "Weight (lb)",
+    cruise_pa: "Cruise PA (ft)",
+    cruise_rpm: "Cruise RPM",
+    obstacle_m: "Obstacle height (m)",
+    climb_figure: "Climb configuration (AFM)",
+    climb_fig_55: "Fig 5.5 — cruise flaps",
+    climb_fig_56: "Fig 5.6 — takeoff flaps",
+    climb_fig_58: "Fig 5.8 — balked landing",
+    climb_flaps_to: "Flaps T/O",
+    climb_flaps_up: "Flaps UP/CRUISE",
+    climb_flaps_ldg: "Flaps LDG - Balked Landing",
+    climb_flaps_balked_unavailable:
+        "Fig 5.8 (balked landing) performance data missing from performance file.",
+    wheel_fairings_installed_yes: "Wheel fairings installed",
+    wheel_fairings_installed_no: "Wheel fairings not installed",
+    wheel_fairings_toggle_label: "Wheel fairings / Carenados de rueda",
+    wheel_fairings_label_short: "fairings",
+    climb_roc_fairing_penalty_suffix: "-3% (no fairings)",
+    climb_roc_adjusted_label: "Adjusted",
+    cruise_tas_fairing_penalty_suffix: "-5% (no fairings)",
+    cruise_tas_adjusted_label: "Adjusted TAS",
+    endurance_range_adjusted_label: "Adjusted range",
+    afm_wheel_fairings_note_climb:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE CLIMB PERFORMANCE IS REDUCED BY APPROXIMATELY 3%.",
+    afm_wheel_fairings_note_cruise:
+        "CAUTION — IN AIRPLANE OPERATIONS WITHOUT THE OPTIONAL WHEEL FAIRINGS INSTALLED, THE MAXIMUM CRUISING SPEED IS REDUCED BY APPROXIMATELY 5%.",
+    fuel_usable: "Usable fuel (US gal)",
+    fuel_reserve: "Reserve (US gal)",
+    derived_not_afm: "Derived, not an AFM chart",
+    landing_no_corr: "No wind, temperature, or weight correction (Table 4).",
+    takeoff: "Takeoff (Fig 5.4)",
+    climb: "Climb (via Fig 5.2)",
+    cruise: "Cruise (Table 3)",
+    landing: "Landing (Table 4)",
+    wind_card: "Wind (Fig 5.3)",
+    unavailable: "Unavailable",
+    derived_time: "Derived time (no AFM chart): ",
+    plot_hint: "Drag the cursor on digitized curves (not AFM scans). Pointer and touch supported.",
+    plot_readout_chart: "Chart read",
+    plot_readout_core: "Core result",
+    readout_off_chart: "Extrapolated / off chart",
+    pa_override_chip: "Chart PA",
+    pa_override_reset: "Reset PA",
+    axis_hw_kt: "HW kt",
+    axis_oat_c: "OAT °C",
+    axis_base_roll_m: "Base roll m",
+    axis_ea_ft: "EA ft",
+    axis_roc_fpm: "ROC fpm",
+    axis_pa_ft: "PA ft",
+    axis_dist_ft: "ft",
+    axis_angle_deg: "Angle °",
+    axis_weight_kg: "Weight (kg)",
+    axis_tailwind_kt: "Tailwind (kt)",
+    axis_obstacle_m: "Obstacle (m)",
+    axis_dist_m: "m",
+    provenance_rev: " rev ",
+    cruise_oat: "Cruise OAT (°C)",
+    cruise_isa: "ISA",
+    cruise_disa_minus20: "dISA −20",
+    cruise_disa_plus10: "dISA +10",
+    obstacle_preset_afm: "5 m / 16 ft (AFM)",
+    obstacle_preset_screen: "15 m / 50 ft",
+    strip_fig54_base: "Fig 5.4 · base",
+    strip_fig54_wt: "Wt",
+    strip_fig54_hw: "HW",
+    strip_fig54_tw: "Tailwind",
+    strip_panel_oat_pa: "OAT / PA",
+    strip_panel_weight: "Weight",
+    strip_panel_hw: "Headwind (kt)",
+    strip_panel_tw: "Tailwind (kt)",
+    strip_panel_obstacle: "Obstacle",
+    strip_climb_roc_x_axis: "Rate of climb (fpm)",
+    strip_climb_roc_ea_y_axis: "Equivalent altitude (ft)",
+    strip_fig52_ea: "Fig 5.2 EA",
+    strip_fig55_roc: "Fig 5.5 ROC",
+    strip_fig56_roc: "Fig 5.6 ROC",
+    strip_fig58_roc: "Fig 5.8 ROC",
+    takeoff_ground_roll: "Ground roll",
+    takeoff_ground_roll_at_chart_zero: "Ground roll (0 m)",
+    takeoff_over_obstacle: "Over obstacle",
+    manual_title: "Methods manual",
+    manual_intro: "Each calculation path, AFM source, interpolation, and limitations.",
+    afm_link: "Official AFM Rev 29",
+    portal_link: "Diamond technical publications",
+    amm_link: "AMM DA201-C1 Rev 25",
+    methods: &EN_METHODS,
+};
+
+const ES_METHODS: [MethodCopy; 8] = [
+    MethodCopy {
+        title: "Altitud de presión y densidad",
+        afm: "AFM DA202-C1 Rev 29 — entradas de rendimiento",
+        summary: "Se ingresa altitud de presión (ft) como si el día fuera estándar (1013,25 hPa); sin corrección por QNH. La PA de carta directa (cursor) anula el valor escrito.",
+        interpolation: "Fórmula directa; cartas usan interpolación lineal.",
+        limitations: "Conversión hPa→ft aproximada; verifique con ejemplos del AFM.",
+    },
+    MethodCopy {
+        title: "Altitud equivalente (Fig 5.2)",
+        afm: "AFM p. 5-6, Figura 5.2",
+        summary: "Interpolación lineal en malla digitalizada PA × OAT.",
+        interpolation: "Lineal en T por fila, luego lineal en PA.",
+        limitations: "Requiere malla completa Rev 29.",
+    },
+    MethodCopy {
+        title: "Distancia de despegue (Fig 5.4)",
+        afm: "AFM p. 5-9 / 5-10, Figura 5.4",
+        summary: "Cadena: rodaje base → factor de peso → panel de viento → obstáculo (m).",
+        interpolation: "Lineal en cada panel; aviso si OAT/PA/peso/viento fuera de rango.",
+        limitations: "Muestra lectura cruda y valor conservador al alza a 50 ft (m = equivalente ft), p. ej. 1154 → 1200 ft.",
+    },
+    MethodCopy {
+        title: "ROC trepada (Fig 5.5 / 5.6 / 5.8)",
+        afm: "AFM p. 5-11, 5-12, 5-16",
+        summary: "ROC (fpm) = a + b × EA; figura según flaps/fase seleccionada.",
+        interpolation: "EA desde Fig 5.2; coeficientes fijos por figura.",
+        limitations: "Tiempo de trepada: estimación derivada, sin carta AFM.",
+    },
+    MethodCopy {
+        title: "Crucero (Tabla 3)",
+        afm: "AFM p. 5-14 / 5-15, Tabla 3",
+        summary: "Fila por PA y RPM; banda OAT dISA−20 / ISA / dISA+10.",
+        interpolation: "Interpolación PA entre filas; banda por OAT−ISA.",
+        limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
+    },
+    MethodCopy {
+        title: "Aterrizaje (Tabla 4)",
+        afm: "AFM p. 5-17, Tabla 4",
+        summary: "Consulta por altitud de presión únicamente (ft).",
+        interpolation: "Lineal en altitudes de la tabla.",
+        limitations: "Sin corrección por viento, temperatura ni peso. 1360 ft ≈ 415 m; texto AFM cita 414 m.",
+    },
+    MethodCopy {
+        title: "Componentes de viento (Fig 5.3)",
+        afm: "AFM p. 5-8, Figura 5.3",
+        summary: "Viento de frente y cruzado por trigonometría; formato 200 / 08 kt.",
+        interpolation: "N/A para componentes.",
+        limitations: "Rumbo pista = número × 10°; aviso si pista no numérica.",
+    },
+    MethodCopy {
+        title: "Autonomía y alcance (derivado)",
+        afm: "AFM §1.8, §5.3.10 (duración máxima) + Tabla 3 GPH",
+        summary: "(Combustible utilizable − reserva) / caudal Tabla 3; alcance = autonomía × TAS.",
+        interpolation: "Usa crucero interpolado de Tabla 3.",
+        limitations: "Derivado, no carta AFM. Combustible utilizable 24,0 US gal (total 24,5; AFM §1.8). Placas: 21,3 / 19,8 gal. Ver AFM §5.3.10 duración máxima.",
+    },
+];
+
+const EN_METHODS: [MethodCopy; 8] = [
+    MethodCopy {
+        title: "Pressure & density altitude",
+        afm: "AFM DA202-C1 Rev 29 — performance inputs",
+        summary:
+            "Pressure altitude (ft) is entered as for a standard day (1013.25 hPa); no QNH correction. Direct chart PA from the cursor overrides the typed value.",
+        interpolation: "Direct formula; charts use linear interpolation.",
+        limitations: "Approximate hPa→ft conversion.",
+    },
+    MethodCopy {
+        title: "Equivalent altitude (Fig 5.2)",
+        afm: "AFM p. 5-6, Figure 5.2",
+        summary: "Linear interpolation on digitized PA × OAT grid.",
+        interpolation: "Linear on T per row, then linear on PA.",
+        limitations: "Requires full Rev 29 grid.",
+    },
+    MethodCopy {
+        title: "Takeoff distance (Fig 5.4)",
+        afm: "AFM p. 5-9 / 5-10, Figure 5.4",
+        summary: "Chain: base roll → weight factor → wind panel → obstacle (m).",
+        interpolation: "Linear on each panel; warning if OAT/PA/weight/wind out of range.",
+        limitations: "Shows raw chart chain and conservative round-up to next 50 ft (m from ft), e.g. 1154 → 1200 ft.",
+    },
+    MethodCopy {
+        title: "Climb ROC (Figs 5.5 / 5.6 / 5.8)",
+        afm: "AFM p. 5-11, 5-12, 5-16",
+        summary: "ROC (fpm) = a + b × EA; figure from selected flap/phase.",
+        interpolation: "EA from Fig 5.2; fixed coefficients per figure.",
+        limitations: "Climb time is a derived estimate — no AFM chart.",
+    },
+    MethodCopy {
+        title: "Cruise (Table 3)",
+        afm: "AFM p. 5-14 / 5-15, Table 3",
+        summary: "Row match on PA and RPM; OAT band dISA−20 / ISA / dISA+10.",
+        interpolation: "PA interpolation between rows.",
+        limitations: "GPH as printed (known oddities).",
+    },
+    MethodCopy {
+        title: "Landing (Table 4)",
+        afm: "AFM p. 5-17, Table 4",
+        summary: "Pressure-altitude lookup only (ft).",
+        interpolation: "Linear on table altitudes.",
+        limitations:
+            "No wind, temperature, or weight correction. 1360 ft ≈ 415 m; AFM text cites 414 m.",
+    },
+    MethodCopy {
+        title: "Wind components (Fig 5.3)",
+        afm: "AFM p. 5-8, Figure 5.3",
+        summary: "Headwind/crosswind by trigonometry; display 200 / 08 kt.",
+        interpolation: "N/A for components.",
+        limitations: "Runway heading: three-digit magnetic 001–360 only; 1–2 digits flagged as ambiguous.",
+    },
+    MethodCopy {
+        title: "Endurance & range (derived)",
+        afm: "AFM §1.8, §5.3.10 (Maximum Flight Duration) + Table 3 GPH",
+        summary: "(Usable fuel − reserve) / Table 3 flow; range = endurance × TAS.",
+        interpolation: "Uses interpolated Table 3 cruise.",
+        limitations: "Derived, not an AFM chart. Usable fuel 24.0 US gal (24.5 total per AFM §1.8). Placards: 21.3 / 19.8 gal. See AFM §5.3.10.",
+    },
+];
+
+pub fn format_obstacle_over(locale: Locale, height_m: f64) -> String {
+    let c = copy(locale);
+    let ft = height_m * 3.280839895;
+    format!(
+        "{} {:.1} m / {:.0} ft",
+        c.takeoff_over_obstacle, height_m, ft
+    )
+}
+
+pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> String {
+    let ft_i = ft.round() as i64;
+    let m_i = m.round() as i64;
+    match locale {
+        Locale::Es => format!("Resultado: {ft_i} ft / {m_i} m"),
+        Locale::En => format!("Result: {ft_i} ft / {m_i} m"),
+    }
+}
+
+pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> String {
+    let ft_i = ft.round() as i64;
+    let m_i = m.round() as i64;
+    match locale {
+        Locale::Es => format!(
+            "Estimación conservadora (redondeo al alza al siguiente 50 ft): {ft_i} ft / {m_i} m"
+        ),
+        Locale::En => {
+            format!("Conservative estimate (rounded up to next 50 ft): {ft_i} ft / {m_i} m")
+        }
+    }
+}
+
+pub fn format_strip_chart_roll_obs(locale: Locale, roll_m: f64, obs_m: f64) -> String {
+    match locale {
+        Locale::Es => format!(
+            "{:.0} m rodaje / {:.0} m obst.",
+            roll_m.round(),
+            obs_m.round()
+        ),
+        Locale::En => format!("{:.0} m roll / {:.0} m obs", roll_m.round(), obs_m.round()),
+    }
+}
+
+/// Strip PA guide label (OAT/PA takeoff panel and Fig 5.2 PA-curve trace) — ES: **AP**, EN: **PA**.
+pub fn format_takeoff_strip_pa_trace_label(locale: Locale, pa_ft: f64) -> String {
+    let ft = pa_ft.round();
+    match locale {
+        Locale::Es => format!("AP {ft:.0} ft"),
+        Locale::En => format!("PA {ft:.0} ft"),
+    }
+}
+
+/// Saved readout / phase summary: chart ROC, penalty tag, optional second line for −3% value.
+pub fn format_climb_readout_summary(
+    locale: Locale,
+    penalized_roc_fpm: f64,
+    chart_roc_fpm: Option<f64>,
+    fairings_installed: bool,
+) -> String {
+    let c = copy(locale);
+    let adj = penalized_roc_fpm.round() as i64;
+    let chart = chart_roc_fpm.map(|x| x.round() as i64).unwrap_or(adj);
+    if fairings_installed {
+        return format!("{chart} fpm");
+    }
+    let suffix = c.climb_roc_fairing_penalty_suffix;
+    if chart_roc_fpm.is_none() {
+        return format!("{adj} fpm {suffix}");
+    }
+    format!(
+        "{chart} fpm {suffix}\n{} {adj} fpm",
+        c.climb_roc_adjusted_label
+    )
+}
+
+/// Interactive chart cursor line: chart ROC (unpenalized) vs penalized when fairings off.
+pub fn format_climb_readout_interactive_pair(
+    locale: Locale,
+    penalized_roc_fpm: f64,
+    chart_roc_fpm: Option<f64>,
+    fairings_installed: bool,
+) -> (String, String) {
+    let c = copy(locale);
+    let adj = penalized_roc_fpm.round() as i64;
+    let chart = chart_roc_fpm.map(|x| x.round() as i64).unwrap_or(adj);
+    if fairings_installed {
+        let s = format!("{chart} fpm");
+        return (s.clone(), s);
+    }
+    let suffix = c.climb_roc_fairing_penalty_suffix;
+    let chart_str = format!("{chart} fpm {suffix}");
+    let core_str = format!("{adj} fpm");
+    (chart_str, core_str)
+}
+
+/// Saved readout / list: Table 3 TAS (chart vs −5%) and unscaled GPH.
+pub fn format_cruise_readout_summary(
+    locale: Locale,
+    penalized_tas_kt: f64,
+    chart_tas_kt: Option<f64>,
+    fairings_installed: bool,
+    gph: f64,
+) -> String {
+    let c = copy(locale);
+    let pen = penalized_tas_kt.round() as i64;
+    let chart = chart_tas_kt.map(|x| x.round() as i64).unwrap_or(pen);
+    if fairings_installed {
+        return format!("{chart} kt TAS · {gph:.1} gph");
+    }
+    let suffix = c.cruise_tas_fairing_penalty_suffix;
+    if chart_tas_kt.is_none() {
+        return format!("{pen} kt TAS {suffix} · {gph:.1} gph");
+    }
+    format!(
+        "{chart} kt TAS {suffix} · {gph:.1} gph\n{} {pen} kt TAS",
+        c.cruise_tas_adjusted_label
+    )
+}
+
+/// Endurance/range line: uses chart TAS for “raw” NM when fairings off; penalized TAS on adjusted line.
+#[allow(clippy::too_many_arguments)]
+pub fn format_endurance_readout_summary(
+    locale: Locale,
+    endurance_h: f64,
+    range_pen_nm: f64,
+    range_chart_nm: Option<f64>,
+    tas_pen: f64,
+    tas_chart: Option<f64>,
+    gph: f64,
+    fairings_installed: bool,
+) -> String {
+    let c = copy(locale);
+    let h = endurance_h;
+    let g = gph;
+    if fairings_installed {
+        let t = tas_chart.unwrap_or(tas_pen).round() as i64;
+        let r = range_chart_nm.unwrap_or(range_pen_nm).round() as i64;
+        return format!("{h:.1} h · {r} NM · {g:.1} gph @ {t} kt");
+    }
+    let suffix = c.cruise_tas_fairing_penalty_suffix;
+    let tc = tas_chart
+        .map(|x| x.round() as i64)
+        .unwrap_or(tas_pen.round() as i64);
+    let rc = range_chart_nm
+        .map(|x| x.round() as i64)
+        .unwrap_or(range_pen_nm.round() as i64);
+    let tp = tas_pen.round() as i64;
+    let rp = range_pen_nm.round() as i64;
+    if tas_chart.is_none() || range_chart_nm.is_none() {
+        return format!("{h:.1} h · {rp} NM · {g:.1} gph @ {tp} kt {suffix}");
+    }
+    format!(
+        "{h:.1} h · {rc} NM · {g:.1} gph @ {tc} kt {suffix}\n{} {rp} NM @ {tp} kt",
+        c.endurance_range_adjusted_label
+    )
+}
+
+#[allow(dead_code)]
+pub fn phase_slug_label(locale: Locale, slug: &str) -> String {
+    let c = copy(locale);
+    match slug {
+        "takeoff" => c.tab_takeoff.to_string(),
+        "climb" => c.tab_climb.to_string(),
+        "cruise" => c.tab_cruise.to_string(),
+        "endurance" => c.tab_endurance.to_string(),
+        "landing" => c.tab_landing.to_string(),
+        "method" | "manual" => c.tab_method.to_string(),
+        other => other.to_string(),
+    }
+}
+
+pub fn format_along_runway_component(
+    locale: Locale,
+    components: &da20_core::types::WindComponents,
+) -> Option<String> {
+    use da20_core::wind::{along_runway_display_kt, format_component_kt};
+    let c = copy(locale);
+    let (is_hw, kt) = along_runway_display_kt(components);
+    if kt < 0.05 {
+        return None;
+    }
+    Some(if is_hw {
+        format!("{} {} kt", c.wind_head, format_component_kt(kt))
+    } else {
+        format!("{} {} kt", c.wind_tail, format_component_kt(kt))
+    })
+}
+
+pub fn format_crosswind_component(locale: Locale, crosswind_kt: f64) -> String {
+    if crosswind_kt.abs() < 0.05 {
+        return String::new();
+    }
+    use da20_core::wind::format_component_kt;
+    let mag = format_component_kt(crosswind_kt.abs());
+    match locale {
+        Locale::Es if crosswind_kt >= 0.0 => format!("Cruzado {mag} kt desde la derecha"),
+        Locale::Es => format!("Cruzado {mag} kt desde la izquierda"),
+        Locale::En if crosswind_kt >= 0.0 => format!("Crosswind {mag} kt from the right"),
+        Locale::En => format!("Crosswind {mag} kt from the left"),
+    }
+}
+
+pub fn data_status_label(locale: Locale, status: &str) -> String {
+    match (locale, status) {
+        (Locale::Es, "production") => "Producción".into(),
+        (Locale::Es, "draft") => "Borrador".into(),
+        (Locale::En, "production") => "Production".into(),
+        (Locale::En, "draft") => "Draft".into(),
+        (_, other) => other.to_string(),
+    }
+}
+
+fn chart_range_warn(locale: Locale, below: bool, actual_m: &str, bound_m: &str) -> String {
+    match (locale, below) {
+        (Locale::Es, true) => format!(
+            "Fuera del rango de la carta ({actual_m} m < {bound_m} m mín.): se usa el mínimo de la carta, resultado conservador"
+        ),
+        (Locale::En, true) => format!(
+            "Below AFM chart range ({actual_m} m < {bound_m} m min.): chart minimum used, conservative result"
+        ),
+        (Locale::Es, false) => format!(
+            "Fuera del rango de la carta ({actual_m} m > {bound_m} m máx.): se usa el máximo de la carta, resultado conservador"
+        ),
+        (Locale::En, false) => format!(
+            "Above AFM chart range ({actual_m} m > {bound_m} m max.): chart maximum used, conservative result"
+        ),
+    }
+}
+
+pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> String {
+    if !w.message.is_empty() {
+        return w.message.clone();
+    }
+    let c = copy(locale);
+    let ctx = w.args.first().map(String::as_str).unwrap_or("");
+    let a1 = w.args.get(1).map(String::as_str).unwrap_or("");
+    let a2 = w.args.get(2).map(String::as_str).unwrap_or("");
+    match w.code.as_str() {
+        "CHART_CLAMP_LOW" => chart_range_warn(locale, true, a1, a2),
+        "CHART_CLAMP_HIGH" => chart_range_warn(locale, false, a1, a2),
+        "CLAMP_LOW" => chart_range_warn(locale, true, a1, a2),
+        "CLAMP_HIGH" => chart_range_warn(locale, false, a1, a2),
+        "EXTRAP_LOW" | "EXTRAP_HIGH" => format!("{ctx}: extrapolation ({a1})"),
+        "ENDURANCE_DERIVED" => c.derived_not_afm.to_string(),
+        "AFM_FUEL_CAPACITY" => match locale {
+            Locale::Es => {
+                "AFM §1.8: 24,5 gal total, 24,0 utilizable; placas 21,3 / 19,8 gal. §5.3.10.".into()
+            }
+            Locale::En => {
+                "AFM §1.8: 24.5 gal total, 24.0 usable; placards 21.3 / 19.8 gal. See §5.3.10."
+                    .into()
+            }
+        },
+        "LANDING_TABLE_50FT" => match locale {
+            Locale::Es => "Tabla 4: 1360 ft (≈415 m); texto AFM cita 414 m.".into(),
+            Locale::En => "Table 4: 1360 ft (≈415 m); AFM narrative cites 414 m.".into(),
+        },
+        "LANDING_NO_WIND" => c.landing_no_corr.to_string(),
+        "DERIVED_ESTIMATE" => match locale {
+            Locale::Es => "Estimación derivada de trepada (sin carta AFM).".into(),
+            Locale::En => "Derived climb estimate (no AFM chart).".into(),
+        },
+        "UNITS" => match locale {
+            Locale::Es => "Despegue: carta en m, pantalla en ft.".into(),
+            Locale::En => "Takeoff: chart in m, display in ft.".into(),
+        },
+        "TABLE3_GPH" => match locale {
+            Locale::Es => "GPH Tabla 3 transcritos del AFM Rev 29.".into(),
+            Locale::En => "Table 3 GPH transcribed from AFM Rev 29.".into(),
+        },
+        "RUNWAY_HEADING" => match locale {
+            Locale::Es => format!(
+                "Rumbo de pista «{ctx}» inválido — use 001–360 (3 dígitos); cálculo con 0°."
+            ),
+            Locale::En => format!(
+                "Runway heading «{ctx}» invalid — use 001–360 (3 digits); calculation uses 0°."
+            ),
+        },
+        "RUNWAY_HEADING_AMBIGUOUS" => match locale {
+            Locale::Es => format!(
+                "Rumbo «{ctx}» ambiguo — use 3 dígitos (p. ej. 019, no 19); cálculo con 0°."
+            ),
+            Locale::En => format!(
+                "Heading «{ctx}» ambiguous — use 3 digits (e.g. 019, not 19); calculation uses 0°."
+            ),
+        },
+        "TAILWIND" => match locale {
+            Locale::Es => format!("Cola {a1} kt."),
+            Locale::En => format!("Tailwind {a1} kt."),
+        },
+        "TAILWIND_CHART_LIMIT" => {
+            let max_kt = w.args.first().map(String::as_str).unwrap_or("");
+            let tw_kt = w.args.get(1).map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => {
+                    format!("Cola {tw_kt} kt fuera de carta (máx {max_kt} kt); sin extrapolar.")
+                }
+                Locale::En => format!(
+                    "Tailwind {tw_kt} kt exceeds chart (max {max_kt} kt); not extrapolated."
+                ),
+            }
+        }
+        "HEADWIND_CHART_LIMIT" => {
+            let max_kt = w.args.first().map(String::as_str).unwrap_or("");
+            let hw_kt = w.args.get(1).map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!(
+                    "Viento de frente {hw_kt} kt fuera de carta (máx {max_kt} kt); sin extrapolar."
+                ),
+                Locale::En => format!(
+                    "Headwind {hw_kt} kt exceeds chart (max {max_kt} kt); not extrapolated."
+                ),
+            }
+        }
+        other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod i18n_display_tests {
+    use super::*;
+    use da20_core::types::FlightInputs;
+    use da20_core::types::WindComponents;
+    use da20_core::wind::wind_chart_panel_needs_crosswind_note;
+
+    #[test]
+    fn html_lang_follows_locale() {
+        assert_eq!(Locale::Es.html_lang(), "es");
+        assert_eq!(Locale::En.html_lang(), "en");
+    }
+
+    #[test]
+    fn crosswind_line_hidden_when_near_zero() {
+        assert!(format_crosswind_component(Locale::Es, 0.0).is_empty());
+        assert!(format_crosswind_component(Locale::En, 0.04).is_empty());
+    }
+
+    #[test]
+    fn along_runway_line_hidden_when_no_along_component() {
+        let comp = WindComponents {
+            headwind_kt: 0.0,
+            crosswind_kt: 8.0,
+            along_runway_headwind_kt: 0.0,
+        };
+        assert!(format_along_runway_component(Locale::Es, &comp).is_none());
+    }
+
+    #[test]
+    fn tailwind_chart_limit_message_includes_speed_and_max() {
+        let w = da20_core::types::CalculationWarning::with_args(
+            "TAILWIND_CHART_LIMIT",
+            vec!["5.0".into(), "6.0".into()],
+        );
+        assert_eq!(
+            warn_text(Locale::Es, &w),
+            "Cola 6.0 kt fuera de carta (máx 5.0 kt); sin extrapolar."
+        );
+        assert_eq!(
+            warn_text(Locale::En, &w),
+            "Tailwind 6.0 kt exceeds chart (max 5.0 kt); not extrapolated."
+        );
+    }
+
+    #[test]
+    fn chart_clamp_warning_plain_bilingual_text() {
+        let w = da20_core::types::CalculationWarning::with_args(
+            "CHART_CLAMP_LOW",
+            vec!["Fig 5.4 headwind panel".into(), "206".into(), "300".into()],
+        );
+        assert_eq!(
+            warn_text(Locale::En, &w),
+            "Below AFM chart range (206 m < 300 m min.): chart minimum used, conservative result"
+        );
+        assert!(warn_text(Locale::Es, &w).contains("206 m < 300 m"));
+    }
+
+    #[test]
+    fn takeoff_strip_pa_trace_label_es_en() {
+        assert_eq!(
+            format_takeoff_strip_pa_trace_label(Locale::Es, 2500.0),
+            "AP 2500 ft"
+        );
+        assert_eq!(
+            format_takeoff_strip_pa_trace_label(Locale::En, 2500.0),
+            "PA 2500 ft"
+        );
+    }
+
+    #[test]
+    fn pressure_altitude_input_label_es_en_distinct() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.pressure_altitude_ft, "Altitud de presión (ft)");
+        assert_eq!(en.pressure_altitude_ft, "Pressure altitude (ft)");
+    }
+
+    #[test]
+    fn typed_near_pure_crosswind_triggers_strip_note() {
+        let inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 280.0,
+            wind_speed_kt: 10.0,
+            ..Default::default()
+        };
+        assert!(wind_chart_panel_needs_crosswind_note(&inputs));
+    }
+
+    #[test]
+    fn climb_flap_toggle_placard_labels_same_es_en_three_options() {
+        const TO: &str = "Flaps T/O";
+        const UP: &str = "Flaps UP/CRUISE";
+        const LDG: &str = "Flaps LDG - Balked Landing";
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.climb_flaps_to, TO);
+        assert_eq!(es.climb_flaps_up, UP);
+        assert_eq!(es.climb_flaps_ldg, LDG);
+        assert_eq!(en.climb_flaps_to, TO);
+        assert_eq!(en.climb_flaps_up, UP);
+        assert_eq!(en.climb_flaps_ldg, LDG);
+        assert_ne!(TO, UP);
+        assert_ne!(UP, LDG);
+    }
+}

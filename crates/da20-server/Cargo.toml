@@ -1,0 +1,23 @@
+[package]
+name = "da20-server"
+description = "Axum server for DA20-C1 performance planner (embedded WASM UI)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "da20-performance"
+path = "src/main.rs"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "set-header"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+mime_guess = "2"
+rust-embed = { version = "8", features = ["mime-guess"] }
+
+[build-dependencies]
+# UI artifacts must exist at compile time for embed; CI builds wasm first.

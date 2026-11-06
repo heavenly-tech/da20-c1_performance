@@ -1,0 +1,123 @@
+{
+  "meta": {
+    "afm_document_number": "SYNTHETIC-NOT-AFM",
+    "afm_revision": "SYNTHETIC-0",
+    "afm_date": "1970-01-01",
+    "data_status": "synthetic_fixture",
+    "afm_official_url": "TODO: Diamond Aircraft official AFM download URL",
+    "amm_official_url": "TODO: Diamond Aircraft official AMM download URL",
+    "notes": "SYNTHETIC — NOT FOR FLIGHT USE. Arbitrary numbers for unit tests and UI development only."
+  },
+  "equivalent_altitude": {
+    "citation": {
+      "figure_or_table": "Figure 5.2",
+      "page": null,
+      "afm_revision": "SYNTHETIC-0",
+      "notes": "SYNTHETIC grid"
+    },
+    "grid": {
+      "pressure_altitude_ft": [0, 2000, 4000],
+      "rows": [
+        { "oat_c": 0, "equivalent_altitude_ft": [0, 1800, 3600] },
+        { "oat_c": 20, "equivalent_altitude_ft": [400, 2200, 4000] },
+        { "oat_c": 40, "equivalent_altitude_ft": [800, 2600, 4400] }
+      ]
+    }
+  },
+  "takeoff": {
+    "citation": {
+      "figure_or_table": "Figure 5.4",
+      "page": null,
+      "afm_revision": "SYNTHETIC-0"
+    },
+    "weight_lb": 1764,
+    "charts": [
+      {
+        "pressure_altitude_ft": 2000,
+        "temperature_c": [0, 20, 40],
+        "ground_roll_ft": [900, 1000, 1100],
+        "distance_50ft_ft": [1500, 1650, 1800]
+      },
+      {
+        "pressure_altitude_ft": 4000,
+        "temperature_c": [0, 20, 40],
+        "ground_roll_ft": [1000, 1120, 1240],
+        "distance_50ft_ft": [1650, 1820, 1990]
+      }
+    ]
+  },
+  "climb": {
+    "citations": {
+      "figure_5_5": { "figure_or_table": "Figure 5.5", "page": null, "afm_revision": "SYNTHETIC-0" },
+      "figure_5_6": { "figure_or_table": "Figure 5.6", "page": null, "afm_revision": "SYNTHETIC-0" },
+      "figure_5_8": { "figure_or_table": "Figure 5.8", "page": null, "afm_revision": "SYNTHETIC-0" }
+    },
+    "segments": [
+      {
+        "figure": "5.5",
+        "equivalent_altitude_ft": [0, 4000, 8000],
+        "rate_of_climb_fpm": [900, 700, 500]
+      },
+      {
+        "figure": "5.8",
+        "equivalent_altitude_ft": [0, 4000, 8000],
+        "time_min": [0, 10, 22],
+        "fuel_us_gal": [0, 1.2, 2.8],
+        "distance_nm": [0, 18, 40]
+      }
+    ]
+  },
+  "cruise": {
+    "citation": {
+      "figure_or_table": "Table 3",
+      "page": null,
+      "afm_revision": "SYNTHETIC-0"
+    },
+    "table": {
+      "pressure_altitude_ft": [2000, 6500],
+      "rpm": [2400, 2600],
+      "rows": [
+        {
+          "oat_c": 20,
+          "tas_kt": [110, 118, 112, 120],
+          "fuel_flow_us_gal_h": [4.5, 5.0, 4.8, 5.2]
+        }
+      ]
+    }
+  },
+  "landing": {
+    "citation": {
+      "figure_or_table": "Table 4",
+      "page": null,
+      "afm_revision": "SYNTHETIC-0"
+    },
+    "table": {
+      "pressure_altitude_ft": [2000, 4000],
+      "rows": [
+        {
+          "oat_c": 20,
+          "ground_roll_ft": [700, 750],
+          "distance_50ft_ft": [1200, 1280]
+        }
+      ]
+    }
+  },
+  "wind": {
+    "citation": {
+      "figure_or_table": "Figure 5.3",
+      "page": null,
+      "afm_revision": "SYNTHETIC-0"
+    },
+    "correction_model": {
+      "kind": "component_table",
+      "grid": {
+        "headwind_component_kt": [-10, 0, 10],
+        "correction_ft": [200, 0, -150]
+      }
+    }
+  },
+  "validation": {
+    "tolerances": {},
+    "worked_examples": []
+  }
+}
