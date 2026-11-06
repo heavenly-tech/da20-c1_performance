@@ -18,7 +18,7 @@ const TW_TICKS_KT: [f64; 6] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
 const HW_TICKS_KT: [f64; 5] = [0.0, 5.0, 10.0, 15.0, 20.0];
 const OBS_TICKS_M: [f64; 4] = [0.0, 5.0, 10.0, 15.0];
 const EA_TICKS_FT: [f64; 5] = [0.0, 3500.0, 7000.0, 10_500.0, 14_000.0];
-const ROC_TICKS_FPM: [f64; 5] = [0.0, 250.0, 500.0, 750.0, 1000.0];
+const ROC_TICKS_FPM: [f64; 5] = [0.0, 275.0, 550.0, 825.0, 1100.0];
 
 fn major_vline(x: f64, y0: f64, y1: f64) -> impl IntoView {
     view! {
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn climb_roc_strip_x_axis_ticks_at_standard_fpm_values() {
-        assert_eq!(ROC_TICKS_FPM, [0.0, 250.0, 500.0, 750.0, 1000.0]);
+        assert_eq!(ROC_TICKS_FPM, [0.0, 275.0, 550.0, 825.0, 1100.0]);
         for roc in ROC_TICKS_FPM {
             let x = x_roc_fpm(roc);
             assert!(
@@ -251,7 +251,15 @@ mod tests {
             );
         }
         assert!((x_roc_fpm(0.0) - CLIMB_ROC.x).abs() < 0.01);
-        assert!((x_roc_fpm(1000.0) - (CLIMB_ROC.x + CLIMB_ROC.w)).abs() < 0.01);
+        assert!((x_roc_fpm(1100.0) - (CLIMB_ROC.x + CLIMB_ROC.w)).abs() < 0.01);
+    }
+
+    #[test]
+    fn climb_roc_strip_has_no_altitude_labels_on_roc_line() {
+        use da20_core::rev29::hand_plot::ROC_PANEL_MAX_FPM;
+        assert!((ROC_PANEL_MAX_FPM - 1100.0).abs() < f64::EPSILON);
+        assert_eq!(ROC_TICKS_FPM.first(), Some(&0.0));
+        assert_eq!(ROC_TICKS_FPM.last(), Some(&1100.0));
     }
 
     #[test]

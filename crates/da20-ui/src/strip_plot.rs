@@ -565,24 +565,6 @@ fn render_climb_strip(
         {climb_strip_major_grid()}
         {eq_paths.collect_view()}
         <polyline points=roc_pts class="chart-stroke-line"/>
-        {guide_line_label(
-            x_roc_fpm(roc_pl.points.first().map(|(_, r)| *r).unwrap_or(0.0)),
-            y_ea_ft(0.0),
-            "0 ft".to_string(),
-            LabelAnchor::End,
-        )}
-        {guide_line_label(
-            x_roc_fpm(
-                roc_pl
-                    .points
-                    .last()
-                    .map(|(_, r)| *r)
-                    .unwrap_or(0.0),
-            ),
-            y_ea_ft(14_000.0),
-            "14000 ft".to_string(),
-            LabelAnchor::Start,
-        )}
         {strip_input_cursor(oat_x)}
         {path.as_ref().and_then(|p| p.points.last().copied()).map(|(roc_x, _)| view! {
             {strip_input_cursor(roc_x)}

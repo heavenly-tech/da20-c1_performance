@@ -20,8 +20,10 @@ jobs:
       - name: cache trunk
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/trunk
-          key: trunk-${{ runner.os }}-v1
+          path: |
+            ~/.cargo/bin/trunk
+            ~/.cache/trunk
+          key: trunk-${{ runner.os }}-v2
       - name: fmt
         run: cargo fmt --all -- --check
       - name: wasm-bindgen-cli pin matches Cargo.lock
@@ -36,7 +38,16 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
       - name: wasm build
         working-directory: crates/da20-ui
-        run: trunk build --release
+        run: |
+          set -eu
+          for attempt in 1 2 3; do
+            if trunk build --release; then
+              exit 0
+            fi
+            echo "trunk build failed (attempt ${attempt}/3), retrying in $((attempt * 20))s..."
+            sleep $((attempt * 20))
+          done
+          exit 1
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: test
@@ -46,6 +57,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - name: wasm-bindgen-cli pin matches Cargo.lock

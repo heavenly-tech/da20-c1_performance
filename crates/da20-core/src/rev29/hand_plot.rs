@@ -170,14 +170,17 @@ pub fn ea_ft_from_strip_y(y: f64) -> f64 {
     ea_min + t * (ea_max - ea_min)
 }
 
-/// ROC panel horizontal axis: ROC (fpm) → strip x (0–1000 fpm).
+/// ROC panel horizontal axis span (AFM Fig 5.5/5.6/5.8).
+pub const ROC_PANEL_MAX_FPM: f64 = 1100.0;
+
+/// ROC panel horizontal axis: ROC (fpm) → strip x (0–1100 fpm).
 pub fn x_roc_fpm(roc: f64) -> f64 {
-    CLIMB_ROC.x + (roc.clamp(0.0, 1000.0) / 1000.0) * CLIMB_ROC.w
+    CLIMB_ROC.x + (roc.clamp(0.0, ROC_PANEL_MAX_FPM) / ROC_PANEL_MAX_FPM) * CLIMB_ROC.w
 }
 
 /// ROC (fpm) read on the ROC panel x-axis at strip x.
 pub fn roc_fpm_from_strip_x(x: f64) -> f64 {
-    ((x - CLIMB_ROC.x) / CLIMB_ROC.w * 1000.0).clamp(0.0, 1000.0)
+    ((x - CLIMB_ROC.x) / CLIMB_ROC.w * ROC_PANEL_MAX_FPM).clamp(0.0, ROC_PANEL_MAX_FPM)
 }
 
 /// Y coordinate of the ROC panel x-axis (ROC = 0 baseline at panel bottom).
@@ -816,6 +819,17 @@ mod tests {
         let data = Rev29File::production();
         let (_, _, w) = wind_panel_tw_m(&data, 400.0, 8.0);
         assert!(w.iter().any(|x| x.code == "TAILWIND_CHART_LIMIT"));
+    }
+
+    #[test]
+    fn tailwind_panel_max_kt_on_chart_no_limit_warning() {
+        use crate::rev29::engine::TAILWIND_PANEL_MAX_KT;
+        let data = Rev29File::production();
+        let (_, _, w) = wind_panel_tw_m(&data, 400.0, TAILWIND_PANEL_MAX_KT);
+        assert!(
+            !w.iter().any(|x| x.code == "TAILWIND_CHART_LIMIT"),
+            "5 kt is on the Fig 5.4 TW sub-panel scale"
+        );
     }
 
     #[test]

@@ -259,21 +259,7 @@ fn polyline_guide_label(
     y_max: f64,
 ) -> impl IntoView {
     match kind {
-        ChartKind::Climb => {
-            let (x0, y0) = pl.points.first().copied().unwrap_or((x_min, y_min));
-            let (x1, y1) = pl.points.last().copied().unwrap_or((x_max, y_min));
-            let (sx0, sy0) =
-                map_to_svg(x0, y0, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
-            let (sx1, sy1) =
-                map_to_svg(x1, y1, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0);
-            view! {
-                <>
-                    {guide_line_label(sx0 - 4.0, sy0, "0 ft".to_string(), LabelAnchor::End)}
-                    {guide_line_label(sx1 + 4.0, sy1, "14000 ft".to_string(), LabelAnchor::Start)}
-                </>
-            }
-            .into_any()
-        }
+        ChartKind::Climb => view! { <g></g> }.into_any(),
         _ => {
             let (x, y, text) = match kind {
                 ChartKind::Takeoff => {
@@ -403,7 +389,7 @@ fn chart_spec(
             0.0,
             14_000.0,
             0.0,
-            1000.0,
+            1100.0,
             None,
         ),
         ChartKind::Landing => {

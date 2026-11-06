@@ -192,6 +192,9 @@ pub fn wind_panel_hw_m(
     )
 }
 
+/// Fig 5.4 tailwind sub-panel tick scale (0–5 kt); AFM tabulated speeds may stop below this.
+pub const TAILWIND_PANEL_MAX_KT: f64 = 5.0;
+
 pub fn wind_panel_tw_m(
     data: &Rev29File,
     base_distance_m: f64,
@@ -204,7 +207,7 @@ pub fn wind_panel_tw_m(
         base_distance_m,
         tailwind_kt,
         "Fig 5.4 tailwind panel",
-        data.tw_kt.value.last().copied().unwrap_or(5.0),
+        TAILWIND_PANEL_MAX_KT,
         "TAILWIND_CHART_LIMIT",
     )
 }

@@ -708,20 +708,30 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             Locale::Es => format!("Cola {a1} kt."),
             Locale::En => format!("Tailwind {a1} kt."),
         },
-        "TAILWIND_CHART_LIMIT" => match locale {
-            Locale::Es => format!("Cola {a2} kt fuera de carta (máx {a1} kt); sin extrapolar."),
-            Locale::En => {
-                format!("Tailwind {a2} kt exceeds chart (max {a1} kt); not extrapolated.")
+        "TAILWIND_CHART_LIMIT" => {
+            let max_kt = w.args.first().map(String::as_str).unwrap_or("");
+            let tw_kt = w.args.get(1).map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => {
+                    format!("Cola {tw_kt} kt fuera de carta (máx {max_kt} kt); sin extrapolar.")
+                }
+                Locale::En => format!(
+                    "Tailwind {tw_kt} kt exceeds chart (max {max_kt} kt); not extrapolated."
+                ),
             }
-        },
-        "HEADWIND_CHART_LIMIT" => match locale {
-            Locale::Es => {
-                format!("Viento de frente {a2} kt fuera de carta (máx {a1} kt); sin extrapolar.")
+        }
+        "HEADWIND_CHART_LIMIT" => {
+            let max_kt = w.args.first().map(String::as_str).unwrap_or("");
+            let hw_kt = w.args.get(1).map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!(
+                    "Viento de frente {hw_kt} kt fuera de carta (máx {max_kt} kt); sin extrapolar."
+                ),
+                Locale::En => format!(
+                    "Headwind {hw_kt} kt exceeds chart (max {max_kt} kt); not extrapolated."
+                ),
             }
-            Locale::En => {
-                format!("Headwind {a2} kt exceeds chart (max {a1} kt); not extrapolated.")
-            }
-        },
+        }
         other => other.to_string(),
     }
 }
@@ -753,6 +763,22 @@ mod i18n_display_tests {
             along_runway_headwind_kt: 0.0,
         };
         assert!(format_along_runway_component(Locale::Es, &comp).is_none());
+    }
+
+    #[test]
+    fn tailwind_chart_limit_message_includes_speed_and_max() {
+        let w = da20_core::types::CalculationWarning::with_args(
+            "TAILWIND_CHART_LIMIT",
+            vec!["5.0".into(), "6.0".into()],
+        );
+        assert_eq!(
+            warn_text(Locale::Es, &w),
+            "Cola 6.0 kt fuera de carta (máx 5.0 kt); sin extrapolar."
+        );
+        assert_eq!(
+            warn_text(Locale::En, &w),
+            "Tailwind 6.0 kt exceeds chart (max 5.0 kt); not extrapolated."
+        );
     }
 
     #[test]
