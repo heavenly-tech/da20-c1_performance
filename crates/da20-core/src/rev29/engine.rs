@@ -385,6 +385,10 @@ pub fn lb_to_kg(lb: f64) -> f64 {
     lb * 0.45359237
 }
 
+pub fn kg_to_lb(kg: f64) -> f64 {
+    kg / 0.45359237
+}
+
 pub fn m_to_ft(m: f64) -> f64 {
     m * M_TO_FT
 }

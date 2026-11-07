@@ -7,17 +7,19 @@ use leptos::prelude::*;
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
     afm_lookup_tag_label, copy, format_along_runway_component, format_crosswind_component,
-    format_obstacle_over, format_takeoff_conservative_estimate,
-    format_takeoff_over_obstacle_result, Locale,
+    format_obstacle_over, format_takeoff_conservative_estimate, Locale,
 };
 use crate::inputs::{
-    AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, ObstacleField,
-    SharedAirfieldInputs, SharedWheelFairingToggle,
+    AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, SharedAirfieldInputs,
+    SharedWheelFairingToggle,
 };
 use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, LandingTableView};
 use crate::phase_readouts::PhaseReadoutsPanel;
+use crate::prefs::TakeoffPrefs;
 use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
+use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
+use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
 use da20_core::types::ChartPhase;
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
@@ -38,16 +40,17 @@ pub fn PhaseShell(
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<da20_core::types::FlightInputs>,
     store: RwSignal<ReadingsStore>,
+    takeoff_prefs: RwSignal<TakeoffPrefs>,
 ) -> impl IntoView {
     view! {
         {move || match phase.get() {
             Phase::Takeoff => view! {
-                <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff>
-                    <ObstacleField locale=locale inputs=inputs/>
-                    <NumField label=move || copy(locale.get()).weight.to_string()
-                        get=move || inputs.get().weight_lb
-                        set=move |v| inputs.update(|i| i.weight_lb = v)/>
-                </PhaseGrid>
+                <>
+                    <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff takeoff_prefs=takeoff_prefs>
+                        <TakeoffNumericBlock locale=locale inputs=inputs prefs=takeoff_prefs/>
+                    </PhaseGrid>
+                    <TakeoffSweepPanel locale=locale data=data inputs=inputs prefs=takeoff_prefs/>
+                </>
             }.into_any(),
             Phase::Climb => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Climb>
@@ -99,6 +102,7 @@ fn PhaseGrid(
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<da20_core::types::FlightInputs>,
     store: RwSignal<ReadingsStore>,
+    #[prop(optional)] takeoff_prefs: Option<RwSignal<TakeoffPrefs>>,
     #[prop(default = true)] airfield: bool,
     children: Children,
 ) -> impl IntoView {
@@ -130,7 +134,7 @@ fn PhaseGrid(
                 <div class="card chart-card">
                     <h3>{phase_title(locale, phase)}</h3>
                     {phase_chart(phase, locale, data, inputs, store, overlay_ids)}
-                    {move || phase_results(locale.get(), phase, bundle.get(), inputs.get())}
+                    {move || phase_results(locale.get(), phase, bundle.get(), inputs.get(), takeoff_prefs.map(|p| p.get()))}
                     <PhaseReadoutsPanel
                         locale=locale
                         phase=phase
@@ -255,6 +259,7 @@ fn phase_results(
     phase: Phase,
     b: SavedBundle,
     inputs: da20_core::types::FlightInputs,
+    takeoff_prefs: Option<TakeoffPrefs>,
 ) -> impl IntoView {
     let c = copy(locale);
     match phase {
@@ -264,25 +269,36 @@ fn phase_results(
             view! {
             {if runway_ok {
                 match &b.takeoff {
-                Some(t) => view! {
+                Some(t) => {
+                    let rounding = takeoff_prefs
+                        .map(|p| p.distance_rounding)
+                        .unwrap_or(TakeoffDistanceRounding::Raw);
+                    let dist = apply_takeoff_distance_rounding(t, rounding);
+                    let (gr_line, to_line) = format_takeoff_distances_pair(
+                        locale,
+                        dist.ground_roll_m,
+                        dist.ground_roll_ft,
+                        dist.over_obstacle_m,
+                        dist.over_obstacle_ft,
+                    );
+                    view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
                         <p class="chip">{afm_lookup_tag_label(locale, t.afm_lookup_tag)}</p>
-                        <p class="mono">{c.takeoff_ground_roll_at_chart_zero}" "{t.ground_roll_ft.round() as i64}" ft"</p>
-                        <p class="mono">{format_takeoff_over_obstacle_result(
-                            locale,
-                            t.distance_over_obstacle_raw_ft,
-                            t.distance_over_obstacle_raw_m,
-                        )}</p>
-                        <p class="mono">{format_takeoff_conservative_estimate(
-                            locale,
-                            t.distance_over_obstacle_conservative_ft,
-                            t.distance_over_obstacle_conservative_m,
-                        )}</p>
+                        <p class="mono">{gr_line}</p>
+                        <p class="mono">{to_line}</p>
+                        {(rounding == TakeoffDistanceRounding::Raw).then(|| view! {
+                            <p class="mono">{format_takeoff_conservative_estimate(
+                                locale,
+                                t.distance_over_obstacle_conservative_ft,
+                                t.distance_over_obstacle_conservative_m,
+                            )}</p>
+                        })}
                         <p class="lab">{format_obstacle_over(locale, inputs.obstacle_height_m)}</p>
                         <WarningsList locale=locale warnings=t.warnings.clone()/>
                     </div>
-                }.into_any(),
+                    }.into_any()
+                },
                 None => view! { <p class="error">"—"</p> }.into_any(),
             }} else {
                 view! { <p class="lab results-muted">{c.results_runway_required}</p> }.into_any()
