@@ -11,9 +11,11 @@ mod interactive_chart;
 mod palette;
 mod phase_readouts;
 mod phases;
+mod prefs;
 mod routing;
 mod storage;
 mod strip_plot;
+mod takeoff_panel;
 mod theme;
 
 use app::App;

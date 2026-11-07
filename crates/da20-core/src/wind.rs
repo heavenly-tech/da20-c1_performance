@@ -70,6 +70,27 @@ pub fn headwind_tailwind_kt(components: &WindComponents) -> (f64, f64) {
 const COS_EPS: f64 = 0.05;
 
 /// Keep wind direction fixed; solve speed for a target along-runway headwind (strip/chart drag).
+/// Signed along-runway component (kt): positive headwind, negative tailwind.
+pub fn signed_along_runway_kt(inputs: &FlightInputs) -> Option<f64> {
+    let rwy = runway_heading_deg(&inputs.runway)?;
+    Some(wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy).along_runway_headwind_kt)
+}
+
+/// Update `FlightInputs` wind speed (keeping direction when possible) for a signed along-runway value.
+pub fn apply_signed_along_runway_wind(inputs: &mut FlightInputs, signed_kt: f64) {
+    let Some(rwy) = runway_heading_deg(&inputs.runway) else {
+        return;
+    };
+    let (dir, speed, clamp) = if signed_kt >= 0.0 {
+        back_solve_wind_for_headwind(inputs.wind_dir_deg, rwy, signed_kt)
+    } else {
+        back_solve_wind_for_tailwind(inputs.wind_dir_deg, rwy, (-signed_kt).max(0.0))
+    };
+    inputs.wind_dir_deg = dir;
+    inputs.wind_speed_kt = speed;
+    inputs.wind_strip_crosswind_clamped = clamp;
+}
+
 pub fn back_solve_wind_for_headwind(
     wind_dir_deg: f64,
     runway_heading_deg: f64,
@@ -272,5 +293,33 @@ mod tests {
         assert_eq!(d, dir);
         assert!(clamp);
         assert!((s - 6.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn signed_along_runway_negative_is_tailwind() {
+        let inputs = FlightInputs {
+            runway: "360".into(),
+            wind_dir_deg: 180.0,
+            wind_speed_kt: 5.0,
+            ..Default::default()
+        };
+        let signed = signed_along_runway_kt(&inputs).unwrap();
+        assert!(signed < 0.0);
+    }
+
+    #[test]
+    fn apply_signed_along_runway_round_trip() {
+        let mut inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 200.0,
+            wind_speed_kt: 8.0,
+            ..Default::default()
+        };
+        let before = signed_along_runway_kt(&inputs).unwrap();
+        apply_signed_along_runway_wind(&mut inputs, 3.0);
+        let after = signed_along_runway_kt(&inputs).unwrap();
+        assert!((after - 3.0).abs() < 0.15);
+        apply_signed_along_runway_wind(&mut inputs, before);
+        assert!((signed_along_runway_kt(&inputs).unwrap() - before).abs() < 0.15);
     }
 }
