@@ -5,6 +5,7 @@ use crate::components::{Disclaimer, Nav};
 use crate::i18n::Locale;
 use crate::palette::{apply_palette, PaletteChoice, PaletteThemeEffect};
 use crate::phases::{Phase, PhaseShell};
+use crate::prefs::TakeoffPrefs;
 use crate::routing::{
     read_phase_from_location, redirect_legacy_manual_hash, write_phase_to_location,
 };
@@ -22,6 +23,7 @@ pub fn App() -> impl IntoView {
     let data = RwSignal::new(PerformanceData::production());
     let inputs = RwSignal::new(da20_core::types::FlightInputs::default());
     let store = RwSignal::new(ReadingsStore::load());
+    let takeoff_prefs = RwSignal::new(TakeoffPrefs::load());
 
     crate::theme::apply_theme(theme.get());
     apply_palette(&palette.get(), theme.get());
@@ -65,7 +67,7 @@ pub fn App() -> impl IntoView {
                 <Nav phase=phase locale=locale theme=theme palette=palette/>
             </header>
             <main class="main">
-                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store/>
+                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store takeoff_prefs=takeoff_prefs/>
             </main>
             <footer class="footer">
                 <p>

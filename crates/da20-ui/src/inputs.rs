@@ -1,6 +1,5 @@
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
 use da20_core::cruise::isa_temp_c_at_pa;
-use da20_core::types::defaults;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
     runway_heading_deg, runway_heading_status, wind_chart_panel_needs_crosswind_note,
@@ -140,38 +139,6 @@ pub fn SharedWheelFairingToggle(
                             {c.wheel_fairings_installed_no}
                         </button>
                     </div>
-                </div>
-            }
-        }}
-    }
-}
-
-#[component]
-pub fn ObstacleField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> impl IntoView {
-    view! {
-        {move || {
-            let c = copy(locale.get());
-            view! {
-                <NumField
-                    label=move || format!("{} (0–15)", c.obstacle_m)
-                    get=move || inputs.get().obstacle_height_m
-                    set=move |v| inputs.update(|i| {
-                        i.obstacle_height_m = v.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
-                    })
-                />
-                <div class="toggle-row">
-                    <button type="button" class="btn g"
-                        on:click=move |_| inputs.update(|i| {
-                            i.obstacle_height_m = defaults::OBSTACLE_PRESET_AFM_EXAMPLE_M;
-                        })>
-                        {c.obstacle_preset_afm}
-                    </button>
-                    <button type="button" class="btn g"
-                        on:click=move |_| inputs.update(|i| {
-                            i.obstacle_height_m = defaults::OBSTACLE_HEIGHT_DEFAULT_M;
-                        })>
-                        {c.obstacle_preset_screen}
-                    </button>
                 </div>
             }
         }}
