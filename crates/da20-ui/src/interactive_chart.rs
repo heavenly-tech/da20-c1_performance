@@ -2,6 +2,7 @@
 
 use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
 use da20_core::climb::compute_climb;
+use da20_core::cruise::cruise_cell_tag_for_column;
 use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
     equivalent_altitude_curves, landing_table_curves, map_to_svg, sample_landing_ft,
@@ -12,7 +13,7 @@ use da20_core::rev29::ea_inverse::pressure_altitude_for_equivalent_altitude;
 use da20_core::rev29::engine::{equivalent_altitude_ft, lb_to_kg};
 use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points;
 use da20_core::takeoff::compute_takeoff;
-use da20_core::types::{ChartPhase, FlightInputs};
+use da20_core::types::{AfmLookupTag, ChartPhase, FlightInputs};
 use da20_core::wind::{compute_wind, runway_heading_deg};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
@@ -22,7 +23,8 @@ use crate::chart_axes::{interactive_chart_axis_ticks, interactive_chart_major_gr
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
-    copy, format_climb_readout_interactive_pair, format_takeoff_strip_pa_trace_label, Locale,
+    afm_lookup_tag_label, copy, format_climb_readout_interactive_pair,
+    format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::inputs::set_chart_pa;
 
@@ -421,6 +423,7 @@ fn readout_pair(
                 roc_u,
                 Some(roc_u),
                 inputs.wheel_fairings_installed,
+                AfmLookupTag::Interpolated,
             );
             format!("{:.0} ft EA · {chart_line}", ea.round())
         }
@@ -445,6 +448,7 @@ fn readout_pair(
                     cl.rate_of_climb_fpm,
                     cl.rate_of_climb_chart_fpm,
                     inputs.wheel_fairings_installed,
+                    cl.afm_lookup_tag,
                 );
                 core
             })
@@ -587,22 +591,31 @@ fn update_cursor(ev: &web_sys::PointerEvent, cursor_x: RwSignal<f64>, cursor_y: 
 
 #[component]
 pub fn CruiseTableView(
+    locale: RwSignal<Locale>,
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
 ) -> impl IntoView {
     view! {
         <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table cruise-table-full">
                 <thead>
                     <tr>
-                        <th>"PA ft"</th>
-                        <th>"RPM"</th>
-                        <th>"TAS"</th>
-                        <th>"GPH"</th>
+                        <th rowspan=2>"PA ft"</th>
+                        <th rowspan=2>"RPM"</th>
+                        <th colspan=3>{move || copy(locale.get()).cruise_tbl_group_disa_m20}</th>
+                        <th colspan=3>{move || copy(locale.get()).cruise_tbl_group_isa}</th>
+                        <th colspan=3>{move || copy(locale.get()).cruise_tbl_group_disa_p10}</th>
+                    </tr>
+                    <tr>
+                        {move || {
+                            let c = copy(locale.get());
+                            [c.cruise_tbl_pct_bhp, c.cruise_tbl_ktas, c.cruise_tbl_gph].into_iter().cycle().take(9).map(|h| view! { <th>{h}</th> }).collect_view()
+                        }}
                     </tr>
                 </thead>
                 <tbody>
                     {move || {
+                        let loc = locale.get();
                         let d = data.get();
                         let rows = &d.inner().cruise_table.value.rows;
                         let i = inputs.get();
@@ -611,12 +624,22 @@ pub fn CruiseTableView(
                             let rpm = r[1];
                             let highlight = (pa - i.cruise_pressure_alt_ft).abs() < 500.0
                                 && (rpm - i.cruise_rpm).abs() < 0.5;
+                            let tag_m20 = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, -20.0));
+                            let tag_isa = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, 0.0));
+                            let tag_p10 = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, 10.0));
                             view! {
                                 <tr class:row-hi=highlight>
                                     <td>{pa as i64}</td>
                                     <td>{rpm as i64}</td>
-                                    <td>{format!("{:.0}", r[6])}</td>
-                                    <td>{format!("{:.1}", r[7])}</td>
+                                    <td class="mono">{format!("{:.0}", r[2])}<br/><span class="cell-tag">{tag_m20}</span></td>
+                                    <td class="mono">{format!("{:.0}", r[3])}</td>
+                                    <td class="mono">{format!("{:.1}", r[4])}</td>
+                                    <td class="mono">{format!("{:.0}", r[5])}<br/><span class="cell-tag">{tag_isa}</span></td>
+                                    <td class="mono">{format!("{:.0}", r[6])}</td>
+                                    <td class="mono">{format!("{:.1}", r[7])}</td>
+                                    <td class="mono">{format!("{:.0}", r[8])}<br/><span class="cell-tag">{tag_p10}</span></td>
+                                    <td class="mono">{format!("{:.0}", r[9])}</td>
+                                    <td class="mono">{format!("{:.1}", r[10])}</td>
                                 </tr>
                             }
                         }).collect_view()

@@ -8,7 +8,7 @@ use da20_core::wind_format::format_wind;
 use leptos::prelude::*;
 
 use crate::i18n::{
-    copy, format_climb_readout_summary, format_cruise_readout_summary,
+    afm_lookup_tag_label, copy, format_climb_readout_summary, format_cruise_readout_summary,
     format_endurance_readout_summary, format_takeoff_conservative_estimate,
     format_takeoff_over_obstacle_result, Locale,
 };
@@ -212,8 +212,9 @@ pub fn readout_results_summary(
     match phase {
         Phase::Takeoff => {
             if let Some(t) = &r.takeoff {
+                let tag = afm_lookup_tag_label(locale, t.afm_lookup_tag);
                 format!(
-                    "{:.0} ft roll · {} · {}",
+                    "{:.0} ft roll · {} · {} · {}",
                     t.ground_roll_ft,
                     format_takeoff_over_obstacle_result(
                         locale,
@@ -225,6 +226,7 @@ pub fn readout_results_summary(
                         t.distance_over_obstacle_conservative_ft,
                         t.distance_over_obstacle_conservative_m,
                     ),
+                    tag
                 )
             } else {
                 c.results_unavailable.to_string()
@@ -239,6 +241,7 @@ pub fn readout_results_summary(
                     cl.rate_of_climb_fpm,
                     cl.rate_of_climb_chart_fpm,
                     r.inputs.wheel_fairings_installed,
+                    cl.afm_lookup_tag,
                 );
                 format!("{roc} · EA {:.0} ft", cl.equivalent_altitude_ft)
             })
@@ -253,6 +256,8 @@ pub fn readout_results_summary(
                     cr.tas_chart_kt,
                     r.inputs.wheel_fairings_installed,
                     cr.fuel_flow_us_gal_h,
+                    cr.percent_bhp,
+                    cr.afm_lookup_tag,
                 )
             })
             .unwrap_or_else(|| c.results_unavailable.to_string()),
@@ -269,6 +274,7 @@ pub fn readout_results_summary(
                     e.tas_chart_kt,
                     e.fuel_flow_us_gal_h,
                     r.inputs.wheel_fairings_installed,
+                    e.afm_lookup_tag,
                 )
             })
             .unwrap_or_else(|| c.results_unavailable.to_string()),
@@ -276,9 +282,10 @@ pub fn readout_results_summary(
             .landing
             .as_ref()
             .map(|l| {
+                let tag = afm_lookup_tag_label(locale, l.afm_lookup_tag);
                 format!(
-                    "{:.0} ft roll · 50 ft {:.0} ft",
-                    l.ground_roll_ft, l.distance_over_50ft_ft
+                    "{:.0} ft roll · 50 ft {:.0} ft · {}",
+                    l.ground_roll_ft, l.distance_over_50ft_ft, tag
                 )
             })
             .unwrap_or_else(|| c.results_unavailable.to_string()),

@@ -1,3 +1,4 @@
+use crate::afm_tag::climb_tag_from_warnings;
 use crate::altitude::effective_pressure_altitude_ft;
 use crate::data::PerformanceData;
 use crate::equivalent_altitude::equivalent_altitude_ft;
@@ -36,9 +37,11 @@ pub fn compute_climb(
     };
 
     warnings.push(CalculationWarning::code_only("DERIVED_ESTIMATE"));
+    let afm_lookup_tag = climb_tag_from_warnings(&warnings);
 
     Ok(ClimbResult {
         provenance: provenance_for(data.inner(), data.climb_roc_source()),
+        afm_lookup_tag,
         equivalent_altitude_ft: eq,
         rate_of_climb_chart_fpm: Some(roc_base),
         rate_of_climb_fpm: roc,

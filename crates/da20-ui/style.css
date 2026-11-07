@@ -487,6 +487,20 @@ body {
   font-weight: 600;
 }
 
+.data-table .cell-tag {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--mut);
+  text-transform: none;
+  margin-top: 2px;
+}
+
+.cruise-table-full th {
+  text-align: center;
+  vertical-align: middle;
+}
+
 .table-scroll {
   overflow-x: auto;
   margin-bottom: 12px;

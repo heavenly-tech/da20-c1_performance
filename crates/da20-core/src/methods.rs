@@ -53,8 +53,8 @@ pub fn all_methods() -> Vec<MethodEntry> {
             id: "cruise",
             title: "Cruise performance (Table 3)",
             afm_reference: "AFM pages 5-14 / 5-15, Table 3",
-            summary: "Exact row match on PA and RPM; OAT band selects dISA−20 / ISA / dISA+10 column group.",
-            interpolation: "Band selection by OAT−ISA at PA (no cross-band interpolation).",
+            summary: "ΔISA = OAT − ISA at PA. Interpolate %BHP, KTAS, and GPH in pressure altitude between published rows and in ΔISA between the three published temperature columns (−20 / 0 / +10) at each row. If RPM is between tabulated RPM levels, interpolate between those surfaces. Wheel fairing note: apply ~5% lower TAS after Table 3 lookup; GPH is not scaled.",
+            interpolation: "Trilinear-style: bilinear PA × ΔISA within each RPM band, then linear in RPM between neighboring tabulated RPM levels when RPM is not an AFM row.",
             limitations: CRUISE_TABLE3_GPH_NOTE,
         },
         MethodEntry {
@@ -74,4 +74,33 @@ pub fn all_methods() -> Vec<MethodEntry> {
             limitations: "Runway heading: three-digit magnetic 001–360 only (no designator shortcuts).",
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cruise_method_manual_no_exact_row_or_oat_band_claims() {
+        let cruise = all_methods()
+            .into_iter()
+            .find(|e| e.id == "cruise")
+            .expect("cruise method entry");
+        let joined = format!(
+            "{} {} {}",
+            cruise.summary, cruise.interpolation, cruise.limitations
+        );
+        assert!(
+            !joined.contains("Exact row match"),
+            "manual must not claim exact row match for Table 3"
+        );
+        assert!(
+            !joined.contains("OAT band"),
+            "manual must not describe band-snapping OAT selection"
+        );
+        assert!(
+            joined.contains("ΔISA") || joined.contains("dISA"),
+            "manual should describe ΔISA"
+        );
+    }
 }
