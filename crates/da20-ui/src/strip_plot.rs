@@ -91,8 +91,11 @@ fn strip_takeoff_pa_curve_guide(
         .collect::<Vec<_>>()
         .join(" ");
     let (cx, _cy) = cursor;
-    let panel_right = TAKEOFF_OAT.x + TAKEOFF_OAT.w;
-    let label_y = takeoff_pa_isoline_y_at_panel_right(inner, pa_ft);
+    let iso = takeoff_pa_curve_strip_points(inner, pa_ft);
+    let (edge_x, edge_y) = iso.last().copied().unwrap_or((
+        TAKEOFF_OAT.x + TAKEOFF_OAT.w,
+        takeoff_pa_isoline_y_at_panel_right(inner, pa_ft),
+    ));
     view! {
         <polyline
             points=pts
@@ -109,8 +112,8 @@ fn strip_takeoff_pa_curve_guide(
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
         {strip_pa_label_at_panel_edge(
-            panel_right,
-            label_y,
+            edge_x,
+            edge_y,
             label,
             LabelAnchor::End,
         )}
@@ -131,7 +134,11 @@ fn strip_climb_ea_cursor_with_pa_row(
         .collect::<Vec<_>>()
         .join(" ");
     let (cx, _cy) = cursor;
-    let label_y = climb_pa_isoline_y_at_panel_right(inner, pa_ft);
+    let iso = climb_fan_pa_curve_strip_points(inner, pa_ft);
+    let (edge_x, edge_y) = iso.last().copied().unwrap_or((
+        CLIMB_EQ.x + CLIMB_EQ.w,
+        climb_pa_isoline_y_at_panel_right(inner, pa_ft),
+    ));
     view! {
         <polyline
             points=pts
@@ -147,7 +154,7 @@ fn strip_climb_ea_cursor_with_pa_row(
             class="chart-stroke-guide-active"
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
-        {strip_pa_label_at_panel_edge(CLIMB_EQ.x + CLIMB_EQ.w, label_y, label, LabelAnchor::End)}
+        {strip_pa_label_at_panel_edge(edge_x, edge_y, label, LabelAnchor::End)}
     }
 }
 
@@ -165,7 +172,13 @@ fn strip_climb_pa_curve_guide_overlay(
         .collect::<Vec<_>>()
         .join(" ");
     let (cx, _cy) = cursor;
-    let label_y = climb_pa_isoline_y_at_panel_right(inner, pa_ft);
+    let (edge_x, edge_y) = climb_fan_pa_curve_strip_points(inner, pa_ft)
+        .last()
+        .copied()
+        .unwrap_or((
+            CLIMB_EQ.x + CLIMB_EQ.w,
+            climb_pa_isoline_y_at_panel_right(inner, pa_ft),
+        ));
     view! {
         <polyline
             points=pts
@@ -186,8 +199,8 @@ fn strip_climb_pa_curve_guide_overlay(
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
         <text
-            x=CLIMB_EQ.x + CLIMB_EQ.w
-            y=label_y - STRIP_PA_LABEL_ABOVE_DY
+            x=edge_x
+            y=edge_y - STRIP_PA_LABEL_ABOVE_DY
             fill=color
             font-size="9"
             text-anchor="end"
@@ -211,7 +224,13 @@ fn strip_takeoff_pa_curve_guide_overlay(
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
         .join(" ");
-    let label_y = takeoff_pa_isoline_y_at_panel_right(inner, pa_ft);
+    let (edge_x, edge_y) = takeoff_pa_curve_strip_points(inner, pa_ft)
+        .last()
+        .copied()
+        .unwrap_or((
+            TAKEOFF_OAT.x + TAKEOFF_OAT.w,
+            takeoff_pa_isoline_y_at_panel_right(inner, pa_ft),
+        ));
     view! {
         <polyline
             points=pts
@@ -222,8 +241,8 @@ fn strip_takeoff_pa_curve_guide_overlay(
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
         <text
-            x=TAKEOFF_OAT.x + TAKEOFF_OAT.w
-            y=label_y - STRIP_PA_LABEL_ABOVE_DY
+            x=edge_x
+            y=edge_y - STRIP_PA_LABEL_ABOVE_DY
             fill=color
             font-size="9"
             text-anchor="end"
@@ -281,7 +300,7 @@ pub fn StripHandPlot(
             <p class="hint">{move || copy(locale.get()).plot_hint}</p>
             <svg
                 class="plot-svg strip-svg"
-                viewBox="0 0 1110 560"
+                viewBox=format!("0 0 {STRIP_VIEWBOX_W} {STRIP_VIEWBOX_H}")
                 on:pointerdown=on_pointer_down
                 on:pointerup=on_pointer_up
                 on:pointerleave=move |_| {
@@ -903,7 +922,7 @@ fn lerp_axis(axis: &[f64], n: f64) -> f64 {
     axis[i] + (f - i as f64) * (axis[j] - axis[i])
 }
 
-const STRIP_VIEWBOX_W: f64 = 1110.0;
+const STRIP_VIEWBOX_W: f64 = 1320.0;
 const STRIP_VIEWBOX_H: f64 = 560.0;
 
 /// Map client coordinates to strip viewBox when the SVG uses default `meet` (same geometry as CTM⁻¹).
@@ -1068,15 +1087,14 @@ mod strip_drag_tests {
         let rect_w = 1400.0;
         let rect_h = 700.0;
         let sx = 300.0;
-        let sy = 280.0;
+        let sy = 80.0;
         let (cx, cy) = strip_viewbox_to_client_meet(sx, sy, 0.0, 0.0, rect_w, rect_h);
         let stretched_x = cx / rect_w * STRIP_VIEWBOX_W;
         let stretched_y = cy / rect_h * STRIP_VIEWBOX_H;
         assert!(
-            (stretched_x - sx).abs() > 0.5,
-            "old stretch mapping should mis-read X under horizontal letterboxing"
+            (stretched_x - sx).abs() > 0.5 || (stretched_y - sy).abs() > 0.5,
+            "stretch mapping should mis-read a point when the element aspect differs from the viewBox"
         );
-        assert!((stretched_y - sy).abs() < 1e-6);
         let (sx2, sy2) = client_to_strip_viewbox_meet(cx, cy, 0.0, 0.0, rect_w, rect_h);
         assert!((sx2 - sx).abs() < 1e-6 && (sy2 - sy).abs() < 1e-6);
     }
@@ -1084,8 +1102,8 @@ mod strip_drag_tests {
     #[test]
     fn pointer_to_viewbox_maps_element_center_when_aspect_matches() {
         let (sx, sy) = client_to_strip_viewbox_meet(200.0, 90.0, 100.0, 40.0, 200.0, 100.0);
-        assert!((sx - 555.0).abs() < 0.01);
-        assert!((sy - 280.0).abs() < 0.01);
+        assert!((sx - STRIP_VIEWBOX_W / 2.0).abs() < 0.01);
+        assert!((sy - STRIP_VIEWBOX_H / 2.0).abs() < 0.01);
     }
 
     #[test]

@@ -45,8 +45,9 @@ pub struct Panel {
 
 pub const TAKEOFF_OAT: Panel = Panel { x: 60.0, w: 420.0 };
 pub const TAKEOFF_WEIGHT: Panel = Panel { x: 510.0, w: 230.0 };
-/// Full wind panel (TW sub-panel + HW sub-panel); spans to the obstacle panel join.
-pub const TAKEOFF_WIND: Panel = Panel { x: 770.0, w: 180.0 };
+/// Full wind panel (TW sub-panel + HW sub-panel). Wide enough that a 5 kt
+/// tailwind correction reads as a slope (5:20 sub-panels, 80 px per 5 kt).
+pub const TAKEOFF_WIND: Panel = Panel { x: 770.0, w: 400.0 };
 /// Fig 5.4 tailwind sub-panel (0–5 kt); 0 kt reference on the right edge, away from weight panel.
 /// Width 5/25 of the wind panel (same 0–5 kt vs 0–20 kt scale as the AFM chart).
 pub const TAKEOFF_TW: Panel = Panel {
@@ -58,7 +59,10 @@ pub const TAKEOFF_HW: Panel = Panel {
     x: TAKEOFF_TW.x + TAKEOFF_TW.w,
     w: TAKEOFF_WIND.w - TAKEOFF_TW.w,
 };
-pub const TAKEOFF_OBS: Panel = Panel { x: 950.0, w: 110.0 };
+pub const TAKEOFF_OBS: Panel = Panel {
+    x: 1170.0,
+    w: 110.0,
+};
 
 pub const CLIMB_EQ: Panel = Panel { x: 60.0, w: 480.0 };
 pub const CLIMB_ROC: Panel = Panel { x: 560.0, w: 490.0 };
