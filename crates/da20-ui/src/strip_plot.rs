@@ -95,7 +95,7 @@ fn strip_takeoff_pa_curve_guide(
         <polyline
             points=pts
             fill="none"
-            class="chart-stroke-guide-active"
+            class="chart-stroke-pa-isoline"
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
         <line

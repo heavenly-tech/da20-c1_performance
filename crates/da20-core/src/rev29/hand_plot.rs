@@ -254,8 +254,14 @@ fn trace_weight_path_interp(
     pts
 }
 
-fn trace_headwind_guide(data: &Rev29File, after_weight_m: f64, hw_kt: f64) -> Vec<(f64, f64)> {
+fn trace_headwind_guide(
+    data: &Rev29File,
+    after_weight_m: f64,
+    hw_kt: f64,
+    entry: (f64, f64),
+) -> Vec<(f64, f64)> {
     trace_wind_panel_guide(
+        entry,
         data,
         after_weight_m,
         hw_kt,
@@ -264,8 +270,14 @@ fn trace_headwind_guide(data: &Rev29File, after_weight_m: f64, hw_kt: f64) -> Ve
     )
 }
 
-fn trace_tailwind_guide(data: &Rev29File, after_weight_m: f64, tw_kt: f64) -> Vec<(f64, f64)> {
+fn trace_tailwind_guide(
+    data: &Rev29File,
+    after_weight_m: f64,
+    tw_kt: f64,
+    entry: (f64, f64),
+) -> Vec<(f64, f64)> {
     trace_wind_panel_guide(
+        entry,
         data,
         after_weight_m,
         tw_kt,
@@ -274,7 +286,10 @@ fn trace_tailwind_guide(data: &Rev29File, after_weight_m: f64, tw_kt: f64) -> Ve
     )
 }
 
+/// Wind-panel leg anchored at the nomogram entry (panel join). Samples kt > 0 only so the
+/// entry Y is not re-derived from chart-clamped panel lookups (avoids a vertical jog).
 fn trace_wind_panel_guide(
+    entry: (f64, f64),
     data: &Rev29File,
     entry_m: f64,
     component_kt: f64,
@@ -282,11 +297,10 @@ fn trace_wind_panel_guide(
     x_map: fn(f64) -> f64,
 ) -> Vec<(f64, f64)> {
     if component_kt <= 1e-9 {
-        let dist = sample(data, entry_m, 0.0).0;
-        return vec![(x_map(0.0), y_dist(dist))];
+        return vec![entry];
     }
-    let mut pts = Vec::with_capacity(PATH_STEPS + 1);
-    for i in 0..=PATH_STEPS {
+    let mut pts = vec![entry];
+    for i in 1..=PATH_STEPS {
         let t = i as f64 / PATH_STEPS as f64;
         let kt = component_kt * t;
         let dist = sample(data, entry_m, kt).0;
@@ -401,20 +415,18 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
             points.push((wind_panel_left, wy));
         }
     }
-    if let Some((wx, wy)) = points.last().copied() {
-        push_turn_marker(&mut markers, (wx, wy));
-    }
+    let wind_entry = points
+        .last()
+        .copied()
+        .unwrap_or((wind_panel_left, y_dist(wind_row_m)));
+    push_turn_marker(&mut markers, wind_entry);
 
     let wind_trace = if takeoff_wind_is_tailwind(hw, tw) {
-        trace_tailwind_guide(data, wind_row_m, tw)
+        trace_tailwind_guide(data, wind_row_m, tw, wind_entry)
     } else if hw > 0.0 {
-        trace_headwind_guide(data, wind_row_m, hw)
+        trace_headwind_guide(data, wind_row_m, hw, wind_entry)
     } else {
-        let wy = points
-            .last()
-            .map(|p| p.1)
-            .unwrap_or_else(|| y_dist(wind_row_m));
-        vec![(x_headwind_kt(0.0), wy)]
+        vec![wind_entry]
     };
     append_segment(&mut points, &wind_trace);
     if let Some(wind_exit) = points.last().copied() {
@@ -796,7 +808,8 @@ mod tests {
         let entry = 300.0;
         let hw_kt = 20.0;
         let guide = headwind_guide_polyline(&data, entry);
-        let trace = trace_headwind_guide(&data, entry, hw_kt);
+        let anchor = (x_headwind_kt(0.0), y_dist(entry));
+        let trace = trace_headwind_guide(&data, entry, hw_kt, anchor);
         assert!(!guide.is_empty() && !trace.is_empty());
         for pt in &trace {
             let on_guide = guide
@@ -1518,26 +1531,65 @@ mod tests {
         );
     }
 
-    #[test]
-    fn takeoff_weight_panel_path_has_no_vertical_segment() {
-        let data = Rev29File::production();
-        let inputs = FlightInputs {
-            oat_c: 35.0,
-            weight_lb: 600.0 / 0.45359237,
-            wind_speed_kt: 10.0,
-            wind_dir_deg: 360.0,
-            runway: "360".into(),
-            ..Default::default()
-        };
-        let path = takeoff_hand_path(&data, &inputs, 1000.0);
-        let x0 = TAKEOFF_WEIGHT.x;
-        let x1 = TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w;
-        for w in path.points.windows(2) {
+    fn assert_only_oat_riser_vertical(path: &TakeoffPath, case: &str) {
+        for (i, w) in path.points.windows(2).enumerate() {
             let (a, b) = (w[0], w[1]);
-            let in_panel = a.0 >= x0 - 0.5 && b.0 >= x0 - 0.5 && a.0 <= x1 + 0.5 && b.0 <= x1 + 0.5;
-            if in_panel && (b.0 - a.0).abs() < 0.01 && (b.1 - a.1).abs() > 0.5 {
-                panic!("vertical segment in weight panel: {a:?} -> {b:?}");
+            let vertical = (b.0 - a.0).abs() < 0.01 && (b.1 - a.1).abs() > 0.5;
+            if vertical && i != 0 {
+                panic!("{case}: unexpected vertical segment {a:?} -> {b:?}");
             }
+        }
+    }
+
+    #[test]
+    fn takeoff_path_only_oat_riser_is_vertical() {
+        let data = Rev29File::production();
+        let cases = [
+            (
+                "tailwind",
+                FlightInputs {
+                    runway: "190".into(),
+                    wind_dir_deg: 10.0,
+                    wind_speed_kt: 5.0,
+                    weight_lb: 800.0 / 0.45359237,
+                    ..Default::default()
+                },
+            ),
+            (
+                "zero_hw",
+                FlightInputs {
+                    runway: "360".into(),
+                    wind_dir_deg: 0.0,
+                    wind_speed_kt: 0.0,
+                    weight_lb: 750.0 / 0.45359237,
+                    ..Default::default()
+                },
+            ),
+            (
+                "max_hw",
+                FlightInputs {
+                    runway: "360".into(),
+                    wind_dir_deg: 360.0,
+                    wind_speed_kt: 20.0,
+                    weight_lb: 750.0 / 0.45359237,
+                    ..Default::default()
+                },
+            ),
+            (
+                "clamp_entry",
+                FlightInputs {
+                    oat_c: 35.0,
+                    weight_lb: 600.0 / 0.45359237,
+                    wind_speed_kt: 10.0,
+                    wind_dir_deg: 360.0,
+                    runway: "360".into(),
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (name, inputs) in cases {
+            let path = takeoff_hand_path(&data, &inputs, 2500.0);
+            assert_only_oat_riser_vertical(&path, name);
         }
     }
 

@@ -14,6 +14,27 @@ use crate::i18n::{afm_lookup_tag_label, copy, Locale};
 use crate::inputs::{input_value, NumField};
 use crate::prefs::{ObstacleUnit, TakeoffPrefs, WeightUnit};
 
+/// Commit a typed takeoff weight field value (kg or lb display) into `weight_lb`.
+pub fn apply_takeoff_weight_field_value(weight_lb: &mut f64, unit: WeightUnit, raw: &str) -> bool {
+    let v: f64 = match raw.trim().parse::<f64>() {
+        Ok(v) if v.is_finite() && v > 0.0 => v,
+        _ => return false,
+    };
+    *weight_lb = match unit {
+        WeightUnit::Kg => kg_to_lb(v),
+        WeightUnit::Lb => v,
+    };
+    true
+}
+
+fn format_takeoff_weight_display(weight_lb: f64, unit: WeightUnit) -> String {
+    let v = match unit {
+        WeightUnit::Kg => lb_to_kg(weight_lb),
+        WeightUnit::Lb => weight_lb,
+    };
+    format!("{v:.2}")
+}
+
 #[derive(Clone, Copy, Default)]
 struct SweepVarDraft {
     enabled: bool,
@@ -42,6 +63,9 @@ fn TakeoffWeightField(
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
 ) -> impl IntoView {
+    let editing = RwSignal::new(false);
+    let draft = RwSignal::new(String::new());
+
     view! {
         <div class="f">
             {move || {
@@ -56,21 +80,36 @@ fn TakeoffWeightField(
                     <div class="unit-row">
                         <input type="number" step="any" class="mono"
                             prop:value=move || {
-                                let unit = prefs.get().weight;
-                                let v = match unit {
-                                    WeightUnit::Kg => lb_to_kg(inputs.get().weight_lb),
-                                    WeightUnit::Lb => inputs.get().weight_lb,
-                                };
-                                format!("{v:.2}")
+                                if editing.get() {
+                                    draft.get()
+                                } else {
+                                    format_takeoff_weight_display(inputs.get().weight_lb, unit)
+                                }
+                            }
+                            on:focus=move |_| {
+                                let u = prefs.get_untracked().weight;
+                                draft.set(format_takeoff_weight_display(inputs.get_untracked().weight_lb, u));
+                                editing.set(true);
                             }
                             on:input=move |ev| {
-                                if let Ok(v) = input_value(&ev).parse::<f64>() {
+                                draft.set(input_value(&ev));
+                            }
+                            on:blur=move |ev| {
+                                let u = prefs.get_untracked().weight;
+                                let raw = input_value(&ev);
+                                inputs.update(|i| {
+                                    apply_takeoff_weight_field_value(&mut i.weight_lb, u, &raw);
+                                });
+                                editing.set(false);
+                            }
+                            on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                                if ev.key() == "Enter" {
+                                    let u = prefs.get_untracked().weight;
+                                    let raw = input_value(&ev);
                                     inputs.update(|i| {
-                                        i.weight_lb = match prefs.get_untracked().weight {
-                                            WeightUnit::Kg => kg_to_lb(v),
-                                            WeightUnit::Lb => v,
-                                        };
+                                        apply_takeoff_weight_field_value(&mut i.weight_lb, u, &raw);
                                     });
+                                    editing.set(false);
                                 }
                             }
                         />
@@ -502,6 +541,29 @@ mod tests {
         inputs.wind_dir_deg = 0.0;
         let b = compute_takeoff(&data, &inputs).unwrap();
         assert!((a.ground_roll_ft - b.ground_roll_ft).abs() < 1e-6);
+    }
+
+    #[test]
+    fn takeoff_weight_field_parses_displayed_kg_strings() {
+        let mut lb = defaults::WEIGHT_LB;
+        assert!(apply_takeoff_weight_field_value(
+            &mut lb,
+            WeightUnit::Kg,
+            "800"
+        ));
+        assert!((lb_to_kg(lb) - 800.0).abs() < 0.01);
+        assert!(apply_takeoff_weight_field_value(
+            &mut lb,
+            WeightUnit::Kg,
+            "650"
+        ));
+        assert!((lb_to_kg(lb) - 650.0).abs() < 0.01);
+        assert!(apply_takeoff_weight_field_value(
+            &mut lb,
+            WeightUnit::Kg,
+            "750.00"
+        ));
+        assert!((lb_to_kg(lb) - 750.0).abs() < 0.01);
     }
 
     #[test]
