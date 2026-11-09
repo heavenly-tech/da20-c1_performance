@@ -171,6 +171,7 @@ pub struct Copy {
     pub strip_panel_weight: &'static str,
     pub strip_panel_hw: &'static str,
     pub strip_panel_tw: &'static str,
+    pub strip_panel_wind: &'static str,
     pub strip_panel_obstacle: &'static str,
     /// Fig 5.2 ROC panel bottom x-axis (Pablo).
     pub strip_climb_roc_x_axis: &'static str,
@@ -351,6 +352,7 @@ const ES: Copy = Copy {
     strip_panel_weight: "Peso",
     strip_panel_hw: "Viento de frente (kt)",
     strip_panel_tw: "Viento de cola (kt)",
+    strip_panel_wind: "Viento de frente / cola (kt)",
     strip_panel_obstacle: "Obstáculo",
     strip_climb_roc_x_axis: "Razón de ascenso (fpm)",
     strip_climb_roc_ea_y_axis: "Altitud equivalente (ft)",
@@ -513,6 +515,7 @@ const EN: Copy = Copy {
     strip_panel_weight: "Weight",
     strip_panel_hw: "Headwind (kt)",
     strip_panel_tw: "Tailwind (kt)",
+    strip_panel_wind: "Headwind / tailwind (kt)",
     strip_panel_obstacle: "Obstacle",
     strip_climb_roc_x_axis: "Rate of climb (fpm)",
     strip_climb_roc_ea_y_axis: "Equivalent altitude (ft)",

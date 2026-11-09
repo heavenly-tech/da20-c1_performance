@@ -7,14 +7,15 @@ use crate::i18n::Copy;
 use da20_core::rev29::charts::map_to_svg;
 use da20_core::rev29::hand_plot::{
     x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft,
-    CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT,
-    TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT,
+    CLIMB_EQ, CLIMB_ROC, DIST_MAX_M, DIST_MIN_M, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_OAT, TAKEOFF_OBS,
+    TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 
 const STRIP_TICK_Y: f64 = 518.0;
 const OAT_TICKS_C: [f64; 5] = [-20.0, 0.0, 20.0, 40.0, 55.0];
 const WEIGHT_TICKS_KG: [f64; 5] = [600.0, 650.0, 700.0, 750.0, 800.0];
-const TW_TICKS_KT: [f64; 6] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+/// Tailwind sub-panel uses 0–5 kt; two edge ticks stay readable at 20% panel width.
+const TW_TICKS_KT: [f64; 2] = [0.0, 5.0];
 const HW_TICKS_KT: [f64; 5] = [0.0, 5.0, 10.0, 15.0, 20.0];
 const OBS_TICKS_M: [f64; 4] = [0.0, 5.0, 10.0, 15.0];
 const EA_TICKS_FT: [f64; 5] = [0.0, 3500.0, 7000.0, 10_500.0, 14_000.0];
@@ -243,8 +244,7 @@ pub fn takeoff_strip_panel_titles(c: &Copy) -> impl IntoView {
     view! {
         <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_oat_pa}</text>
         <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_weight_kg}</text>
-        <text x=TAKEOFF_TW.x+TAKEOFF_TW.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_tw}</text>
-        <text x=TAKEOFF_HW.x+TAKEOFF_HW.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_hw}</text>
+        <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_wind}</text>
         <text x=TAKEOFF_OBS.x+TAKEOFF_OBS.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_obstacle_m}</text>
     }
 }
@@ -265,6 +265,7 @@ mod tests {
 
     #[test]
     fn tw_subpanel_ticks_use_tailwind_x_mapper() {
+        use da20_core::rev29::hand_plot::TAKEOFF_TW;
         assert!((x_tailwind_kt(0.0) - (TAKEOFF_TW.x + TAKEOFF_TW.w)).abs() < 0.01);
         assert!((x_tailwind_kt(5.0) - TAKEOFF_TW.x).abs() < 0.01);
         let c = copy(Locale::En);
@@ -334,7 +335,31 @@ mod tests {
 
     #[test]
     fn takeoff_major_grid_includes_tw_and_oat_verticals() {
-        assert_eq!(TW_TICKS_KT.len(), 6);
+        assert_eq!(TW_TICKS_KT.len(), 2);
         assert!((x_oat(OAT_TICKS_C[0]) - TAKEOFF_OAT.x).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_wind_subpanels_proportional_to_afm_kt_range() {
+        use da20_core::rev29::hand_plot::{TAKEOFF_HW, TAKEOFF_TW, TAKEOFF_WIND};
+        let ratio = TAKEOFF_TW.w / TAKEOFF_HW.w;
+        assert!(
+            (ratio - 0.25).abs() < 0.01,
+            "TW:HW width should match 5:20 kt, got {ratio}"
+        );
+        assert!((TAKEOFF_TW.w + TAKEOFF_HW.w - TAKEOFF_WIND.w).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_tailwind_ticks_spaced_for_readability() {
+        let xs: Vec<f64> = TW_TICKS_KT.iter().map(|&kt| x_tailwind_kt(kt)).collect();
+        let min_gap = xs
+            .windows(2)
+            .map(|w| (w[1] - w[0]).abs())
+            .fold(f64::INFINITY, f64::min);
+        assert!(
+            min_gap >= 20.0,
+            "tailwind tick spacing {min_gap}px should not overlap"
+        );
     }
 }

@@ -9,10 +9,11 @@ use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     back_solve_takeoff_wind_from_strip_x, chart_read_takeoff_base_m,
     climb_fan_pa_curve_point_at_oat, climb_fan_pa_curve_strip_points, climb_hand_path,
-    headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path, takeoff_oat_panel_pa_trace,
-    takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm,
-    x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP,
-    TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW, TAKEOFF_WEIGHT, TAKEOFF_WIND,
+    headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path, takeoff_pa_curve_point_at_oat,
+    takeoff_pa_curve_strip_points, takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt,
+    x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ,
+    CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW,
+    TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::rev29::types::Rev29File;
 use da20_core::takeoff::compute_takeoff;
@@ -64,21 +65,52 @@ fn strip_input_cursor(x: f64) -> impl IntoView {
     }
 }
 
-fn strip_oat_pa_trace_guide(y: f64, oat_x: f64, label: String) -> impl IntoView {
+const STRIP_PA_LABEL_ABOVE_DY: f64 = 10.0;
+
+fn strip_pa_label_at_panel_edge(
+    x: f64,
+    y: f64,
+    label: String,
+    anchor: LabelAnchor,
+) -> impl IntoView {
+    guide_line_label(x, y - STRIP_PA_LABEL_ABOVE_DY, label, anchor)
+}
+
+/// Fig 5.4: selected PA isoline (full panel width) + vertical OAT cursor; label at panel edge.
+fn strip_takeoff_pa_curve_guide(
+    inner: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+    label: String,
+) -> impl IntoView {
+    let cursor = takeoff_pa_curve_point_at_oat(inner, pa_ft, oat_c);
+    let pts: String = takeoff_pa_curve_strip_points(inner, pa_ft)
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let (cx, cy) = cursor;
+    let panel_right = TAKEOFF_OAT.x + TAKEOFF_OAT.w;
     view! {
-        <line
-            x1=TAKEOFF_OAT.x
-            y1=y
-            x2=oat_x
-            y2=y
+        <polyline
+            points=pts
+            fill="none"
             class="chart-stroke-guide-active"
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
-        {guide_line_label(
-            TAKEOFF_OAT.x + 4.0,
-            y,
+        <line
+            x1=cx
+            y1=STRIP_TOP
+            x2=cx
+            y2=STRIP_BOTTOM
+            class="chart-stroke-guide-active"
+            stroke-dasharray=STRIP_INPUT_CURSOR_DASH
+        />
+        {strip_pa_label_at_panel_edge(
+            panel_right,
+            cy,
             label,
-            LabelAnchor::Start,
+            LabelAnchor::End,
         )}
     }
 }
@@ -112,7 +144,7 @@ fn strip_climb_ea_cursor_with_pa_row(
             class="chart-stroke-guide-active"
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
-        {guide_line_label(cx + 4.0, cy, label, LabelAnchor::Start)}
+        {strip_pa_label_at_panel_edge(CLIMB_EQ.x + CLIMB_EQ.w, cy, label, LabelAnchor::End)}
     }
 }
 
@@ -150,11 +182,11 @@ fn strip_climb_pa_curve_guide_overlay(
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
         <text
-            x=cx + 4.0
-            y=cy
+            x=CLIMB_EQ.x + CLIMB_EQ.w
+            y=cy - STRIP_PA_LABEL_ABOVE_DY
             fill=color
             font-size="9"
-            text-anchor="start"
+            text-anchor="end"
             dominant-baseline="middle"
             opacity="0.92"
         >
@@ -163,18 +195,23 @@ fn strip_climb_pa_curve_guide_overlay(
     }
 }
 
-fn strip_oat_pa_trace_guide_overlay(
-    y: f64,
-    oat_x: f64,
+fn strip_takeoff_pa_curve_guide_overlay(
+    inner: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
     label: String,
     color: &'static str,
 ) -> impl IntoView {
+    let cursor = takeoff_pa_curve_point_at_oat(inner, pa_ft, oat_c);
+    let pts: String = takeoff_pa_curve_strip_points(inner, pa_ft)
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let (_, cy) = cursor;
     view! {
-        <line
-            x1=TAKEOFF_OAT.x
-            y1=y
-            x2=oat_x
-            y2=y
+        <polyline
+            points=pts
             fill="none"
             stroke=color
             stroke-width="2.5"
@@ -182,11 +219,11 @@ fn strip_oat_pa_trace_guide_overlay(
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
         <text
-            x=TAKEOFF_OAT.x + 4.0
-            y=y
+            x=TAKEOFF_OAT.x + TAKEOFF_OAT.w
+            y=cy - STRIP_PA_LABEL_ABOVE_DY
             fill=color
             font-size="9"
-            text-anchor="start"
+            text-anchor="end"
             dominant-baseline="middle"
             opacity="0.92"
         >
@@ -515,14 +552,13 @@ fn render_takeoff_strip(
         .collect::<Vec<_>>()
         .join(" ");
 
-    let pa_trace = takeoff_oat_panel_pa_trace(inner, pa, inputs.oat_c);
     let pa_trace_label = format_takeoff_strip_pa_trace_label(locale, pa);
 
     view! {
         {panel_backgrounds(locale)}
         {takeoff_strip_major_grid()}
         {curve_paths.collect_view()}
-        {strip_oat_pa_trace_guide(pa_trace.y, pa_trace.oat_x, pa_trace_label)}
+        {strip_takeoff_pa_curve_guide(inner, pa, inputs.oat_c, pa_trace_label)}
         {weight_guides.collect_view()}
         <g class:results-muted=tailwind_case>
             {headwind_guides.collect_view()}
@@ -726,12 +762,11 @@ fn saved_path_overlays(
                     let color = OVERLAY_STROKE_COLORS[idx % OVERLAY_STROKE_COLORS.len()];
                     let pa_guide = match kind {
                         StripKind::Takeoff => {
-                            let trace =
-                                takeoff_oat_panel_pa_trace(inner, pa, r.inputs.oat_c);
                             let label = format_takeoff_strip_pa_trace_label(locale, pa);
-                            strip_oat_pa_trace_guide_overlay(
-                                trace.y,
-                                trace.oat_x,
+                            strip_takeoff_pa_curve_guide_overlay(
+                                inner,
+                                pa,
+                                r.inputs.oat_c,
                                 label,
                                 color,
                             )
@@ -1112,7 +1147,22 @@ mod strip_drag_tests {
     }
 
     #[test]
+    fn takeoff_pa_curve_strip_spans_full_oat_panel_width() {
+        use da20_core::rev29::hand_plot::takeoff_pa_curve_strip_points;
+
+        let data = PerformanceData::production();
+        let inner = data.inner();
+        let pts = takeoff_pa_curve_strip_points(inner, 2500.0);
+        assert!(pts.len() >= 2);
+        let left = pts.first().unwrap().0;
+        let right = pts.last().unwrap().0;
+        assert!((left - TAKEOFF_OAT.x).abs() < 1.0);
+        assert!((right - (TAKEOFF_OAT.x + TAKEOFF_OAT.w)).abs() < 1.0);
+    }
+
+    #[test]
     fn takeoff_oat_pa_trace_y_matches_effective_pa_engine_read() {
+        use da20_core::rev29::hand_plot::takeoff_oat_panel_pa_trace;
         use da20_core::types::{ChartPhase, PaOverride};
         use da20_core::PerformanceData;
 
