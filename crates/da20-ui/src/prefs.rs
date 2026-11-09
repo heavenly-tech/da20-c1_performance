@@ -2,7 +2,7 @@ use da20_core::takeoff_rounding::TakeoffDistanceRounding;
 use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
 
-const KEY: &str = "da20_takeoff_prefs_v1";
+pub const TAKEOFF_PREFS_STORAGE_KEY: &str = "da20_takeoff_prefs_v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WeightUnit {
@@ -47,7 +47,7 @@ impl Default for TakeoffPrefs {
 impl TakeoffPrefs {
     pub fn load() -> Self {
         if cfg!(target_arch = "wasm32") {
-            LocalStorage::get(KEY).unwrap_or_default()
+            LocalStorage::get(TAKEOFF_PREFS_STORAGE_KEY).unwrap_or_default()
         } else {
             Self::default()
         }
@@ -55,7 +55,7 @@ impl TakeoffPrefs {
 
     pub fn save(self) {
         if cfg!(target_arch = "wasm32") {
-            let _ = LocalStorage::set(KEY, self);
+            let _ = LocalStorage::set(TAKEOFF_PREFS_STORAGE_KEY, self);
         }
     }
 }
@@ -77,5 +77,21 @@ mod tests {
         let p = TakeoffPrefs::default();
         assert_eq!(p.weight, WeightUnit::Lb);
         assert_eq!(p.obstacle, ObstacleUnit::Meters);
+    }
+
+    #[test]
+    fn prefs_storage_key_and_kg_round_trip() {
+        assert_eq!(TAKEOFF_PREFS_STORAGE_KEY, "da20_takeoff_prefs_v1");
+        let prefs = TakeoffPrefs {
+            weight: WeightUnit::Kg,
+            obstacle: ObstacleUnit::Feet,
+            distance_rounding: TakeoffDistanceRounding::Ceil10Meters,
+        };
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        let back: TakeoffPrefs = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, prefs);
+        let missing_weight = r#"{"obstacle":"Meters","distance_rounding":"Raw"}"#;
+        let defaults: TakeoffPrefs = serde_json::from_str(missing_weight).expect("default weight");
+        assert_eq!(defaults.weight, WeightUnit::Lb);
     }
 }

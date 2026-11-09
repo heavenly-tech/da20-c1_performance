@@ -15,8 +15,10 @@ use crate::inputs::{input_value, NumField};
 use crate::prefs::{ObstacleUnit, TakeoffPrefs, WeightUnit};
 
 /// Commit a typed takeoff weight field value (kg or lb display) into `weight_lb`.
+/// Accepts a decimal point or comma. Does not rewrite the in-progress draft.
 pub fn apply_takeoff_weight_field_value(weight_lb: &mut f64, unit: WeightUnit, raw: &str) -> bool {
-    let v: f64 = match raw.trim().parse::<f64>() {
+    let normalized = raw.trim().replace(',', ".");
+    let v: f64 = match normalized.parse::<f64>() {
         Ok(v) if v.is_finite() && v > 0.0 => v,
         _ => return false,
     };
@@ -25,6 +27,26 @@ pub fn apply_takeoff_weight_field_value(weight_lb: &mut f64, unit: WeightUnit, r
         WeightUnit::Lb => v,
     };
     true
+}
+
+/// Keystroke handler for the weight field. Stores the raw draft and does not
+/// touch `weight_lb`. Committing each prefix and rewriting `{:.2}` (the old
+/// `prop:value` + `on:input` loop) freezes the field on the first digit.
+pub fn note_takeoff_weight_draft(draft: &mut String, raw: &str) {
+    *draft = raw.to_string();
+}
+
+pub fn takeoff_weight_field_display(
+    editing: bool,
+    draft: &str,
+    weight_lb: f64,
+    unit: WeightUnit,
+) -> String {
+    if editing {
+        draft.to_string()
+    } else {
+        format_takeoff_weight_display(weight_lb, unit)
+    }
 }
 
 fn format_takeoff_weight_display(weight_lb: f64, unit: WeightUnit) -> String {
@@ -80,11 +102,12 @@ fn TakeoffWeightField(
                     <div class="unit-row">
                         <input type="number" step="any" class="mono"
                             prop:value=move || {
-                                if editing.get() {
-                                    draft.get()
-                                } else {
-                                    format_takeoff_weight_display(inputs.get().weight_lb, unit)
-                                }
+                                takeoff_weight_field_display(
+                                    editing.get(),
+                                    &draft.get(),
+                                    inputs.get().weight_lb,
+                                    unit,
+                                )
                             }
                             on:focus=move |_| {
                                 let u = prefs.get_untracked().weight;
@@ -92,7 +115,9 @@ fn TakeoffWeightField(
                                 editing.set(true);
                             }
                             on:input=move |ev| {
-                                draft.set(input_value(&ev));
+                                let mut next = draft.get_untracked();
+                                note_takeoff_weight_draft(&mut next, &input_value(&ev));
+                                draft.set(next);
                             }
                             on:blur=move |ev| {
                                 let u = prefs.get_untracked().weight;
@@ -543,27 +568,119 @@ mod tests {
         assert!((a.ground_roll_ft - b.ground_roll_ft).abs() < 1e-6);
     }
 
+    fn legacy_keystroke_reformat(unit: WeightUnit, typed: &str) -> f64 {
+        let mut lb = defaults::WEIGHT_LB;
+        let mut field = String::new();
+        for ch in typed.chars() {
+            field.push(ch);
+            apply_takeoff_weight_field_value(&mut lb, unit, &field);
+            field = format_takeoff_weight_display(lb, unit);
+        }
+        lb
+    }
+
+    fn type_weight_draft(unit: WeightUnit, typed: &str) -> (Vec<String>, f64) {
+        let start = defaults::WEIGHT_LB;
+        let mut lb = start;
+        let mut draft = format_takeoff_weight_display(lb, unit);
+        let mut shown = Vec::new();
+        let mut buf = String::new();
+        for ch in typed.chars() {
+            buf.push(ch);
+            note_takeoff_weight_draft(&mut draft, &buf);
+            assert!(
+                (lb - start).abs() < 1e-9,
+                "draft keystrokes must not commit {typed}"
+            );
+            shown.push(takeoff_weight_field_display(true, &draft, lb, unit));
+        }
+        assert!(apply_takeoff_weight_field_value(&mut lb, unit, &draft));
+        let committed = takeoff_weight_field_display(false, &draft, lb, unit);
+        shown.push(committed);
+        (shown, lb)
+    }
+
     #[test]
-    fn takeoff_weight_field_parses_displayed_kg_strings() {
+    fn typing_800_and_650_keeps_every_digit_in_kg_and_lb() {
+        let (shown, lb) = type_weight_draft(WeightUnit::Kg, "800");
+        assert_eq!(&shown[..3], ["8", "80", "800"]);
+        assert!((lb_to_kg(lb) - 800.0).abs() < 0.01, "kg {}", lb_to_kg(lb));
+        assert_eq!(shown.last().unwrap(), "800.00");
+
+        let (shown, lb) = type_weight_draft(WeightUnit::Kg, "650");
+        assert_eq!(&shown[..3], ["6", "65", "650"]);
+        assert!((lb_to_kg(lb) - 650.0).abs() < 0.01);
+        assert_eq!(shown.last().unwrap(), "650.00");
+
+        let (shown, lb) = type_weight_draft(WeightUnit::Lb, "800");
+        assert_eq!(&shown[..3], ["8", "80", "800"]);
+        assert!((lb - 800.0).abs() < 0.01);
+        assert_eq!(shown.last().unwrap(), "800.00");
+
+        let (shown, lb) = type_weight_draft(WeightUnit::Lb, "650");
+        assert_eq!(&shown[..3], ["6", "65", "650"]);
+        assert!((lb - 650.0).abs() < 0.01);
+
+        let stuck = legacy_keystroke_reformat(WeightUnit::Kg, "800");
+        assert!(
+            (lb_to_kg(stuck) - 800.0).abs() > 100.0,
+            "old per-keystroke {{:.2}} rewrite stored {} kg",
+            lb_to_kg(stuck)
+        );
+        let stuck_lb = legacy_keystroke_reformat(WeightUnit::Lb, "650");
+        assert!(
+            (stuck_lb - 650.0).abs() > 100.0,
+            "old lb rewrite stored {stuck_lb}"
+        );
+    }
+
+    #[test]
+    fn weight_decimal_and_unit_toggle_round_trip() {
         let mut lb = defaults::WEIGHT_LB;
         assert!(apply_takeoff_weight_field_value(
             &mut lb,
             WeightUnit::Kg,
-            "800"
+            "650,5"
         ));
-        assert!((lb_to_kg(lb) - 800.0).abs() < 0.01);
+        assert!((lb_to_kg(lb) - 650.5).abs() < 0.01);
         assert!(apply_takeoff_weight_field_value(
             &mut lb,
             WeightUnit::Kg,
-            "650"
+            "800.25"
         ));
-        assert!((lb_to_kg(lb) - 650.0).abs() < 0.01);
+        assert!((lb_to_kg(lb) - 800.25).abs() < 0.01);
+        let as_lb = takeoff_weight_field_display(false, "", lb, WeightUnit::Lb);
+        let as_kg = takeoff_weight_field_display(false, "", lb, WeightUnit::Kg);
+        assert_eq!(as_kg, "800.25");
+        let mut round = lb;
         assert!(apply_takeoff_weight_field_value(
-            &mut lb,
-            WeightUnit::Kg,
-            "750.00"
+            &mut round,
+            WeightUnit::Lb,
+            &as_lb
         ));
-        assert!((lb_to_kg(lb) - 750.0).abs() < 0.01);
+        assert!((round - lb).abs() < 0.05);
+        assert!(apply_takeoff_weight_field_value(
+            &mut round,
+            WeightUnit::Kg,
+            &as_kg
+        ));
+        assert!((lb_to_kg(round) - 800.25).abs() < 0.01);
+
+        let mut other = defaults::WEIGHT_LB;
+        assert!(apply_takeoff_weight_field_value(
+            &mut other,
+            WeightUnit::Lb,
+            "1763.70"
+        ));
+        let kg = takeoff_weight_field_display(false, "", other, WeightUnit::Kg);
+        let back = takeoff_weight_field_display(false, "", other, WeightUnit::Lb);
+        assert!(apply_takeoff_weight_field_value(
+            &mut other,
+            WeightUnit::Kg,
+            &kg
+        ));
+        let restored = takeoff_weight_field_display(false, "", other, WeightUnit::Lb);
+        assert_eq!(restored, back);
     }
 
     #[test]

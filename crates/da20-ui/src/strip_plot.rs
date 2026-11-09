@@ -9,10 +9,11 @@ use da20_core::rev29::engine::lb_to_kg;
 use da20_core::rev29::hand_plot::{
     back_solve_takeoff_wind_from_strip_x, chart_read_takeoff_base_m,
     climb_fan_pa_curve_point_at_oat, climb_fan_pa_curve_strip_points, climb_hand_path,
-    headwind_and_tailwind, tailwind_reference_x, takeoff_hand_path, takeoff_pa_curve_point_at_oat,
-    takeoff_pa_curve_strip_points, takeoff_panel_guides, takeoff_wind_is_tailwind, x_headwind_kt,
-    x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft, CLIMB_EQ,
-    CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW,
+    climb_pa_isoline_y_at_panel_right, headwind_and_tailwind, tailwind_reference_x,
+    takeoff_hand_path, takeoff_pa_curve_point_at_oat, takeoff_pa_curve_strip_points,
+    takeoff_pa_isoline_y_at_panel_right, takeoff_panel_guides, takeoff_wind_is_tailwind,
+    x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft,
+    CLIMB_EQ, CLIMB_ROC, STRIP_BOTTOM, STRIP_TOP, TAKEOFF_HW, TAKEOFF_OAT, TAKEOFF_OBS, TAKEOFF_TW,
     TAKEOFF_WEIGHT, TAKEOFF_WIND,
 };
 use da20_core::rev29::types::Rev29File;
@@ -89,8 +90,9 @@ fn strip_takeoff_pa_curve_guide(
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
         .join(" ");
-    let (cx, cy) = cursor;
+    let (cx, _cy) = cursor;
     let panel_right = TAKEOFF_OAT.x + TAKEOFF_OAT.w;
+    let label_y = takeoff_pa_isoline_y_at_panel_right(inner, pa_ft);
     view! {
         <polyline
             points=pts
@@ -108,7 +110,7 @@ fn strip_takeoff_pa_curve_guide(
         />
         {strip_pa_label_at_panel_edge(
             panel_right,
-            cy,
+            label_y,
             label,
             LabelAnchor::End,
         )}
@@ -128,7 +130,8 @@ fn strip_climb_ea_cursor_with_pa_row(
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
         .join(" ");
-    let (cx, cy) = cursor;
+    let (cx, _cy) = cursor;
+    let label_y = climb_pa_isoline_y_at_panel_right(inner, pa_ft);
     view! {
         <polyline
             points=pts
@@ -144,7 +147,7 @@ fn strip_climb_ea_cursor_with_pa_row(
             class="chart-stroke-guide-active"
             stroke-dasharray=STRIP_INPUT_CURSOR_DASH
         />
-        {strip_pa_label_at_panel_edge(CLIMB_EQ.x + CLIMB_EQ.w, cy, label, LabelAnchor::End)}
+        {strip_pa_label_at_panel_edge(CLIMB_EQ.x + CLIMB_EQ.w, label_y, label, LabelAnchor::End)}
     }
 }
 
@@ -161,7 +164,8 @@ fn strip_climb_pa_curve_guide_overlay(
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
         .join(" ");
-    let (cx, cy) = cursor;
+    let (cx, _cy) = cursor;
+    let label_y = climb_pa_isoline_y_at_panel_right(inner, pa_ft);
     view! {
         <polyline
             points=pts
@@ -183,7 +187,7 @@ fn strip_climb_pa_curve_guide_overlay(
         />
         <text
             x=CLIMB_EQ.x + CLIMB_EQ.w
-            y=cy - STRIP_PA_LABEL_ABOVE_DY
+            y=label_y - STRIP_PA_LABEL_ABOVE_DY
             fill=color
             font-size="9"
             text-anchor="end"
@@ -198,17 +202,16 @@ fn strip_climb_pa_curve_guide_overlay(
 fn strip_takeoff_pa_curve_guide_overlay(
     inner: &Rev29File,
     pa_ft: f64,
-    oat_c: f64,
+    _oat_c: f64,
     label: String,
     color: &'static str,
 ) -> impl IntoView {
-    let cursor = takeoff_pa_curve_point_at_oat(inner, pa_ft, oat_c);
     let pts: String = takeoff_pa_curve_strip_points(inner, pa_ft)
         .iter()
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
         .join(" ");
-    let (_, cy) = cursor;
+    let label_y = takeoff_pa_isoline_y_at_panel_right(inner, pa_ft);
     view! {
         <polyline
             points=pts
@@ -220,7 +223,7 @@ fn strip_takeoff_pa_curve_guide_overlay(
         />
         <text
             x=TAKEOFF_OAT.x + TAKEOFF_OAT.w
-            y=cy - STRIP_PA_LABEL_ABOVE_DY
+            y=label_y - STRIP_PA_LABEL_ABOVE_DY
             fill=color
             font-size="9"
             text-anchor="end"
@@ -320,6 +323,25 @@ pub fn StripHandPlot(
             </p>
         </div>
     }
+}
+
+/// Points of the Fig 5.4 user polyline. The strip view formats this list into
+/// the `<polyline points>` attribute, so tests of this function cover the path
+/// that is drawn.
+pub fn takeoff_rendered_path_points(
+    inner: &Rev29File,
+    inputs: &FlightInputs,
+    pa_ft: f64,
+) -> Vec<(f64, f64)> {
+    takeoff_hand_path(inner, inputs, pa_ft).points
+}
+
+pub fn format_svg_polyline(points: &[(f64, f64)]) -> String {
+    points
+        .iter()
+        .map(|(x, y)| format!("{x:.1},{y:.1}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn readout_line(
@@ -545,12 +567,7 @@ fn render_takeoff_strip(
             }
         });
 
-    let path_pts: String = path
-        .points
-        .iter()
-        .map(|(x, y)| format!("{x:.1},{y:.1}"))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let path_pts = format_svg_polyline(&takeoff_rendered_path_points(inner, &inputs, pa));
 
     let pa_trace_label = format_takeoff_strip_pa_trace_label(locale, pa);
 
@@ -1182,5 +1199,239 @@ mod strip_drag_tests {
             (trace.y - y_dist(chart_read_takeoff_base_m(data.inner(), pa, inputs.oat_c))).abs()
                 < 0.01
         );
+    }
+
+    fn assert_rendered_path_only_oat_riser_vertical(points: &[(f64, f64)], case: &str) {
+        let polyline = format_svg_polyline(points);
+        assert!(polyline.contains(','), "{case}: empty polyline");
+        for (i, w) in points.windows(2).enumerate() {
+            let (a, b) = (w[0], w[1]);
+            let vertical = (b.0 - a.0).abs() < 0.01 && (b.1 - a.1).abs() > 0.5;
+            if vertical && i != 0 {
+                panic!("{case}: rendered vertical segment {i}: {a:?} -> {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn takeoff_rendered_polyline_has_no_vertical_jumps() {
+        use da20_core::rev29::hand_plot::tailwind_reference_x;
+        use da20_core::types::{ChartPhase, FlightInputs, PaOverride};
+
+        let data = PerformanceData::production();
+        let pa = PaOverride {
+            pa_ft: 2500.0,
+            phase: ChartPhase::Takeoff,
+        };
+        let cases = [
+            (
+                "tw-800",
+                FlightInputs {
+                    oat_c: 20.0,
+                    weight_lb: 800.0 / 0.45359237,
+                    runway: "190".into(),
+                    wind_dir_deg: 10.0,
+                    wind_speed_kt: 5.0,
+                    pa_override: Some(pa),
+                    ..Default::default()
+                },
+            ),
+            (
+                "tw-650",
+                FlightInputs {
+                    oat_c: 20.0,
+                    weight_lb: 650.0 / 0.45359237,
+                    runway: "190".into(),
+                    wind_dir_deg: 10.0,
+                    wind_speed_kt: 5.0,
+                    pa_override: Some(pa),
+                    ..Default::default()
+                },
+            ),
+            (
+                "calm-800",
+                FlightInputs {
+                    oat_c: 20.0,
+                    weight_lb: 800.0 / 0.45359237,
+                    runway: "360".into(),
+                    wind_dir_deg: 360.0,
+                    wind_speed_kt: 0.0,
+                    pa_override: Some(pa),
+                    ..Default::default()
+                },
+            ),
+            (
+                "calm-650",
+                FlightInputs {
+                    oat_c: 20.0,
+                    weight_lb: 650.0 / 0.45359237,
+                    runway: "360".into(),
+                    wind_dir_deg: 360.0,
+                    wind_speed_kt: 0.0,
+                    pa_override: Some(pa),
+                    ..Default::default()
+                },
+            ),
+            (
+                "hw20-750",
+                FlightInputs {
+                    oat_c: 20.0,
+                    weight_lb: 750.0 / 0.45359237,
+                    runway: "360".into(),
+                    wind_dir_deg: 360.0,
+                    wind_speed_kt: 20.0,
+                    pa_override: Some(pa),
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (name, inputs) in cases {
+            let pts = takeoff_rendered_path_points(data.inner(), &inputs, 2500.0);
+            assert_rendered_path_only_oat_riser_vertical(&pts, name);
+            let end = *pts.last().unwrap();
+            let path = takeoff_hand_path(data.inner(), &inputs, 2500.0);
+            assert!(
+                (end.1 - y_dist(path.chart_over_obstacle_m)).abs() < 0.75,
+                "{name}: endpoint y {} vs obstacle {}",
+                end.1,
+                y_dist(path.chart_over_obstacle_m)
+            );
+        }
+
+        let tw = FlightInputs {
+            oat_c: 20.0,
+            weight_lb: 800.0 / 0.45359237,
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            pa_override: Some(pa),
+            ..Default::default()
+        };
+        let pts = takeoff_rendered_path_points(data.inner(), &tw, 2500.0);
+        let core = takeoff_hand_path(data.inner(), &tw, 2500.0);
+        let mut sloped = false;
+        for w in pts.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let in_tw = a.0 >= TAKEOFF_TW.x - 0.1
+                && b.0 >= TAKEOFF_TW.x - 0.1
+                && a.0 <= tailwind_reference_x() + 0.1
+                && b.0 <= tailwind_reference_x() + 0.1;
+            if in_tw && b.0 < a.0 - 0.5 && (b.1 - a.1).abs() > 0.2 {
+                sloped = true;
+            }
+        }
+        assert!(sloped, "tailwind leg must slope from 0 kt toward 5 kt");
+        let at_5 = pts
+            .iter()
+            .find(|(x, _)| (*x - TAKEOFF_TW.x).abs() < 0.2)
+            .copied()
+            .expect("5 kt end");
+        let ground_y = y_dist(core.chart_ground_m);
+        assert!(
+            (at_5.1 - ground_y).abs() < 1.5,
+            "rendered 5 kt y {} vs ground-roll y {ground_y}",
+            at_5.1
+        );
+    }
+
+    #[test]
+    fn takeoff_wind_subpanels_render_at_five_to_twenty() {
+        let ratio = TAKEOFF_TW.w / TAKEOFF_HW.w;
+        assert!((ratio - 0.25).abs() < 1e-9, "TW:HW {ratio}");
+        assert!((TAKEOFF_TW.w + TAKEOFF_HW.w - TAKEOFF_WIND.w).abs() < 1e-9);
+        assert!(
+            (TAKEOFF_WIND.x + TAKEOFF_WIND.w - TAKEOFF_OBS.x).abs() < 1e-6,
+            "wind panel must meet the obstacle panel"
+        );
+        assert!((x_tailwind_kt(5.0) - TAKEOFF_TW.x).abs() < 1e-6);
+        assert!((x_tailwind_kt(0.0) - (TAKEOFF_TW.x + TAKEOFF_TW.w)).abs() < 1e-6);
+        assert!((x_headwind_kt(20.0) - (TAKEOFF_HW.x + TAKEOFF_HW.w)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn takeoff_strip_readout_matches_solver_and_weight_direction() {
+        use da20_core::takeoff::compute_takeoff;
+        use da20_core::types::{ChartPhase, FlightInputs, PaOverride};
+
+        let data = PerformanceData::production();
+        let pa = Some(PaOverride {
+            pa_ft: 2500.0,
+            phase: ChartPhase::Takeoff,
+        });
+        let light = FlightInputs {
+            oat_c: 20.0,
+            weight_lb: 650.0 / 0.45359237,
+            runway: "360".into(),
+            wind_dir_deg: 360.0,
+            wind_speed_kt: 0.0,
+            pa_override: pa,
+            ..Default::default()
+        };
+        let heavy_tw = FlightInputs {
+            oat_c: 20.0,
+            weight_lb: 800.0 / 0.45359237,
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            pa_override: pa,
+            ..Default::default()
+        };
+        let light_line = readout_line(Locale::En, StripKind::Takeoff, data.clone(), light.clone());
+        let heavy_line = readout_line(
+            Locale::En,
+            StripKind::Takeoff,
+            data.clone(),
+            heavy_tw.clone(),
+        );
+        let light_takeoff = compute_takeoff(&data, &light).unwrap();
+        let heavy_takeoff = compute_takeoff(&data, &heavy_tw).unwrap();
+        let light_path = takeoff_hand_path(data.inner(), &light, 2500.0);
+        let heavy_path = takeoff_hand_path(data.inner(), &heavy_tw, 2500.0);
+        assert!(
+            light_takeoff.distance_over_obstacle_raw_m
+                <= heavy_takeoff.distance_over_obstacle_raw_m
+        );
+        assert!(light_path.chart_ground_m <= heavy_path.chart_ground_m);
+        assert!(light_line.contains(&format!("{:.0}", light_path.chart_ground_m.round())));
+        assert!(light_line.contains(&format!(
+            "{:.0}",
+            light_takeoff.distance_over_obstacle_raw_ft.round()
+        )));
+        assert!(heavy_line.contains(&format!("{:.0}", heavy_path.chart_over_obstacle_m.round())));
+        let defaults = readout_line(
+            Locale::En,
+            StripKind::Takeoff,
+            data,
+            FlightInputs::default(),
+        );
+        assert!(
+            defaults.contains("401") && defaults.contains("1685"),
+            "default chart line is 401 m / 1685 ft, got {defaults}"
+        );
+        assert_ne!(light_line, defaults);
+        assert_ne!(heavy_line, light_line);
+    }
+
+    #[test]
+    fn pa_label_y_is_isoline_end_not_cursor() {
+        use da20_core::rev29::hand_plot::{
+            climb_fan_pa_curve_strip_points, climb_pa_isoline_y_at_panel_right,
+            takeoff_pa_curve_point_at_oat, takeoff_pa_curve_strip_points,
+            takeoff_pa_isoline_y_at_panel_right,
+        };
+        let data = PerformanceData::production();
+        let pts = takeoff_pa_curve_strip_points(data.inner(), 2500.0);
+        let y_end = takeoff_pa_isoline_y_at_panel_right(data.inner(), 2500.0);
+        let right = pts.last().copied().unwrap();
+        assert!((right.0 - (TAKEOFF_OAT.x + TAKEOFF_OAT.w)).abs() < 1.0);
+        assert!((y_end - right.1).abs() < 0.05);
+        let cursor = takeoff_pa_curve_point_at_oat(data.inner(), 2500.0, 20.0);
+        assert!(
+            (cursor.0 - right.0).abs() > 20.0,
+            "cursor must not be the panel-edge anchor"
+        );
+        let climb_pts = climb_fan_pa_curve_strip_points(data.inner(), 2500.0);
+        let climb_y = climb_pa_isoline_y_at_panel_right(data.inner(), 2500.0);
+        assert!((climb_y - climb_pts.last().unwrap().1).abs() < 0.05);
     }
 }
