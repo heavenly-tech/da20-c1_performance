@@ -79,6 +79,17 @@ pub fn TakeoffNumericBlock(
     }
 }
 
+fn commit_takeoff_weight_raw(
+    inputs: RwSignal<FlightInputs>,
+    prefs: RwSignal<TakeoffPrefs>,
+    raw: &str,
+) {
+    let unit = prefs.get_untracked().weight;
+    inputs.update(|i| {
+        apply_takeoff_weight_field_value(&mut i.weight_lb, unit, raw);
+    });
+}
+
 #[component]
 fn TakeoffWeightField(
     locale: RwSignal<Locale>,
@@ -87,72 +98,87 @@ fn TakeoffWeightField(
 ) -> impl IntoView {
     let editing = RwSignal::new(false);
     let draft = RwSignal::new(String::new());
+    let input_ref = NodeRef::<leptos::html::Input>::new();
+
+    // While the field is focused the browser owns the text. Writing `prop:value`
+    // on each key (especially `{:.2}` on `type=number`) rewrote "800" into "8.00".
+    Effect::new(move |_| {
+        let el = input_ref.get();
+        let editing_now = editing.get();
+        let unit = prefs.get().weight;
+        let text = takeoff_weight_field_display(false, "", inputs.get().weight_lb, unit);
+        if editing_now {
+            return;
+        }
+        if let Some(el) = el {
+            el.set_value(&text);
+        }
+    });
+
+    let commit_and_close = move |raw: String| {
+        commit_takeoff_weight_raw(inputs, prefs, &raw);
+        editing.set(false);
+    };
 
     view! {
         <div class="f">
-            {move || {
-                let c = copy(locale.get());
-                let unit = prefs.get().weight;
-                let label = match unit {
-                    WeightUnit::Kg => c.takeoff_weight_kg,
-                    WeightUnit::Lb => c.weight,
-                };
-                view! {
-                    <label>{label}</label>
-                    <div class="unit-row">
-                        <input type="number" step="any" class="mono"
-                            prop:value=move || {
-                                takeoff_weight_field_display(
-                                    editing.get(),
-                                    &draft.get(),
-                                    inputs.get().weight_lb,
-                                    unit,
-                                )
-                            }
-                            on:focus=move |_| {
-                                let u = prefs.get_untracked().weight;
-                                draft.set(format_takeoff_weight_display(inputs.get_untracked().weight_lb, u));
-                                editing.set(true);
-                            }
-                            on:input=move |ev| {
-                                let mut next = draft.get_untracked();
-                                note_takeoff_weight_draft(&mut next, &input_value(&ev));
-                                draft.set(next);
-                            }
-                            on:blur=move |ev| {
-                                let u = prefs.get_untracked().weight;
-                                let raw = input_value(&ev);
-                                inputs.update(|i| {
-                                    apply_takeoff_weight_field_value(&mut i.weight_lb, u, &raw);
-                                });
+            <label>
+                {move || {
+                    let c = copy(locale.get());
+                    match prefs.get().weight {
+                        WeightUnit::Kg => c.takeoff_weight_kg.to_string(),
+                        WeightUnit::Lb => c.weight.to_string(),
+                    }
+                }}
+            </label>
+            <div class="unit-row">
+                <input node_ref=input_ref type="text" inputmode="decimal" autocomplete="off" class="mono"
+                    on:focus=move |_| {
+                        editing.set(true);
+                    }
+                    on:input=move |ev| {
+                        let mut next = String::new();
+                        note_takeoff_weight_draft(&mut next, &input_value(&ev));
+                        draft.set(next);
+                    }
+                    on:blur=move |ev| {
+                        commit_and_close(input_value(&ev));
+                    }
+                    on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                        if ev.key() == "Enter" {
+                            commit_and_close(input_value(&ev));
+                        }
+                    }
+                />
+                <div class="toggle-row unit-toggle">
+                    <button type="button" class="btn g"
+                        class:on=move || prefs.get().weight == WeightUnit::Kg
+                        on:click=move |_| {
+                            if editing.get_untracked() {
+                                if let Some(el) = input_ref.get_untracked() {
+                                    commit_takeoff_weight_raw(inputs, prefs, &el.value());
+                                }
                                 editing.set(false);
                             }
-                            on:keydown=move |ev: leptos::ev::KeyboardEvent| {
-                                if ev.key() == "Enter" {
-                                    let u = prefs.get_untracked().weight;
-                                    let raw = input_value(&ev);
-                                    inputs.update(|i| {
-                                        apply_takeoff_weight_field_value(&mut i.weight_lb, u, &raw);
-                                    });
-                                    editing.set(false);
+                            prefs.update(|p| { p.weight = WeightUnit::Kg; p.save(); });
+                        }>
+                        {move || copy(locale.get()).unit_kg.to_string()}
+                    </button>
+                    <button type="button" class="btn g"
+                        class:on=move || prefs.get().weight == WeightUnit::Lb
+                        on:click=move |_| {
+                            if editing.get_untracked() {
+                                if let Some(el) = input_ref.get_untracked() {
+                                    commit_takeoff_weight_raw(inputs, prefs, &el.value());
                                 }
+                                editing.set(false);
                             }
-                        />
-                        <div class="toggle-row unit-toggle">
-                            <button type="button" class="btn g"
-                                class:on=move || prefs.get().weight == WeightUnit::Kg
-                                on:click=move |_| prefs.update(|p| { p.weight = WeightUnit::Kg; p.save(); })>
-                                {c.unit_kg}
-                            </button>
-                            <button type="button" class="btn g"
-                                class:on=move || prefs.get().weight == WeightUnit::Lb
-                                on:click=move |_| prefs.update(|p| { p.weight = WeightUnit::Lb; p.save(); })>
-                                {c.unit_lb}
-                            </button>
-                        </div>
-                    </div>
-                }
-            }}
+                            prefs.update(|p| { p.weight = WeightUnit::Lb; p.save(); });
+                        }>
+                        {move || copy(locale.get()).unit_lb.to_string()}
+                    </button>
+                </div>
+            </div>
         </div>
     }
 }
