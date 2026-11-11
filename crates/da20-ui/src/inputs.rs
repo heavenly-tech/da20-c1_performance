@@ -1,5 +1,6 @@
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
 use da20_core::cruise::isa_temp_c_at_pa;
+use da20_core::types::CruiseSolveMode;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
     runway_heading_deg, runway_heading_status, wind_chart_panel_needs_crosswind_note,
@@ -165,9 +166,33 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                 <NumField label=move || c.cruise_oat.to_string()
                     get=move || inputs.get().cruise_oat_c
                     set=move |v| inputs.update(|i| i.cruise_oat_c = v)/>
-                <NumField label=move || c.cruise_rpm.to_string()
-                    get=move || inputs.get().cruise_rpm
-                    set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                <div class="toggle-row">
+                    <button type="button" class="btn g"
+                        class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm
+                        on:click=move |_| inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetRpm)>
+                        {c.cruise_mode_set_rpm}
+                    </button>
+                    <button type="button" class="btn g"
+                        class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetPercentBhp
+                        on:click=move |_| inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetPercentBhp)>
+                        {c.cruise_mode_set_bhp}
+                    </button>
+                </div>
+                {move || {
+                    if inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm {
+                        view! {
+                            <NumField label=move || c.cruise_rpm.to_string()
+                                get=move || inputs.get().cruise_rpm
+                                set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <NumField label=move || c.cruise_pct_bhp.to_string()
+                                get=move || inputs.get().cruise_percent_bhp
+                                set=move |v| inputs.update(|i| i.cruise_percent_bhp = v)/>
+                        }.into_any()
+                    }
+                }}
                 {move || {
                     let c = copy(locale.get());
                     let installed = inputs.get().wheel_fairings_installed;

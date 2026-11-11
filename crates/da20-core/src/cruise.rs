@@ -2,8 +2,12 @@ use crate::data::PerformanceData;
 use crate::interpolation::lerp;
 use crate::provenance::provenance_for;
 use crate::types::{
-    cruise_fairing_multiplier, AfmLookupTag, CalculationWarning, CruiseResult, FlightInputs,
+    cruise_fairing_multiplier, AfmLookupTag, CalculationWarning, CruiseResult, CruiseSolveMode,
+    FlightInputs,
 };
+
+pub const CRUISE_BHP_EXTRAP_NOTE: &str =
+    "Requested %BHP is outside the range spanned by tabulated RPM levels at this PA/ΔISA; RPM solved by linear extrapolation along the %BHP–RPM curve (not clamped).";
 
 pub const CRUISE_TABLE3_GPH_NOTE: &str = "Table 3 GPH values are transcribed as printed in AFM Rev 29 (includes known oddities, e.g. 2000 ft / 2700 RPM ISA 6.8 GPH vs −20 °C 7.7 GPH; 4000 ft / 2800 RPM +10 °C 6.8 GPH).";
 
@@ -43,6 +47,8 @@ struct LookupFlags {
     disa_extrap: bool,
     /// True when PA is outside every altitude band where this RPM appears (no row at that PA).
     rpm_band_gap: bool,
+    /// True when target %BHP lies outside the band covered by tabulated RPM rows (inverse solve).
+    bhp_extrap: bool,
 }
 
 fn row_valid(r: &[f64]) -> bool {
@@ -238,6 +244,153 @@ fn merge_flags(a: &mut LookupFlags, b: LookupFlags) {
     a.disa_interp |= b.disa_interp;
     a.disa_extrap |= b.disa_extrap;
     a.rpm_band_gap |= b.rpm_band_gap;
+    a.bhp_extrap |= b.bhp_extrap;
+}
+
+fn percent_bhp_at_rpm(
+    rows: &[Vec<f64>],
+    pa: f64,
+    disa: f64,
+    rpm: f64,
+) -> Result<(f64, LookupFlags), CruiseError> {
+    let (tri, _, f) = lookup_table3(rows, pa, rpm, disa)?;
+    Ok((tri.bhp, f))
+}
+
+fn bhp_between(b0: f64, b1: f64, target: f64) -> bool {
+    let lo = b0.min(b1) - 1e-6;
+    let hi = b0.max(b1) + 1e-6;
+    target >= lo && target <= hi
+}
+
+fn push_solution(
+    best: &mut Option<(f64, LookupFlags)>,
+    rpm: f64,
+    flags: LookupFlags,
+    hint_rpm: f64,
+) {
+    let replace = |cur: f64, cand: f64| {
+        let d_cur = (cur - hint_rpm).abs();
+        let d_cand = (cand - hint_rpm).abs();
+        if (d_cand - d_cur).abs() < 1e-6 {
+            cand > cur
+        } else {
+            d_cand < d_cur
+        }
+    };
+    if best.as_ref().is_none_or(|(r, _)| replace(*r, rpm)) {
+        *best = Some((rpm, flags));
+    }
+}
+
+/// Invert %BHP → RPM by inverting the same piecewise-linear RPM segments as `lookup_table3`.
+fn solve_rpm_for_percent_bhp(
+    rows: &[Vec<f64>],
+    pa: f64,
+    disa: f64,
+    target_bhp: f64,
+    hint_rpm: f64,
+) -> Result<(f64, LookupFlags), CruiseError> {
+    let levels = unique_sorted_rpms(rows);
+    if levels.is_empty() {
+        return Err(CruiseError::NotFound);
+    }
+
+    let mut candidates: Option<(f64, LookupFlags)> = None;
+    for &rpm in &levels {
+        let (bhp, f) = percent_bhp_at_rpm(rows, pa, disa, rpm)?;
+        if (bhp - target_bhp).abs() < 1e-4 {
+            push_solution(&mut candidates, rpm, f, hint_rpm);
+        }
+    }
+    if let Some(hit) = candidates {
+        return Ok(hit);
+    }
+
+    let mut best: Option<(f64, LookupFlags)> = None;
+    for w in levels.windows(2) {
+        let r0 = w[0];
+        let r1 = w[1];
+        let (b0, f0) = percent_bhp_at_rpm(rows, pa, disa, r0)?;
+        let (b1, f1) = percent_bhp_at_rpm(rows, pa, disa, r1)?;
+        if !bhp_between(b0, b1, target_bhp) {
+            continue;
+        }
+        let denom = b1 - b0;
+        let t = if denom.abs() < 1e-9 {
+            0.5
+        } else {
+            (target_bhp - b0) / denom
+        };
+        let rpm = lerp(0.0, r0, 1.0, r1, t);
+        let mut merged = LookupFlags::default();
+        merge_flags(&mut merged, f0);
+        merge_flags(&mut merged, f1);
+        merged.rpm_interp = (r1 - r0).abs() > RPM_MATCH_TOL;
+        push_solution(&mut best, rpm, merged, hint_rpm);
+    }
+    if let Some(hit) = best {
+        return Ok(hit);
+    }
+
+    let r_lo = levels[0];
+    let r_hi = *levels.last().unwrap();
+    let (b_lo, f_lo) = percent_bhp_at_rpm(rows, pa, disa, r_lo)?;
+    let (b_hi, f_hi) = percent_bhp_at_rpm(rows, pa, disa, r_hi)?;
+    let band_min = b_lo.min(b_hi);
+
+    let inv_flags = LookupFlags {
+        bhp_extrap: true,
+        rpm_extrap: true,
+        ..Default::default()
+    };
+
+    if levels.len() < 2 {
+        let mut merged = f_lo;
+        merge_flags(&mut merged, inv_flags);
+        return Ok((r_lo, merged));
+    }
+
+    let below_band = target_bhp < band_min;
+    let (rpm_a, rpm_b, b_a, b_b, fa, fb) = if below_band {
+        if b_lo <= b_hi {
+            let r1 = levels[1];
+            let (b1, f1) = percent_bhp_at_rpm(rows, pa, disa, r1)?;
+            (r_lo, r1, b_lo, b1, f_lo, f1)
+        } else {
+            let n = levels.len();
+            let ra = levels[n - 2];
+            let (ba, fa) = percent_bhp_at_rpm(rows, pa, disa, ra)?;
+            (ra, r_hi, ba, b_hi, fa, f_hi)
+        }
+    } else if b_lo <= b_hi {
+        let n = levels.len();
+        let ra = levels[n - 2];
+        let (ba, fa) = percent_bhp_at_rpm(rows, pa, disa, ra)?;
+        (ra, r_hi, ba, b_hi, fa, f_hi)
+    } else {
+        let r1 = levels[1];
+        let (b1, f1) = percent_bhp_at_rpm(rows, pa, disa, r1)?;
+        (r_lo, r1, b_lo, b1, f_lo, f1)
+    };
+
+    let denom = b_b - b_a;
+    let t = if denom.abs() < 1e-9 {
+        if below_band {
+            -1.0
+        } else {
+            2.0
+        }
+    } else {
+        (target_bhp - b_a) / denom
+    };
+    let solved = lerp(0.0, rpm_a, 1.0, rpm_b, t);
+    let mut merged = LookupFlags::default();
+    merge_flags(&mut merged, fa);
+    merge_flags(&mut merged, fb);
+    merged.rpm_interp = true;
+    merge_flags(&mut merged, inv_flags);
+    Ok((solved, merged))
 }
 
 fn surface_with_rpm_gap_flag(
@@ -336,7 +489,7 @@ fn lookup_table3(
 }
 
 fn resolve_tag(pa: f64, rpm: f64, disa: f64, rows: &[Vec<f64>], f: &LookupFlags) -> AfmLookupTag {
-    if f.rpm_band_gap || f.rpm_extrap || f.disa_extrap || f.pa_extrap {
+    if f.rpm_band_gap || f.rpm_extrap || f.disa_extrap || f.pa_extrap || f.bhp_extrap {
         return AfmLookupTag::Extrapolated;
     }
 
@@ -363,24 +516,28 @@ fn resolve_tag(pa: f64, rpm: f64, disa: f64, rows: &[Vec<f64>], f: &LookupFlags)
     }
 }
 
-pub fn compute_cruise(
+#[allow(clippy::too_many_arguments)]
+fn build_cruise_result(
     data: &PerformanceData,
-    inputs: &FlightInputs,
+    pa: f64,
+    rpm: f64,
+    disa: f64,
+    rows: &[Vec<f64>],
+    extra_flags: LookupFlags,
+    warnings: Vec<CalculationWarning>,
+    fairings: bool,
 ) -> Result<CruiseResult, CruiseError> {
-    let pa = inputs.cruise_pressure_alt_ft;
-    let rpm = inputs.cruise_rpm;
-    let rows = &data.inner().cruise_table.value.rows;
-    let disa = disa_c(inputs.cruise_oat_c, pa);
-    let (tri, tag, _) = lookup_table3(rows, pa, rpm, disa)?;
+    let (tri, _, mut flags) = lookup_table3(rows, pa, rpm, disa)?;
+    merge_flags(&mut flags, extra_flags);
+    let tag = resolve_tag(pa, rpm, disa, rows, &flags);
 
-    let m = cruise_fairing_multiplier(inputs.wheel_fairings_installed);
+    let m = cruise_fairing_multiplier(fairings);
     let tas = tri.tas * m;
-
-    let warnings = vec![CalculationWarning::code_only("TABLE3_GPH")];
 
     Ok(CruiseResult {
         provenance: provenance_for(data.inner(), data.cruise_source()),
         afm_lookup_tag: tag,
+        rpm: Some(rpm),
         percent_bhp: Some(tri.bhp),
         tas_chart_kt: Some(tri.tas),
         tas_kt: tas,
@@ -388,6 +545,58 @@ pub fn compute_cruise(
         fuel_flow_us_gal_h: tri.gph,
         warnings,
     })
+}
+
+pub fn compute_cruise(
+    data: &PerformanceData,
+    inputs: &FlightInputs,
+) -> Result<CruiseResult, CruiseError> {
+    let pa = inputs.cruise_pressure_alt_ft;
+    let rows = &data.inner().cruise_table.value.rows;
+    let disa = disa_c(inputs.cruise_oat_c, pa);
+    let mut warnings = vec![CalculationWarning::code_only("TABLE3_GPH")];
+
+    let (rpm, extra_flags) = match inputs.cruise_solve_mode {
+        CruiseSolveMode::SetRpm => (inputs.cruise_rpm, LookupFlags::default()),
+        CruiseSolveMode::SetPercentBhp => {
+            let (solved, inv) = solve_rpm_for_percent_bhp(
+                rows,
+                pa,
+                disa,
+                inputs.cruise_percent_bhp,
+                inputs.cruise_rpm,
+            )?;
+            if inv.bhp_extrap {
+                warnings.push(CalculationWarning::with_args(
+                    "CRUISE_BHP_OUT_OF_RANGE",
+                    vec![format!("{:.2}", inputs.cruise_percent_bhp)],
+                ));
+            }
+            (solved, inv)
+        }
+    };
+
+    build_cruise_result(
+        data,
+        pa,
+        rpm,
+        disa,
+        rows,
+        extra_flags,
+        warnings,
+        inputs.wheel_fairings_installed,
+    )
+}
+
+/// RPM row to highlight in the full Table 3 view (solved RPM in %BHP mode).
+pub fn effective_cruise_highlight_rpm(data: &PerformanceData, inputs: &FlightInputs) -> f64 {
+    match inputs.cruise_solve_mode {
+        CruiseSolveMode::SetRpm => inputs.cruise_rpm,
+        CruiseSolveMode::SetPercentBhp => compute_cruise(data, inputs)
+            .ok()
+            .and_then(|r| r.rpm)
+            .unwrap_or(inputs.cruise_rpm),
+    }
 }
 
 /// Cell tag for a published Table 3 row at a temperature column (ΔISA −20 / 0 / +10).
@@ -478,6 +687,133 @@ mod tests {
         inputs.oat_c = -10.0;
         let r2 = compute_cruise(&data, &inputs).unwrap();
         assert!((r1.tas_kt - r2.tas_kt).abs() < 1e-9);
+    }
+
+    #[test]
+    fn round_trip_rpm_bhp_rpm_grid() {
+        let data = PerformanceData::production();
+        let rows = &data.inner().cruise_table.value.rows;
+        let pas: Vec<f64> = rows.iter().filter(|r| row_valid(r)).map(|r| r[0]).collect();
+        let pas: Vec<f64> = {
+            let mut v = pas;
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v.dedup_by(|a, b| (*a - *b).abs() < PA_MATCH_TOL);
+            v
+        };
+        let rpms = unique_sorted_rpms(rows);
+        for &pa in &pas {
+            for pa_mid in [pa - 250.0, pa, pa + 250.0] {
+                if pa_mid < 0.0 {
+                    continue;
+                }
+                let disa = 0.0;
+                let oat = isa_temp_c_at_pa(pa_mid);
+                for &rpm in &rpms {
+                    let forward = FlightInputs {
+                        cruise_pressure_alt_ft: pa_mid,
+                        cruise_rpm: rpm,
+                        cruise_oat_c: oat,
+                        cruise_solve_mode: CruiseSolveMode::SetRpm,
+                        wheel_fairings_installed: true,
+                        ..FlightInputs::default()
+                    };
+                    let r_fwd = compute_cruise(&data, &forward).expect("forward");
+                    let bhp = r_fwd.percent_bhp.unwrap();
+                    let rpms_lv = unique_sorted_rpms(rows);
+                    let b_lo = percent_bhp_at_rpm(rows, pa_mid, disa, rpms_lv[0])
+                        .expect("bhp lo")
+                        .0;
+                    let b_hi = percent_bhp_at_rpm(rows, pa_mid, disa, *rpms_lv.last().unwrap())
+                        .expect("bhp hi")
+                        .0;
+                    let band_min = b_lo.min(b_hi);
+                    let band_max = b_lo.max(b_hi);
+                    if bhp < band_min - 0.01 || bhp > band_max + 0.01 {
+                        continue;
+                    }
+                    let inverse = FlightInputs {
+                        cruise_pressure_alt_ft: pa_mid,
+                        cruise_oat_c: oat,
+                        cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+                        cruise_percent_bhp: bhp,
+                        cruise_rpm: rpm,
+                        wheel_fairings_installed: true,
+                        ..FlightInputs::default()
+                    };
+                    let r_inv = compute_cruise(&data, &inverse).expect("inverse");
+                    assert!(
+                        (r_inv.rpm.unwrap() - rpm).abs() < 1.0,
+                        "pa={pa_mid} rpm={rpm} bhp={bhp} got={}",
+                        r_inv.rpm.unwrap()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn worked_example_bhp_mode_6500ft_isa() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            cruise_percent_bhp: 56.25,
+            wheel_fairings_installed: true,
+            ..FlightInputs::default()
+        };
+        let r = compute_cruise(&data, &inputs).unwrap();
+        assert!((r.rpm.unwrap() - 2600.0).abs() < 0.5);
+        assert!((r.percent_bhp.unwrap() - 56.25).abs() < 0.01);
+        assert!((r.tas_chart_kt.unwrap() - 116.0).abs() < 0.01);
+        assert!((r.fuel_flow_us_gal_h - 5.525).abs() < 0.01);
+        assert_eq!(r.afm_lookup_tag, AfmLookupTag::Interpolated);
+    }
+
+    #[test]
+    fn unreachable_bhp_not_clamped_and_tag_extrapolated() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            cruise_percent_bhp: 5.0,
+            wheel_fairings_installed: true,
+            ..FlightInputs::default()
+        };
+        let r = compute_cruise(&data, &inputs).unwrap();
+        assert_eq!(r.afm_lookup_tag, AfmLookupTag::Extrapolated);
+        let rows = &data.inner().cruise_table.value.rows;
+        let disa = disa_c(inputs.cruise_oat_c, inputs.cruise_pressure_alt_ft);
+        let levels = unique_sorted_rpms(rows);
+        let (b_lo, _) =
+            percent_bhp_at_rpm(rows, inputs.cruise_pressure_alt_ft, disa, levels[0]).unwrap();
+        let (b_hi, _) = percent_bhp_at_rpm(
+            rows,
+            inputs.cruise_pressure_alt_ft,
+            disa,
+            *levels.last().unwrap(),
+        )
+        .unwrap();
+        let band_min = b_lo.min(b_hi);
+        assert!(
+            5.0 < band_min - 0.5,
+            "test assumes 5% BHP below band min {band_min}"
+        );
+        let solved = r.rpm.unwrap();
+        let anchor = if b_lo <= b_hi {
+            levels[0]
+        } else {
+            *levels.last().unwrap()
+        };
+        assert!(
+            (solved - anchor).abs() > 50.0,
+            "expected extrapolated RPM away from anchor {anchor}, got {solved}"
+        );
+        assert!(r
+            .warnings
+            .iter()
+            .any(|w| w.code == "CRUISE_BHP_OUT_OF_RANGE"));
     }
 
     #[test]

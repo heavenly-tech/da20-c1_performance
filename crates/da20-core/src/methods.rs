@@ -53,8 +53,8 @@ pub fn all_methods() -> Vec<MethodEntry> {
             id: "cruise",
             title: "Cruise performance (Table 3)",
             afm_reference: "AFM pages 5-14 / 5-15, Table 3",
-            summary: "ΔISA = OAT − ISA at PA. Interpolate %BHP, KTAS, and GPH in pressure altitude between published rows and in ΔISA between the three published temperature columns (−20 / 0 / +10) at each row. If RPM is between tabulated RPM levels, interpolate between those surfaces. Wheel fairing note: apply ~5% lower TAS after Table 3 lookup; GPH is not scaled.",
-            interpolation: "Trilinear-style: bilinear PA × ΔISA within each RPM band, then linear in RPM between neighboring tabulated RPM levels when RPM is not an AFM row.",
+            summary: "ΔISA = OAT − ISA at PA. Forward mode (set RPM): interpolate %BHP, KTAS, and GPH in PA and ΔISA and linearly in RPM between tabulated levels. Inverse mode (set %BHP): bilinear PA × ΔISA at each tabulated RPM to build %BHP(RPM), invert linearly between neighboring RPM rows (%BHP monotonic in RPM), then read TAS/GPH at the solved RPM. Out-of-range %BHP is extrapolated, not clamped. Wheel fairing note: apply ~5% lower TAS after Table 3 lookup; GPH is not scaled.",
+            interpolation: "Forward: trilinear-style bilinear PA × ΔISA per RPM band, then linear in RPM. Inverse: same surface %BHP(RPM) inverted linearly; extrapolation flagged when %BHP lies outside the tabulated RPM band at that PA/ΔISA.",
             limitations: CRUISE_TABLE3_GPH_NOTE,
         },
         MethodEntry {

@@ -96,6 +96,9 @@ pub struct Copy {
     pub weight: &'static str,
     pub cruise_pa: &'static str,
     pub cruise_rpm: &'static str,
+    pub cruise_mode_set_rpm: &'static str,
+    pub cruise_mode_set_bhp: &'static str,
+    pub cruise_pct_bhp: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
     pub climb_fig_55: &'static str,
@@ -276,6 +279,9 @@ const ES: Copy = Copy {
     weight: "Peso (lb)",
     cruise_pa: "PA crucero (ft)",
     cruise_rpm: "RPM crucero",
+    cruise_mode_set_rpm: "Fijar RPM",
+    cruise_mode_set_bhp: "Fijar %BHP",
+    cruise_pct_bhp: "% BHP crucero",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
     climb_fig_55: "Fig 5.5 — flaps crucero",
@@ -439,6 +445,9 @@ const EN: Copy = Copy {
     weight: "Weight (lb)",
     cruise_pa: "Cruise PA (ft)",
     cruise_rpm: "Cruise RPM",
+    cruise_mode_set_rpm: "Set RPM",
+    cruise_mode_set_bhp: "Set %BHP",
+    cruise_pct_bhp: "Cruise % BHP",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
     climb_fig_55: "Fig 5.5 — cruise flaps",
@@ -588,8 +597,8 @@ const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
-        summary: "ΔISA = OAT − ISA en esa PA. Interpolación de %Potencia, TAS y GPH en altitud entre filas publicadas y en ΔISA entre columnas −20 / 0 / +10. Si el RPM cae entre niveles tabulados, interpolación entre esas superficies. Carenados: aplicar ~−5% TAS después de la consulta Tabla 3; sin escalar GPH.",
-        interpolation: "Trilineal: bilineal PA × ΔISA en cada banda de RPM y luego lineal en RPM entre niveles tabulados vecinos. La etiqueta refleja la tabla antes del factor de carenados.",
+        summary: "ΔISA = OAT − ISA en esa PA. Modo fijar RPM: interpolación de %BHP, TAS y GPH en PA y ΔISA y lineal en RPM entre niveles tabulados. Modo fijar %BHP: bilineal PA × ΔISA en cada RPM tabulado para %BHP(RPM), inversión lineal entre filas vecinas; %BHP fuera de rango se extrapola (sin fijar al borde). Carenados: ~−5% TAS después de Tabla 3; GPH sin escalar.",
+        interpolation: "Directo trilineal; inverso: misma superficie %BHP(RPM) invertida linealmente; extrapolado cuando el %BHP queda fuera de la banda de RPM tabulada en esa PA/ΔISA.",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
@@ -648,8 +657,8 @@ const EN_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
-        summary: "ΔISA = OAT − ISA at that PA. Interpolate %BHP, KTAS, and GPH in altitude between published rows and in ΔISA between the −20 / 0 / +10 columns. If RPM lies between tabulated levels, interpolate between those RPM surfaces. Wheel fairings: apply ~−5% TAS after the Table 3 lookup; do not scale GPH.",
-        interpolation: "Trilinear-style: bilinear PA × ΔISA within each RPM band, then linear in RPM between neighboring tabulated RPM levels. Tag reflects table lookup before the fairing factor.",
+        summary: "ΔISA = OAT − ISA at that PA. Set RPM: interpolate %BHP, KTAS, and GPH in PA/ΔISA and linearly in RPM. Set %BHP: bilinear PA × ΔISA at each tabulated RPM to form %BHP(RPM), invert linearly between neighbors; out-of-range %BHP is extrapolated, not clamped. Wheel fairings: ~−5% TAS after Table 3; GPH not scaled.",
+        interpolation: "Forward trilinear; inverse uses the same %BHP(RPM) surface inverted linearly; extrapolated when %BHP is outside tabulated RPM coverage at that PA/ΔISA.",
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
@@ -957,6 +966,17 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             Locale::Es => "GPH Tabla 3 transcritos del AFM Rev 29.".into(),
             Locale::En => "Table 3 GPH transcribed from AFM Rev 29.".into(),
         },
+        "CRUISE_BHP_OUT_OF_RANGE" => {
+            let pct = w.args.first().map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!(
+                    "%BHP solicitado {pct}% fuera del rango cubierto por RPM tabulados en esta PA/ΔISA (sin fijar al borde)."
+                ),
+                Locale::En => format!(
+                    "Requested %BHP {pct}% is outside tabulated RPM coverage at this PA/ΔISA (not clamped to table edge)."
+                ),
+            }
+        }
         "RUNWAY_HEADING" => match locale {
             Locale::Es => format!(
                 "Rumbo de pista «{ctx}» inválido — use 001–360 (3 dígitos); cálculo con 0°."
@@ -1092,6 +1112,16 @@ mod i18n_display_tests {
             ..Default::default()
         };
         assert!(wind_chart_panel_needs_crosswind_note(&inputs));
+    }
+
+    #[test]
+    fn cruise_mode_toggle_i18n_both_locales() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.cruise_mode_set_rpm, "Fijar RPM");
+        assert_eq!(es.cruise_mode_set_bhp, "Fijar %BHP");
+        assert_eq!(en.cruise_mode_set_rpm, "Set RPM");
+        assert_eq!(en.cruise_mode_set_bhp, "Set %BHP");
     }
 
     #[test]

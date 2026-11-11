@@ -20,7 +20,7 @@ use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
-use da20_core::types::ChartPhase;
+use da20_core::types::{ChartPhase, CruiseSolveMode};
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -367,11 +367,37 @@ fn phase_results(
                     let t_chart = tas_c.map(|x| x.round() as i64).unwrap_or(pen.round() as i64);
                     let t_pen = pen.round() as i64;
                     let bhp = cr.percent_bhp.unwrap_or(0.0);
+                    let rpm_out = cr.rpm.map(|x| x.round() as i64).unwrap_or(0);
+                    let bhp_mode = inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp;
                     view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
                         <p class="chip">{afm_lookup_tag_label(locale, cr.afm_lookup_tag)}</p>
-                        {if fair_on {
+                        {if bhp_mode {
+                            if fair_on {
+                                view! {
+                                    <>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span></p>
+                                        <p class="mono">{format!("{bhp:.2}")}" % BHP · "{format!("{ff:.1}")}" US gal/h"</p>
+                                    </>
+                                }.into_any()
+                            } else if tas_c.is_some() {
+                                view! {
+                                    <>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                        <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
+                                        <p class="mono">{format!("{bhp:.2}")}" % BHP · "{format!("{ff:.1}")}" US gal/h"</p>
+                                    </>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                        <p class="mono">{format!("{bhp:.2}")}" % BHP · "{format!("{ff:.1}")}" US gal/h"</p>
+                                    </>
+                                }.into_any()
+                            }
+                        } else if fair_on {
                             view! {
                                 <>
                                     <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_chart}<span class="u">" kt TAS"</span></p>
