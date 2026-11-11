@@ -45,19 +45,24 @@ pub struct Panel {
 
 pub const TAKEOFF_OAT: Panel = Panel { x: 60.0, w: 420.0 };
 pub const TAKEOFF_WEIGHT: Panel = Panel { x: 510.0, w: 230.0 };
-/// Full wind panel (TW sub-panel + HW sub-panel).
-pub const TAKEOFF_WIND: Panel = Panel { x: 770.0, w: 150.0 };
+/// Full wind panel (TW sub-panel + HW sub-panel). Wide enough that a 5 kt
+/// tailwind correction reads as a slope (5:20 sub-panels, 80 px per 5 kt).
+pub const TAKEOFF_WIND: Panel = Panel { x: 770.0, w: 400.0 };
 /// Fig 5.4 tailwind sub-panel (0–5 kt); 0 kt reference on the right edge, away from weight panel.
+/// Width 5/25 of the wind panel (same 0–5 kt vs 0–20 kt scale as the AFM chart).
 pub const TAKEOFF_TW: Panel = Panel {
     x: TAKEOFF_WIND.x,
-    w: 50.0,
+    w: TAKEOFF_WIND.w * 5.0 / 25.0,
 };
 /// Headwind sub-panel (0–20 kt), to the right of the TW sub-panel.
 pub const TAKEOFF_HW: Panel = Panel {
     x: TAKEOFF_TW.x + TAKEOFF_TW.w,
     w: TAKEOFF_WIND.w - TAKEOFF_TW.w,
 };
-pub const TAKEOFF_OBS: Panel = Panel { x: 950.0, w: 110.0 };
+pub const TAKEOFF_OBS: Panel = Panel {
+    x: 1170.0,
+    w: 110.0,
+};
 
 pub const CLIMB_EQ: Panel = Panel { x: 60.0, w: 480.0 };
 pub const CLIMB_ROC: Panel = Panel { x: 560.0, w: 490.0 };
@@ -206,22 +211,97 @@ pub fn headwind_and_tailwind(inputs: &FlightInputs) -> (f64, f64) {
     headwind_tailwind_kt(&c)
 }
 
-fn weight_distance_m(data: &Rev29File, base_m: f64, weight_kg: f64) -> f64 {
-    let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
-    let (wf, _) = weight_factor(data, weight_kg);
-    let (wf_chart, _) = weight_factor(data, chart_kg);
-    base_m * wf / wf_chart
+fn bracket_entry_line_index(lines: &[f64], entry_m: f64) -> usize {
+    let mut j = 0usize;
+    while j + 1 < lines.len() && lines[j + 1] <= entry_m {
+        j += 1;
+    }
+    j.min(lines.len().saturating_sub(2))
 }
 
-fn trace_weight_path(data: &Rev29File, base_m: f64, from_kg: f64, to_kg: f64) -> Vec<(f64, f64)> {
+fn bracket_hw_line_index(lines: &[f64], entry_m: f64) -> usize {
+    bracket_entry_line_index(lines, entry_m)
+}
+
+/// Weight-panel point on the interpolated distance-row guide at `kg`.
+pub fn weight_panel_point_interp(data: &Rev29File, entry_m: f64, kg: f64) -> (f64, f64) {
+    let lines = &data.hw_lines.value;
+    if lines.is_empty() {
+        return weight_panel_point(data, entry_m, kg);
+    }
+    if lines.len() == 1 || entry_m <= lines[0] {
+        return weight_panel_point(data, lines[0], kg);
+    }
+    if entry_m >= lines[lines.len() - 1] {
+        return weight_panel_point(data, *lines.last().unwrap(), kg);
+    }
+    let j = bracket_hw_line_index(lines, entry_m);
+    let p0 = weight_panel_point(data, lines[j], kg);
+    let p1 = weight_panel_point(data, lines[j + 1], kg);
+    let t = (entry_m - lines[j]) / (lines[j + 1] - lines[j]);
+    (p0.0 + t * (p1.0 - p0.0), p0.1 + t * (p1.1 - p0.1))
+}
+
+fn tailwind_panel_point(data: &Rev29File, line_m: f64, tw_kt: f64) -> (f64, f64) {
+    let dist = wind_panel_tw_distance(data, line_m, tw_kt).0;
+    (x_tailwind_kt(tw_kt), y_dist(dist))
+}
+
+/// Tailwind-panel point on the interpolated distance-row guide at `tw_kt`.
+pub fn tailwind_panel_point_interp(data: &Rev29File, entry_m: f64, tw_kt: f64) -> (f64, f64) {
+    let lines = &data.tw_lines.value;
+    if lines.is_empty() {
+        return tailwind_panel_point(data, entry_m, tw_kt);
+    }
+    if lines.len() == 1 || entry_m <= lines[0] {
+        return tailwind_panel_point(data, lines[0], tw_kt);
+    }
+    if entry_m >= lines[lines.len() - 1] {
+        return tailwind_panel_point(data, *lines.last().unwrap(), tw_kt);
+    }
+    let j = bracket_entry_line_index(lines, entry_m);
+    let p0 = tailwind_panel_point(data, lines[j], tw_kt);
+    let p1 = tailwind_panel_point(data, lines[j + 1], tw_kt);
+    let t = (entry_m - lines[j]) / (lines[j + 1] - lines[j]);
+    (p0.0 + t * (p1.0 - p0.0), p0.1 + t * (p1.1 - p0.1))
+}
+
+fn headwind_panel_point(data: &Rev29File, line_m: f64, hw_kt: f64) -> (f64, f64) {
+    let dist = wind_panel_hw_distance(data, line_m, hw_kt).0;
+    (x_headwind_kt(hw_kt), y_dist(dist))
+}
+
+fn headwind_panel_point_interp(data: &Rev29File, entry_m: f64, hw_kt: f64) -> (f64, f64) {
+    let lines = &data.hw_lines.value;
+    if lines.is_empty() {
+        return headwind_panel_point(data, entry_m, hw_kt);
+    }
+    if lines.len() == 1 || entry_m <= lines[0] {
+        return headwind_panel_point(data, lines[0], hw_kt);
+    }
+    if entry_m >= lines[lines.len() - 1] {
+        return headwind_panel_point(data, *lines.last().unwrap(), hw_kt);
+    }
+    let j = bracket_entry_line_index(lines, entry_m);
+    let p0 = headwind_panel_point(data, lines[j], hw_kt);
+    let p1 = headwind_panel_point(data, lines[j + 1], hw_kt);
+    let t = (entry_m - lines[j]) / (lines[j + 1] - lines[j]);
+    (p0.0 + t * (p1.0 - p0.0), p0.1 + t * (p1.1 - p0.1))
+}
+
+fn trace_weight_path_interp(
+    data: &Rev29File,
+    entry_m: f64,
+    from_kg: f64,
+    to_kg: f64,
+) -> Vec<(f64, f64)> {
     let lo = from_kg.min(to_kg);
     let hi = from_kg.max(to_kg);
     let mut pts = Vec::with_capacity(PATH_STEPS + 1);
     for i in 0..=PATH_STEPS {
         let t = i as f64 / PATH_STEPS as f64;
         let kg = lo + t * (hi - lo);
-        let dist = weight_distance_m(data, base_m, kg);
-        pts.push((x_weight_kg(kg), y_dist(dist)));
+        pts.push(weight_panel_point_interp(data, entry_m, kg));
     }
     if to_kg < from_kg {
         pts.reverse();
@@ -229,50 +309,38 @@ fn trace_weight_path(data: &Rev29File, base_m: f64, from_kg: f64, to_kg: f64) ->
     pts
 }
 
-fn trace_headwind_guide(data: &Rev29File, after_weight_m: f64, hw_kt: f64) -> Vec<(f64, f64)> {
-    trace_wind_panel_guide(
-        data,
-        after_weight_m,
-        hw_kt,
-        &data.hw_kt.value,
-        wind_panel_hw_distance,
-        x_headwind_kt,
-    )
-}
-
-fn trace_tailwind_guide(data: &Rev29File, after_weight_m: f64, tw_kt: f64) -> Vec<(f64, f64)> {
-    trace_wind_panel_guide(
-        data,
-        after_weight_m,
-        tw_kt,
-        &data.tw_kt.value,
-        wind_panel_tw_distance,
-        x_tailwind_kt,
-    )
-}
-
-fn trace_wind_panel_guide(
+fn trace_headwind_guide(
     data: &Rev29File,
-    entry_m: f64,
-    component_kt: f64,
-    kt_axis: &[f64],
-    sample: fn(&Rev29File, f64, f64) -> (f64, Vec<CalculationWarning>),
-    x_map: fn(f64) -> f64,
+    after_weight_m: f64,
+    hw_kt: f64,
+    entry: (f64, f64),
 ) -> Vec<(f64, f64)> {
-    let mut pts = Vec::new();
-    for &kt in kt_axis {
-        if kt > component_kt + 1e-6 {
-            break;
-        }
-        let dist = sample(data, entry_m, kt).0;
-        pts.push((x_map(kt), y_dist(dist)));
+    if hw_kt <= 1e-9 {
+        return vec![entry];
     }
-    let end = (
-        x_map(component_kt),
-        y_dist(sample(data, entry_m, component_kt).0),
-    );
-    if pts.last().copied() != Some(end) {
-        pts.push(end);
+    let mut pts = vec![entry];
+    for i in 1..=PATH_STEPS {
+        let t = i as f64 / PATH_STEPS as f64;
+        let kt = hw_kt * t;
+        pts.push(headwind_panel_point_interp(data, after_weight_m, kt));
+    }
+    pts
+}
+
+fn trace_tailwind_guide(
+    data: &Rev29File,
+    after_weight_m: f64,
+    tw_kt: f64,
+    entry: (f64, f64),
+) -> Vec<(f64, f64)> {
+    if tw_kt <= 1e-9 {
+        return vec![entry];
+    }
+    let mut pts = vec![entry];
+    for i in 1..=PATH_STEPS {
+        let t = i as f64 / PATH_STEPS as f64;
+        let kt = tw_kt * t;
+        pts.push(tailwind_panel_point_interp(data, after_weight_m, kt));
     }
     pts
 }
@@ -359,9 +427,7 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
     let y_on_pa_curve = y_dist(core.base_m);
     let weight_ref_x = TAKEOFF_WEIGHT.x;
     let chart_kg = defaults::TAKEOFF_CHART_WEIGHT_KG;
-    let after_wt_y = y_dist(core.after_weight_m);
-    let wind_row_m = core.wind_panel_entry_m;
-    let wind_row_y = y_dist(wind_row_m);
+    let wind_row_m = core.after_weight_m;
 
     let mut markers = Vec::with_capacity(8);
     push_turn_marker(&mut markers, (oat_x, STRIP_BOTTOM));
@@ -376,30 +442,33 @@ pub fn takeoff_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) ->
         (weight_ref_x, y_on_pa_curve),
     ];
 
-    let along_weight = trace_weight_path(data, core.base_m, chart_kg, weight_kg);
+    let along_weight = trace_weight_path_interp(data, core.base_m, chart_kg, weight_kg);
     append_segment(&mut points, &along_weight);
 
-    let wind_panel_left = takeoff_wind_panel_entry_x(hw, tw);
+    // Enter the wind panel on a horizontal at the weight-exit distance. Do not snap
+    // vertically onto the 0 kt guide — that step is the jump at the panel edge.
+    let wind_entry_x = if takeoff_wind_is_tailwind(hw, tw) {
+        tailwind_reference_x()
+    } else {
+        TAKEOFF_HW.x
+    };
     if let Some((lx, ly)) = points.last().copied() {
-        if (ly - after_wt_y).abs() > 0.5 {
-            points.push((lx, after_wt_y));
-        }
-        if (after_wt_y - wind_row_y).abs() > 0.5 {
-            let wx = points.last().map(|p| p.0).unwrap_or(lx);
-            points.push((wx, wind_row_y));
-        }
-        if (points.last().map(|p| p.0).unwrap_or(lx) - wind_panel_left).abs() > 0.5 {
-            points.push((wind_panel_left, wind_row_y));
+        if (lx - wind_entry_x).abs() > 0.5 {
+            points.push((wind_entry_x, ly));
         }
     }
-    push_turn_marker(&mut markers, (wind_panel_left, wind_row_y));
+    let wind_entry = points
+        .last()
+        .copied()
+        .unwrap_or((wind_entry_x, y_dist(wind_row_m)));
+    push_turn_marker(&mut markers, wind_entry);
 
     let wind_trace = if takeoff_wind_is_tailwind(hw, tw) {
-        trace_tailwind_guide(data, wind_row_m, tw)
+        trace_tailwind_guide(data, wind_row_m, tw, wind_entry)
     } else if hw > 0.0 {
-        trace_headwind_guide(data, wind_row_m, hw)
+        trace_headwind_guide(data, wind_row_m, hw, wind_entry)
     } else {
-        vec![(x_headwind_kt(0.0), wind_row_y)]
+        vec![wind_entry]
     };
     append_segment(&mut points, &wind_trace);
     if let Some(wind_exit) = points.last().copied() {
@@ -491,12 +560,92 @@ pub struct TakeoffOatPaTrace {
     pub pa_ft: f64,
 }
 
-pub fn takeoff_oat_panel_pa_trace(data: &Rev29File, pa_ft: f64, oat_c: f64) -> TakeoffOatPaTrace {
-    TakeoffOatPaTrace {
-        y: y_dist(chart_read_takeoff_base_m(data, pa_ft, oat_c)),
-        oat_x: x_oat(oat_c),
-        pa_ft,
+/// Fig 5.4 OAT/PA panel: full-width PA isoline (interpolated between printed PA rows).
+pub fn takeoff_pa_curve_strip_points(data: &Rev29File, pa_ft: f64) -> Vec<(f64, f64)> {
+    data.to_t
+        .value
+        .iter()
+        .map(|&t| {
+            let m = takeoff_base_m(data, pa_ft, t).0;
+            (x_oat(t), y_dist(m))
+        })
+        .collect()
+}
+
+/// Point on the constant-PA takeoff curve at the current OAT (for vertical cursor).
+pub fn takeoff_pa_curve_point_at_oat(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, f64) {
+    let x = x_oat(oat_c);
+    let pts = takeoff_pa_curve_strip_points(data, pa_ft);
+    if pts.is_empty() {
+        return (x, STRIP_BOTTOM);
     }
+    if pts.len() == 1 {
+        return pts[0];
+    }
+    if x <= pts[0].0 {
+        return pts[0];
+    }
+    if x >= pts.last().unwrap().0 {
+        return *pts.last().unwrap();
+    }
+    for w in pts.windows(2) {
+        let (x0, y0) = w[0];
+        let (x1, y1) = w[1];
+        if x >= x0 && x <= x1 {
+            let t = if (x1 - x0).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (x - x0) / (x1 - x0)
+            };
+            return (x, y0 + t * (y1 - y0));
+        }
+    }
+    pts.last().copied().unwrap_or((x, STRIP_BOTTOM))
+}
+
+pub fn takeoff_oat_panel_pa_trace(data: &Rev29File, pa_ft: f64, oat_c: f64) -> TakeoffOatPaTrace {
+    let (oat_x, y) = takeoff_pa_curve_point_at_oat(data, pa_ft, oat_c);
+    TakeoffOatPaTrace { y, oat_x, pa_ft }
+}
+
+/// Y on a strip polyline at a fixed strip x (linear between adjacent samples).
+pub fn y_on_strip_polyline_at_x(pts: &[(f64, f64)], x: f64) -> f64 {
+    if pts.is_empty() {
+        return STRIP_BOTTOM;
+    }
+    if pts.len() == 1 {
+        return pts[0].1;
+    }
+    if x <= pts[0].0 {
+        return pts[0].1;
+    }
+    if x >= pts.last().unwrap().0 {
+        return pts.last().unwrap().1;
+    }
+    for w in pts.windows(2) {
+        let (x0, y0) = w[0];
+        let (x1, y1) = w[1];
+        if x >= x0 && x <= x1 {
+            let t = if (x1 - x0).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (x - x0) / (x1 - x0)
+            };
+            return y0 + t * (y1 - y0);
+        }
+    }
+    pts.last().map(|p| p.1).unwrap_or(STRIP_BOTTOM)
+}
+
+/// Y where the selected PA isoline meets the right edge of the OAT/PA panel.
+pub fn takeoff_pa_isoline_y_at_panel_right(data: &Rev29File, pa_ft: f64) -> f64 {
+    let x = TAKEOFF_OAT.x + TAKEOFF_OAT.w;
+    y_on_strip_polyline_at_x(&takeoff_pa_curve_strip_points(data, pa_ft), x)
+}
+
+pub fn climb_pa_isoline_y_at_panel_right(data: &Rev29File, pa_ft: f64) -> f64 {
+    let x = CLIMB_EQ.x + CLIMB_EQ.w;
+    y_on_strip_polyline_at_x(&climb_fan_pa_curve_strip_points(data, pa_ft), x)
 }
 
 /// Fig 5.2 fan chart: OAT → (x,y) along the **constant chart pressure-altitude** row for `pa_ft`.
@@ -741,7 +890,8 @@ mod tests {
         let entry = 300.0;
         let hw_kt = 20.0;
         let guide = headwind_guide_polyline(&data, entry);
-        let trace = trace_headwind_guide(&data, entry, hw_kt);
+        let anchor = (x_headwind_kt(0.0), y_dist(entry));
+        let trace = trace_headwind_guide(&data, entry, hw_kt, anchor);
         assert!(!guide.is_empty() && !trace.is_empty());
         for pt in &trace {
             let on_guide = guide
@@ -1461,6 +1611,215 @@ mod tests {
             "unexpected marker count {}",
             path.markers.len()
         );
+    }
+
+    fn assert_only_oat_riser_vertical(path: &TakeoffPath, case: &str) {
+        for (i, w) in path.points.windows(2).enumerate() {
+            let (a, b) = (w[0], w[1]);
+            let vertical = (b.0 - a.0).abs() < 0.01 && (b.1 - a.1).abs() > 0.5;
+            if vertical && i != 0 {
+                panic!("{case}: unexpected vertical segment {a:?} -> {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn takeoff_path_only_oat_riser_is_vertical() {
+        let data = Rev29File::production();
+        let cases = [
+            (
+                "tailwind",
+                FlightInputs {
+                    runway: "190".into(),
+                    wind_dir_deg: 10.0,
+                    wind_speed_kt: 5.0,
+                    weight_lb: 800.0 / 0.45359237,
+                    ..Default::default()
+                },
+            ),
+            (
+                "zero_hw",
+                FlightInputs {
+                    runway: "360".into(),
+                    wind_dir_deg: 0.0,
+                    wind_speed_kt: 0.0,
+                    weight_lb: 750.0 / 0.45359237,
+                    ..Default::default()
+                },
+            ),
+            (
+                "max_hw",
+                FlightInputs {
+                    runway: "360".into(),
+                    wind_dir_deg: 360.0,
+                    wind_speed_kt: 20.0,
+                    weight_lb: 750.0 / 0.45359237,
+                    ..Default::default()
+                },
+            ),
+            (
+                "clamp_entry",
+                FlightInputs {
+                    oat_c: 35.0,
+                    weight_lb: 600.0 / 0.45359237,
+                    wind_speed_kt: 10.0,
+                    wind_dir_deg: 360.0,
+                    runway: "360".into(),
+                    ..Default::default()
+                },
+            ),
+        ];
+        for (name, inputs) in cases {
+            let path = takeoff_hand_path(&data, &inputs, 2500.0);
+            assert_only_oat_riser_vertical(&path, name);
+        }
+    }
+
+    #[test]
+    fn takeoff_tailwind_trace_follows_interpolated_guides() {
+        let data = Rev29File::production();
+        let entry = 526.5;
+        let kt = 3.0;
+        let p = tailwind_panel_point_interp(&data, entry, kt);
+        let p_lo = tailwind_panel_point(&data, 500.0, kt);
+        let p_hi = tailwind_panel_point(&data, 600.0, kt);
+        let t = (entry - 500.0) / 100.0;
+        let want_x = p_lo.0 + t * (p_hi.0 - p_lo.0);
+        let want_y = p_lo.1 + t * (p_hi.1 - p_lo.1);
+        assert!((p.0 - want_x).abs() < 0.01 && (p.1 - want_y).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_lighter_weight_needs_less_distance_same_wind() {
+        use crate::data::PerformanceData;
+        use crate::takeoff::compute_takeoff;
+        let data = Rev29File::production();
+        let pdata = PerformanceData::production();
+        let base = FlightInputs {
+            oat_c: 20.0,
+            runway: "360".into(),
+            wind_dir_deg: 0.0,
+            wind_speed_kt: 0.0,
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
+            ..Default::default()
+        };
+        let mut light = base.clone();
+        light.weight_lb = 650.0 / 0.45359237;
+        let mut heavy = base;
+        heavy.weight_lb = 800.0 / 0.45359237;
+        let pl = takeoff_hand_path(&data, &light, 2500.0);
+        let ph = takeoff_hand_path(&data, &heavy, 2500.0);
+        assert!(
+            pl.chart_over_obstacle_m <= ph.chart_over_obstacle_m + 1e-6,
+            "650 kg obs {} vs 800 kg {}",
+            pl.chart_over_obstacle_m,
+            ph.chart_over_obstacle_m
+        );
+        let tl = compute_takeoff(&pdata, &light).unwrap();
+        let th = compute_takeoff(&pdata, &heavy).unwrap();
+        assert!(tl.distance_over_obstacle_raw_m <= th.distance_over_obstacle_raw_m);
+        assert!((pl.chart_over_obstacle_m - tl.distance_over_obstacle_raw_m).abs() < 0.05);
+        assert!((ph.chart_over_obstacle_m - th.distance_over_obstacle_raw_m).abs() < 0.05);
+    }
+
+    #[test]
+    fn takeoff_path_endpoint_y_matches_chart_ground_roll() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            oat_c: 20.0,
+            weight_lb: 800.0 / 0.45359237,
+            runway: "190".into(),
+            wind_dir_deg: 10.0,
+            wind_speed_kt: 5.0,
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
+            ..Default::default()
+        };
+        let path = takeoff_hand_path(&data, &inputs, 2500.0);
+        let wind_right = TAKEOFF_WIND.x + TAKEOFF_WIND.w - 0.5;
+        let wind_end = path
+            .points
+            .iter()
+            .rfind(|(x, _)| *x >= TAKEOFF_TW.x && *x <= wind_right)
+            .copied()
+            .expect("wind");
+        let want_y = y_dist(path.chart_ground_m);
+        assert!(
+            (wind_end.1 - want_y).abs() < 0.75,
+            "wind exit y {} vs ground roll y {want_y}",
+            wind_end.1
+        );
+    }
+
+    #[test]
+    fn takeoff_weight_trace_follows_interpolated_guides() {
+        let data = Rev29File::production();
+        let entry = 526.5;
+        let p = weight_panel_point_interp(&data, entry, 700.0);
+        let p_lo = weight_panel_point(&data, 500.0, 700.0);
+        let p_hi = weight_panel_point(&data, 600.0, 700.0);
+        let t = (entry - 500.0) / 100.0;
+        let want_x = p_lo.0 + t * (p_hi.0 - p_lo.0);
+        let want_y = p_lo.1 + t * (p_hi.1 - p_lo.1);
+        assert!((p.0 - want_x).abs() < 0.01 && (p.1 - want_y).abs() < 0.01);
+    }
+
+    #[test]
+    fn takeoff_wind_path_ends_at_entered_component_no_flat_tail() {
+        let data = Rev29File::production();
+        let inputs = FlightInputs {
+            wind_dir_deg: 360.0,
+            wind_speed_kt: 12.0,
+            runway: "360".into(),
+            ..Default::default()
+        };
+        let (hw, _) = headwind_and_tailwind(&inputs);
+        let path = takeoff_hand_path(&data, &inputs, 2500.0);
+        let want_x = x_headwind_kt(hw);
+        let wind_right = TAKEOFF_WIND.x + TAKEOFF_WIND.w - 0.5;
+        let last_in_wind = path
+            .points
+            .iter()
+            .rfind(|(x, _)| *x >= TAKEOFF_TW.x && *x <= wind_right)
+            .copied()
+            .expect("wind segment");
+        assert!(
+            (last_in_wind.0 - want_x).abs() < 0.01,
+            "last wind x {} vs entered {want_x}",
+            last_in_wind.0
+        );
+        for w in path.points.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if a.0 >= TAKEOFF_TW.x
+                && b.0 <= wind_right
+                && a.0 >= TAKEOFF_TW.x
+                && (b.1 - a.1).abs() < 0.01
+                && (b.0 - a.0).abs() > 1.0
+            {
+                panic!("flat horizontal segment inside wind panel: {a:?} -> {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn takeoff_pa_curve_spans_oat_panel_and_passes_cursor() {
+        let data = Rev29File::production();
+        let pa = 2500.0;
+        let oat = 15.0;
+        let pts = takeoff_pa_curve_strip_points(&data, pa);
+        assert!(pts.len() >= 2);
+        assert!((pts.first().unwrap().0 - TAKEOFF_OAT.x).abs() < 25.0);
+        assert!((pts.last().unwrap().0 - (TAKEOFF_OAT.x + TAKEOFF_OAT.w)).abs() < 25.0);
+        let cursor = takeoff_pa_curve_point_at_oat(&data, pa, oat);
+        let on_curve = pts
+            .windows(2)
+            .any(|w| point_near_segment(cursor, w[0], w[1], 0.75));
+        assert!(on_curve, "cursor {:?} off PA isoline", cursor);
     }
 
     #[test]

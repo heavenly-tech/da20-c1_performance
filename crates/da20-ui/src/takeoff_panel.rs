@@ -14,6 +14,49 @@ use crate::i18n::{afm_lookup_tag_label, copy, Locale};
 use crate::inputs::{input_value, NumField};
 use crate::prefs::{ObstacleUnit, TakeoffPrefs, WeightUnit};
 
+/// Commit a typed takeoff weight field value (kg or lb display) into `weight_lb`.
+/// Accepts a decimal point or comma. Does not rewrite the in-progress draft.
+pub fn apply_takeoff_weight_field_value(weight_lb: &mut f64, unit: WeightUnit, raw: &str) -> bool {
+    let normalized = raw.trim().replace(',', ".");
+    let v: f64 = match normalized.parse::<f64>() {
+        Ok(v) if v.is_finite() && v > 0.0 => v,
+        _ => return false,
+    };
+    *weight_lb = match unit {
+        WeightUnit::Kg => kg_to_lb(v),
+        WeightUnit::Lb => v,
+    };
+    true
+}
+
+/// Keystroke handler for the weight field. Stores the raw draft and does not
+/// touch `weight_lb`. Committing each prefix and rewriting `{:.2}` (the old
+/// `prop:value` + `on:input` loop) freezes the field on the first digit.
+pub fn note_takeoff_weight_draft(draft: &mut String, raw: &str) {
+    *draft = raw.to_string();
+}
+
+pub fn takeoff_weight_field_display(
+    editing: bool,
+    draft: &str,
+    weight_lb: f64,
+    unit: WeightUnit,
+) -> String {
+    if editing {
+        draft.to_string()
+    } else {
+        format_takeoff_weight_display(weight_lb, unit)
+    }
+}
+
+fn format_takeoff_weight_display(weight_lb: f64, unit: WeightUnit) -> String {
+    let v = match unit {
+        WeightUnit::Kg => lb_to_kg(weight_lb),
+        WeightUnit::Lb => weight_lb,
+    };
+    format!("{v:.2}")
+}
+
 #[derive(Clone, Copy, Default)]
 struct SweepVarDraft {
     enabled: bool,
@@ -36,59 +79,106 @@ pub fn TakeoffNumericBlock(
     }
 }
 
+fn commit_takeoff_weight_raw(
+    inputs: RwSignal<FlightInputs>,
+    prefs: RwSignal<TakeoffPrefs>,
+    raw: &str,
+) {
+    let unit = prefs.get_untracked().weight;
+    inputs.update(|i| {
+        apply_takeoff_weight_field_value(&mut i.weight_lb, unit, raw);
+    });
+}
+
 #[component]
 fn TakeoffWeightField(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
 ) -> impl IntoView {
+    let editing = RwSignal::new(false);
+    let draft = RwSignal::new(String::new());
+    let input_ref = NodeRef::<leptos::html::Input>::new();
+
+    // While the field is focused the browser owns the text. Writing `prop:value`
+    // on each key (especially `{:.2}` on `type=number`) rewrote "800" into "8.00".
+    Effect::new(move |_| {
+        let el = input_ref.get();
+        let editing_now = editing.get();
+        let unit = prefs.get().weight;
+        let text = takeoff_weight_field_display(false, "", inputs.get().weight_lb, unit);
+        if editing_now {
+            return;
+        }
+        if let Some(el) = el {
+            el.set_value(&text);
+        }
+    });
+
+    let commit_and_close = move |raw: String| {
+        commit_takeoff_weight_raw(inputs, prefs, &raw);
+        editing.set(false);
+    };
+
     view! {
         <div class="f">
-            {move || {
-                let c = copy(locale.get());
-                let unit = prefs.get().weight;
-                let label = match unit {
-                    WeightUnit::Kg => c.takeoff_weight_kg,
-                    WeightUnit::Lb => c.weight,
-                };
-                view! {
-                    <label>{label}</label>
-                    <div class="unit-row">
-                        <input type="number" step="any" class="mono"
-                            prop:value=move || {
-                                let unit = prefs.get().weight;
-                                let v = match unit {
-                                    WeightUnit::Kg => lb_to_kg(inputs.get().weight_lb),
-                                    WeightUnit::Lb => inputs.get().weight_lb,
-                                };
-                                format!("{v:.2}")
-                            }
-                            on:input=move |ev| {
-                                if let Ok(v) = input_value(&ev).parse::<f64>() {
-                                    inputs.update(|i| {
-                                        i.weight_lb = match prefs.get_untracked().weight {
-                                            WeightUnit::Kg => kg_to_lb(v),
-                                            WeightUnit::Lb => v,
-                                        };
-                                    });
+            <label>
+                {move || {
+                    let c = copy(locale.get());
+                    match prefs.get().weight {
+                        WeightUnit::Kg => c.takeoff_weight_kg.to_string(),
+                        WeightUnit::Lb => c.weight.to_string(),
+                    }
+                }}
+            </label>
+            <div class="unit-row">
+                <input node_ref=input_ref type="text" inputmode="decimal" autocomplete="off" class="mono"
+                    on:focus=move |_| {
+                        editing.set(true);
+                    }
+                    on:input=move |ev| {
+                        let mut next = String::new();
+                        note_takeoff_weight_draft(&mut next, &input_value(&ev));
+                        draft.set(next);
+                    }
+                    on:blur=move |ev| {
+                        commit_and_close(input_value(&ev));
+                    }
+                    on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                        if ev.key() == "Enter" {
+                            commit_and_close(input_value(&ev));
+                        }
+                    }
+                />
+                <div class="toggle-row unit-toggle">
+                    <button type="button" class="btn g"
+                        class:on=move || prefs.get().weight == WeightUnit::Kg
+                        on:click=move |_| {
+                            if editing.get_untracked() {
+                                if let Some(el) = input_ref.get_untracked() {
+                                    commit_takeoff_weight_raw(inputs, prefs, &el.value());
                                 }
+                                editing.set(false);
                             }
-                        />
-                        <div class="toggle-row unit-toggle">
-                            <button type="button" class="btn g"
-                                class:on=move || prefs.get().weight == WeightUnit::Kg
-                                on:click=move |_| prefs.update(|p| { p.weight = WeightUnit::Kg; p.save(); })>
-                                {c.unit_kg}
-                            </button>
-                            <button type="button" class="btn g"
-                                class:on=move || prefs.get().weight == WeightUnit::Lb
-                                on:click=move |_| prefs.update(|p| { p.weight = WeightUnit::Lb; p.save(); })>
-                                {c.unit_lb}
-                            </button>
-                        </div>
-                    </div>
-                }
-            }}
+                            prefs.update(|p| { p.weight = WeightUnit::Kg; p.save(); });
+                        }>
+                        {move || copy(locale.get()).unit_kg.to_string()}
+                    </button>
+                    <button type="button" class="btn g"
+                        class:on=move || prefs.get().weight == WeightUnit::Lb
+                        on:click=move |_| {
+                            if editing.get_untracked() {
+                                if let Some(el) = input_ref.get_untracked() {
+                                    commit_takeoff_weight_raw(inputs, prefs, &el.value());
+                                }
+                                editing.set(false);
+                            }
+                            prefs.update(|p| { p.weight = WeightUnit::Lb; p.save(); });
+                        }>
+                        {move || copy(locale.get()).unit_lb.to_string()}
+                    </button>
+                </div>
+            </div>
         </div>
     }
 }
@@ -502,6 +592,121 @@ mod tests {
         inputs.wind_dir_deg = 0.0;
         let b = compute_takeoff(&data, &inputs).unwrap();
         assert!((a.ground_roll_ft - b.ground_roll_ft).abs() < 1e-6);
+    }
+
+    fn legacy_keystroke_reformat(unit: WeightUnit, typed: &str) -> f64 {
+        let mut lb = defaults::WEIGHT_LB;
+        let mut field = String::new();
+        for ch in typed.chars() {
+            field.push(ch);
+            apply_takeoff_weight_field_value(&mut lb, unit, &field);
+            field = format_takeoff_weight_display(lb, unit);
+        }
+        lb
+    }
+
+    fn type_weight_draft(unit: WeightUnit, typed: &str) -> (Vec<String>, f64) {
+        let start = defaults::WEIGHT_LB;
+        let mut lb = start;
+        let mut draft = format_takeoff_weight_display(lb, unit);
+        let mut shown = Vec::new();
+        let mut buf = String::new();
+        for ch in typed.chars() {
+            buf.push(ch);
+            note_takeoff_weight_draft(&mut draft, &buf);
+            assert!(
+                (lb - start).abs() < 1e-9,
+                "draft keystrokes must not commit {typed}"
+            );
+            shown.push(takeoff_weight_field_display(true, &draft, lb, unit));
+        }
+        assert!(apply_takeoff_weight_field_value(&mut lb, unit, &draft));
+        let committed = takeoff_weight_field_display(false, &draft, lb, unit);
+        shown.push(committed);
+        (shown, lb)
+    }
+
+    #[test]
+    fn typing_800_and_650_keeps_every_digit_in_kg_and_lb() {
+        let (shown, lb) = type_weight_draft(WeightUnit::Kg, "800");
+        assert_eq!(&shown[..3], ["8", "80", "800"]);
+        assert!((lb_to_kg(lb) - 800.0).abs() < 0.01, "kg {}", lb_to_kg(lb));
+        assert_eq!(shown.last().unwrap(), "800.00");
+
+        let (shown, lb) = type_weight_draft(WeightUnit::Kg, "650");
+        assert_eq!(&shown[..3], ["6", "65", "650"]);
+        assert!((lb_to_kg(lb) - 650.0).abs() < 0.01);
+        assert_eq!(shown.last().unwrap(), "650.00");
+
+        let (shown, lb) = type_weight_draft(WeightUnit::Lb, "800");
+        assert_eq!(&shown[..3], ["8", "80", "800"]);
+        assert!((lb - 800.0).abs() < 0.01);
+        assert_eq!(shown.last().unwrap(), "800.00");
+
+        let (shown, lb) = type_weight_draft(WeightUnit::Lb, "650");
+        assert_eq!(&shown[..3], ["6", "65", "650"]);
+        assert!((lb - 650.0).abs() < 0.01);
+
+        let stuck = legacy_keystroke_reformat(WeightUnit::Kg, "800");
+        assert!(
+            (lb_to_kg(stuck) - 800.0).abs() > 100.0,
+            "old per-keystroke {{:.2}} rewrite stored {} kg",
+            lb_to_kg(stuck)
+        );
+        let stuck_lb = legacy_keystroke_reformat(WeightUnit::Lb, "650");
+        assert!(
+            (stuck_lb - 650.0).abs() > 100.0,
+            "old lb rewrite stored {stuck_lb}"
+        );
+    }
+
+    #[test]
+    fn weight_decimal_and_unit_toggle_round_trip() {
+        let mut lb = defaults::WEIGHT_LB;
+        assert!(apply_takeoff_weight_field_value(
+            &mut lb,
+            WeightUnit::Kg,
+            "650,5"
+        ));
+        assert!((lb_to_kg(lb) - 650.5).abs() < 0.01);
+        assert!(apply_takeoff_weight_field_value(
+            &mut lb,
+            WeightUnit::Kg,
+            "800.25"
+        ));
+        assert!((lb_to_kg(lb) - 800.25).abs() < 0.01);
+        let as_lb = takeoff_weight_field_display(false, "", lb, WeightUnit::Lb);
+        let as_kg = takeoff_weight_field_display(false, "", lb, WeightUnit::Kg);
+        assert_eq!(as_kg, "800.25");
+        let mut round = lb;
+        assert!(apply_takeoff_weight_field_value(
+            &mut round,
+            WeightUnit::Lb,
+            &as_lb
+        ));
+        assert!((round - lb).abs() < 0.05);
+        assert!(apply_takeoff_weight_field_value(
+            &mut round,
+            WeightUnit::Kg,
+            &as_kg
+        ));
+        assert!((lb_to_kg(round) - 800.25).abs() < 0.01);
+
+        let mut other = defaults::WEIGHT_LB;
+        assert!(apply_takeoff_weight_field_value(
+            &mut other,
+            WeightUnit::Lb,
+            "1763.70"
+        ));
+        let kg = takeoff_weight_field_display(false, "", other, WeightUnit::Kg);
+        let back = takeoff_weight_field_display(false, "", other, WeightUnit::Lb);
+        assert!(apply_takeoff_weight_field_value(
+            &mut other,
+            WeightUnit::Kg,
+            &kg
+        ));
+        let restored = takeoff_weight_field_display(false, "", other, WeightUnit::Lb);
+        assert_eq!(restored, back);
     }
 
     #[test]
