@@ -273,7 +273,7 @@ pub fn afm_lookup_tag_label(locale: Locale, tag: AfmLookupTag) -> &'static str {
 
 const ES: Copy = Copy {
     disclaimer: "No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. Valores digitalizados y aproximados. El AFM aprobado rige toda la planificación de vuelo.",
-    logo_suffix: "Rendimiento",
+    logo_suffix: "Performance",
     tab_takeoff: "Despegue",
     tab_climb: "Ascenso",
     tab_cruise: "Crucero y potencia",
