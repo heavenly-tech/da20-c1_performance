@@ -1,4 +1,4 @@
-use da20_core::altitude::nws_density_altitude_ft;
+use da20_core::altitude::isa_troposphere_density_altitude_ft;
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
 use da20_core::chart_bounds::{limits, CHART_EDGE_TOL};
 use da20_core::cruise::isa_temp_c_at_pa;
@@ -300,7 +300,7 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                         }
                     })/>
                 {mt.then(|| {
-                    let da = nws_density_altitude_ft(
+                    let da = isa_troposphere_density_altitude_ft(
                         inputs.get().cruise_pressure_alt_ft,
                         inputs.get().cruise_oat_c,
                     );

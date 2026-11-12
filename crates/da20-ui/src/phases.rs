@@ -22,7 +22,7 @@ use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use crate::table_source_panel::{MtFig4SourcePanel, Table3SourcePanel, Table4SourcePanel};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
-use da20_core::altitude::nws_density_altitude_ft;
+use da20_core::altitude::isa_troposphere_density_altitude_ft;
 use da20_core::mt175r::cruise::{rmax_at_da, rmin_at_da};
 use da20_core::mt175r::Mt175rData;
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
@@ -511,7 +511,7 @@ fn phase_results(
                         && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
                     {
                         let bhp_msg = if inputs.propeller == PropellerKind::Mt175R {
-                            let da = nws_density_altitude_ft(
+                            let da = isa_troposphere_density_altitude_ft(
                                 inputs.cruise_pressure_alt_ft,
                                 inputs.cruise_oat_c,
                             );

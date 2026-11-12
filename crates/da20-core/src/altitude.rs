@@ -20,12 +20,19 @@ pub fn density_altitude_ft(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
     pressure_altitude_ft + (120.0 * (oat_c - isa_temp_c))
 }
 
-/// NOAA/NWS density altitude (ft); matches AFMS E-1487 worked example to ~1 ft.
-pub fn nws_density_altitude_ft(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
-    let p_inhg = 29.92126 * (1.0 - 6.8755856e-6 * pressure_altitude_ft).powf(5.2558797);
-    let t_f = oat_c * 9.0 / 5.0 + 32.0;
-    let inner = (17.326 * p_inhg) / (459.67 + t_f);
-    145442.16 * (1.0 - inner.powf(0.235))
+const ISA_SEA_LEVEL_TEMP_K: f64 = 288.15;
+const ISA_TEMP_EXPONENT: f64 = 5.25588;
+
+/// ISA troposphere density altitude (ft) for MT AFMS Fig 4 (standard-temperature table).
+///
+/// Uses the same lapse rate as `crate::cruise::isa_temp_c_at_pa` (0.0019812 °C/ft).
+/// At ISA OAT, DA equals PA within floating-point tolerance.
+pub fn isa_troposphere_density_altitude_ft(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
+    let t_std_k = ISA_SEA_LEVEL_TEMP_K - ISA_LAPSE_RATE_C_PER_FT * pressure_altitude_ft;
+    let t_actual_k = oat_c + 273.15;
+    let sigma = (t_std_k / ISA_SEA_LEVEL_TEMP_K).powf(ISA_TEMP_EXPONENT)
+        * (ISA_SEA_LEVEL_TEMP_K / t_actual_k);
+    (1.0 - sigma.powf(1.0 / 4.25588)) * ISA_SEA_LEVEL_TEMP_K / ISA_LAPSE_RATE_C_PER_FT
 }
 
 fn resolved_override(inputs: &FlightInputs) -> Option<PaOverride> {
@@ -71,9 +78,21 @@ mod tests {
     }
 
     #[test]
-    fn nws_da_worked_example() {
-        let da = nws_density_altitude_ft(6000.0, 15.0);
-        assert!((da - 7390.37).abs() < 0.5, "da={da}");
+    fn isa_standard_day_density_altitude_equals_pressure_altitude() {
+        for pa in [2000.0, 6000.0, 10_000.0, 12_000.0] {
+            let oat = 15.0 - ISA_LAPSE_RATE_C_PER_FT * pa;
+            let da = isa_troposphere_density_altitude_ft(pa, oat);
+            let rel = (da - pa).abs() / pa;
+            assert!(rel < 1e-6, "pa={pa} da={da} rel={rel}");
+            assert!((da - pa).abs() < 0.01, "pa={pa} da={da}");
+        }
+    }
+
+    #[test]
+    fn isa_troposphere_pa6000_oat15_density_altitude() {
+        // AFMS Fig 1 worked example quotes 7391 ft; chart reading is ~17 ft above this model.
+        let da = isa_troposphere_density_altitude_ft(6000.0, 15.0);
+        assert!((da - 7373.5).abs() < 1.0, "da={da}");
     }
 
     #[test]

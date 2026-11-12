@@ -1,4 +1,4 @@
-use crate::altitude::nws_density_altitude_ft;
+use crate::altitude::isa_troposphere_density_altitude_ft;
 use crate::chart_bounds::{limits, CHART_EDGE_TOL};
 use crate::cruise::CruiseError;
 use crate::data::PerformanceData;
@@ -591,7 +591,7 @@ pub fn compute_mt175r_cruise(
     inputs: &FlightInputs,
 ) -> Result<CruiseResult, CruiseError> {
     let pa = inputs.cruise_pressure_alt_ft;
-    let da = nws_density_altitude_ft(pa, inputs.cruise_oat_c);
+    let da = isa_troposphere_density_altitude_ft(pa, inputs.cruise_oat_c);
     let rows = mt.fig4_rows();
     let mut warnings = vec![CalculationWarning::code_only("FIG4_GPH")];
 
@@ -745,8 +745,7 @@ mod tests {
         let inputs = FlightInputs {
             propeller: crate::types::PropellerKind::Mt175R,
             cruise_pressure_alt_ft: 10_000.0,
-            // OAT chosen so NWS DA matches the Fig 4 row at 10000 ft (ISA overshoots DA).
-            cruise_oat_c: -4.954249,
+            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(10_000.0),
             cruise_rpm: 2200.0,
             cruise_solve_mode: CruiseSolveMode::SetRpm,
             ..FlightInputs::default()
@@ -769,8 +768,7 @@ mod tests {
         let inputs = FlightInputs {
             propeller: crate::types::PropellerKind::Mt175R,
             cruise_pressure_alt_ft: pa,
-            // OAT chosen so NWS DA matches the Fig 4 row at 12000 ft (ISA gives DA above chart).
-            cruise_oat_c: -8.916752156701492,
+            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(pa),
             cruise_rpm: 2200.0,
             cruise_solve_mode: CruiseSolveMode::SetRpm,
             ..FlightInputs::default()
@@ -832,9 +830,18 @@ mod tests {
     }
 
     #[test]
-    fn printed_example_pa6000_oat15_da() {
-        let da = nws_density_altitude_ft(6000.0, 15.0);
-        assert!((da - 7391.0).abs() <= 5.0, "da={da}");
+    fn pa12000_isa_on_fig4_chart_top_row() {
+        let mt = Mt175rData::production();
+        let pa = 12_000.0;
+        let inputs = FlightInputs {
+            propeller: crate::types::PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: pa,
+            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(pa),
+            cruise_rpm: 2200.0,
+            cruise_solve_mode: CruiseSolveMode::SetRpm,
+            ..FlightInputs::default()
+        };
+        assert!(compute_mt175r_cruise(&mt, &inputs).is_ok());
     }
 
     #[test]
@@ -850,7 +857,7 @@ mod tests {
             cruise_rpm: 2440.0,
             ..FlightInputs::default()
         };
-        let da = nws_density_altitude_ft(pa, inputs.cruise_oat_c);
+        let da = isa_troposphere_density_altitude_ft(pa, inputs.cruise_oat_c);
         let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
         assert!((r.density_altitude_ft.unwrap() - da).abs() <= 1.0);
         assert!((r.percent_bhp.unwrap() - 65.0).abs() < 0.15);

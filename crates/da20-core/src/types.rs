@@ -394,7 +394,7 @@ pub struct CruiseResult {
     pub table3_source: Option<Table3SourceTrace>,
     #[serde(default)]
     pub mt_fig4_source: Option<MtFig4SourceTrace>,
-    /// NWS density altitude used for MT Fig 4 (Sensenich cruise leaves this unset).
+    /// ISA troposphere density altitude used for MT Fig 4 (Sensenich cruise leaves this unset).
     #[serde(default)]
     pub density_altitude_ft: Option<f64>,
     pub warnings: Vec<CalculationWarning>,
