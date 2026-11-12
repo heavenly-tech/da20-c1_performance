@@ -53,8 +53,8 @@ pub fn all_methods() -> Vec<MethodEntry> {
             id: "cruise",
             title: "Cruise performance (Table 3)",
             afm_reference: "AFM pages 5-14 / 5-15, Table 3",
-            summary: "ΔISA = OAT − ISA at PA. Forward mode (set RPM): interpolate %BHP, KTAS, and GPH in PA and ΔISA and linearly in RPM between tabulated levels. Inverse mode (set %BHP): bilinear PA × ΔISA at each tabulated RPM to build %BHP(RPM), invert linearly between neighboring RPM rows (%BHP monotonic in RPM), then read TAS/GPH at the solved RPM. Out-of-range %BHP is extrapolated, not clamped. Wheel fairing note: apply ~5% lower TAS after Table 3 lookup; GPH is not scaled.",
-            interpolation: "Forward: trilinear-style bilinear PA × ΔISA per RPM band, then linear in RPM. Inverse: same surface %BHP(RPM) inverted linearly; extrapolation flagged when %BHP lies outside the tabulated RPM band at that PA/ΔISA.",
+            summary: "ΔISA = OAT − ISA at PA. On each Table 3 PA row, linearly interpolate or extrapolate in RPM along that row's own tabulated RPM ladder after interpolating along ΔISA (−20 / 0 / +10); then blend those values linearly in PA (and ΔISA is already per row). Set-RPM forward mode reads %BHP, KTAS, and GPH from that surface. Set-%BHP inverse mode bisects RPM on the same forward surface (±100 RPM slack beyond each bracketing row's ladder); requested %BHP outside that envelope is not achievable. Wheel fairing note: apply ~5% lower TAS after Table 3 lookup; GPH is not scaled.",
+            interpolation: "Tags: Table on exact printed PA/RPM/ΔISA nodes; Interpolated inside the grid; Extrapolated when RPM, PA, or ΔISA is outside tabulated limits (inverse hits off-chart when the solved RPM needs extrapolation).",
             limitations: CRUISE_TABLE3_GPH_NOTE,
         },
         MethodEntry {

@@ -99,6 +99,7 @@ pub struct Copy {
     pub cruise_mode_set_rpm: &'static str,
     pub cruise_mode_set_bhp: &'static str,
     pub cruise_pct_bhp: &'static str,
+    pub cruise_bhp_not_achievable: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
     pub climb_fig_55: &'static str,
@@ -282,6 +283,8 @@ const ES: Copy = Copy {
     cruise_mode_set_rpm: "Fijar RPM",
     cruise_mode_set_bhp: "Fijar %BHP",
     cruise_pct_bhp: "% BHP crucero",
+    cruise_bhp_not_achievable:
+        "no alcanzable — %BHP fuera del rango alcanzable (±100 RPM respecto a la carta en esta PA/ΔISA)",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
     climb_fig_55: "Fig 5.5 — flaps crucero",
@@ -448,6 +451,8 @@ const EN: Copy = Copy {
     cruise_mode_set_rpm: "Set RPM",
     cruise_mode_set_bhp: "Set %BHP",
     cruise_pct_bhp: "Cruise % BHP",
+    cruise_bhp_not_achievable:
+        "not achievable — %BHP outside reachable RPM band (±100 RPM beyond table rows at this PA/ΔISA)",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
     climb_fig_55: "Fig 5.5 — cruise flaps",
@@ -597,8 +602,8 @@ const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
-        summary: "ΔISA = OAT − ISA en esa PA. Modo fijar RPM: interpolación de %BHP, TAS y GPH en PA y ΔISA y lineal en RPM entre niveles tabulados. Modo fijar %BHP: bilineal PA × ΔISA en cada RPM tabulado para %BHP(RPM), inversión lineal entre filas vecinas; %BHP fuera de rango se extrapola (sin fijar al borde). Carenados: ~−5% TAS después de Tabla 3; GPH sin escalar.",
-        interpolation: "Directo trilineal; inverso: misma superficie %BHP(RPM) invertida linealmente; extrapolado cuando el %BHP queda fuera de la banda de RPM tabulada en esa PA/ΔISA.",
+        summary: "ΔISA = OAT − ISA en esa PA. En cada fila PA de Tabla 3: interpolación lineal en RPM sobre su propia escala RPM (tras ΔISA −20/0/+10 en esa fila); luego mezcla lineal en PA. Modo fijar RPM: lectura directa de %BHP, TAS y GPH. Modo fijar %BHP: bisección en la misma superficie (±100 RPM sobre la carta); si no hay solución → no alcanzable. Carenados: ~−5% TAS después de Tabla 3; GPH sin escalar.",
+        interpolation: "Etiquetas: Tabla (nodo impreso), Interpolado (interior), Extrapolado (fuera de carta). Inverso extrapolado: RPM/TAS/GPH resueltos marcados fuera de carta; se muestra el %BHP solicitado.",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
@@ -657,8 +662,8 @@ const EN_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
-        summary: "ΔISA = OAT − ISA at that PA. Set RPM: interpolate %BHP, KTAS, and GPH in PA/ΔISA and linearly in RPM. Set %BHP: bilinear PA × ΔISA at each tabulated RPM to form %BHP(RPM), invert linearly between neighbors; out-of-range %BHP is extrapolated, not clamped. Wheel fairings: ~−5% TAS after Table 3; GPH not scaled.",
-        interpolation: "Forward trilinear; inverse uses the same %BHP(RPM) surface inverted linearly; extrapolated when %BHP is outside tabulated RPM coverage at that PA/ΔISA.",
+        summary: "ΔISA = OAT − ISA at PA. On each Table 3 PA row: linear RPM interpolation on that row's own ladder (after ΔISA −20/0/+10 on the row), then linear blend in PA. Set RPM: direct %BHP/KTAS/GPH. Set %BHP: bisection on the same surface (±100 RPM beyond rows); no root → not achievable. Wheel fairings: ~−5% TAS after Table 3; GPH not scaled.",
+        interpolation: "Tags: Table (printed node), Interpolated (interior), Extrapolated (off chart). Inverse extrapolation labels solved RPM/TAS/GPH off chart; headline keeps requested %BHP.",
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
@@ -970,10 +975,21 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             let pct = w.args.first().map(String::as_str).unwrap_or("");
             match locale {
                 Locale::Es => format!(
-                    "%BHP solicitado {pct}% fuera del rango cubierto por RPM tabulados en esta PA/ΔISA (sin fijar al borde)."
+                    "%BHP solicitado {pct}%: RPM resuelto fuera de carta (fuera de la banda ±100 RPM de la Tabla 3 en esta PA/ΔISA)."
                 ),
                 Locale::En => format!(
-                    "Requested %BHP {pct}% is outside tabulated RPM coverage at this PA/ΔISA (not clamped to table edge)."
+                    "Requested %BHP {pct}%: solved RPM is off chart (outside ±100 RPM of Table 3 rows at this PA/ΔISA)."
+                ),
+            }
+        }
+        "CRUISE_BHP_NOT_ACHIEVABLE" => {
+            let pct = w.args.first().map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!(
+                    "%BHP solicitado {pct}% no alcanzable en esta PA/ΔISA (±100 RPM sobre carta)."
+                ),
+                Locale::En => format!(
+                    "Requested %BHP {pct}% not achievable at this PA/ΔISA (±100 RPM beyond table rows)."
                 ),
             }
         }

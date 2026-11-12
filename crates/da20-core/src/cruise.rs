@@ -6,16 +6,18 @@ use crate::types::{
     FlightInputs,
 };
 
-pub const CRUISE_BHP_EXTRAP_NOTE: &str =
-    "Requested %BHP is outside the range spanned by tabulated RPM levels at this PA/ΔISA; RPM solved by linear extrapolation along the %BHP–RPM curve (not clamped).";
-
 pub const CRUISE_TABLE3_GPH_NOTE: &str = "Table 3 GPH values are transcribed as printed in AFM Rev 29 (includes known oddities, e.g. 2000 ft / 2700 RPM ISA 6.8 GPH vs −20 °C 7.7 GPH; 4000 ft / 2800 RPM +10 °C 6.8 GPH).";
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum CruiseError {
     #[error("cruise row not found")]
     NotFound,
+    #[error("requested %BHP not achievable within Table 3 RPM coverage at this PA/ΔISA")]
+    BhpNotAchievable,
 }
+
+/// RPM search slack beyond each bracketing PA row's own tabulated RPM ladder.
+const BHP_INVERSE_RPM_SLACK: f64 = 100.0;
 
 pub fn isa_temp_c_at_pa(pa_ft: f64) -> f64 {
     15.0 - 0.0019812 * pa_ft
@@ -45,8 +47,6 @@ struct LookupFlags {
     pa_extrap: bool,
     disa_interp: bool,
     disa_extrap: bool,
-    /// True when PA is outside every altitude band where this RPM appears (no row at that PA).
-    rpm_band_gap: bool,
     /// True when target %BHP lies outside the band covered by tabulated RPM rows (inverse solve).
     bhp_extrap: bool,
 }
@@ -55,31 +55,20 @@ fn row_valid(r: &[f64]) -> bool {
     r.len() >= 11
 }
 
-fn unique_sorted_rpms(rows: &[Vec<f64>]) -> Vec<f64> {
-    let mut v: Vec<f64> = rows.iter().filter(|r| row_valid(r)).map(|r| r[1]).collect();
+fn unique_sorted_pas(rows: &[Vec<f64>]) -> Vec<f64> {
+    let mut v: Vec<f64> = rows.iter().filter(|r| row_valid(r)).map(|r| r[0]).collect();
     v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    v.dedup_by(|a, b| (*a - *b).abs() < RPM_MATCH_TOL);
+    v.dedup_by(|a, b| (*a - *b).abs() < PA_MATCH_TOL);
     v
 }
 
-fn rows_at_rpm(rows: &[Vec<f64>], rpm: f64) -> Vec<&Vec<f64>> {
+fn rows_at_pa(rows: &[Vec<f64>], pa: f64) -> Vec<&Vec<f64>> {
     let mut v: Vec<_> = rows
         .iter()
-        .filter(|r| row_valid(r) && (r[1] - rpm).abs() < RPM_MATCH_TOL)
+        .filter(|r| row_valid(r) && (r[0] - pa).abs() < PA_MATCH_TOL)
         .collect();
-    v.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap());
+    v.sort_by(|a, b| a[1].partial_cmp(&b[1]).unwrap_or(std::cmp::Ordering::Equal));
     v
-}
-
-fn pas_for_rpm(rows: &[Vec<f64>], rpm: f64) -> Option<Vec<f64>> {
-    let at = rows_at_rpm(rows, rpm);
-    if at.is_empty() {
-        return None;
-    }
-    let mut p: Vec<f64> = at.iter().map(|r| r[0]).collect();
-    p.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    p.dedup_by(|a, b| (*a - *b).abs() < PA_MATCH_TOL);
-    Some(p)
 }
 
 fn lerp_triple(a: Triple, b: Triple, t: f64) -> Triple {
@@ -135,105 +124,177 @@ fn interpolate_triple_along_disa(row: &[f64], disa: f64) -> (Triple, bool, bool)
     }
 }
 
-/// Interpolate in PA between rows at fixed RPM, each row first resolved in ΔISA.
-fn surface_at_fixed_rpm(
-    rows: &[Vec<f64>],
-    rpm: f64,
-    pa: f64,
-    disa: f64,
-) -> Option<(Triple, LookupFlags)> {
-    let at_rpm = rows_at_rpm(rows, rpm);
-    if at_rpm.is_empty() {
+/// Interpolate in RPM on one PA row's own tabulated RPM ladder (ΔISA per node first).
+fn lookup_on_pa_ladder(ladder: &[&Vec<f64>], rpm: f64, disa: f64) -> Option<(Triple, LookupFlags)> {
+    if ladder.is_empty() {
         return None;
     }
 
-    let mut flags = LookupFlags::default();
-
-    if at_rpm.len() == 1 {
-        let only_pa = at_rpm[0][0];
-        let (tri, di, de) = interpolate_triple_along_disa(at_rpm[0], disa);
+    if let Some(row) = ladder.iter().find(|r| (r[1] - rpm).abs() < RPM_MATCH_TOL) {
+        let (tri, di, de) = interpolate_triple_along_disa(row, disa);
+        let mut flags = LookupFlags::default();
         flags.disa_interp |= di;
         flags.disa_extrap |= de;
-        if (pa - only_pa).abs() > PA_MATCH_TOL {
-            flags.pa_extrap = true;
-        }
         return Some((tri, flags));
     }
 
-    let pas: Vec<f64> = at_rpm.iter().map(|r| r[0]).collect();
+    if ladder.len() == 1 {
+        let row = ladder[0];
+        let (tri, di, de) = interpolate_triple_along_disa(row, disa);
+        let mut flags = LookupFlags::default();
+        flags.disa_interp |= di;
+        flags.disa_extrap |= de;
+        flags.rpm_extrap = true;
+        return Some((tri, flags));
+    }
+
+    let mut below_idx = None;
+    let mut above_idx = None;
+    for (i, r) in ladder.iter().enumerate() {
+        if r[1] < rpm - RPM_MATCH_TOL {
+            below_idx = Some(i);
+        } else if r[1] > rpm + RPM_MATCH_TOL && above_idx.is_none() {
+            above_idx = Some(i);
+        }
+    }
+
+    let (i0, i1, t_rpm, rpm_extrap) = match (below_idx, above_idx) {
+        (Some(b), Some(a)) => (
+            b,
+            a,
+            (rpm - ladder[b][1]) / (ladder[a][1] - ladder[b][1]),
+            false,
+        ),
+        (None, Some(_)) => {
+            if ladder.len() < 2 {
+                return None;
+            }
+            (
+                0,
+                1,
+                (rpm - ladder[0][1]) / (ladder[1][1] - ladder[0][1]),
+                true,
+            )
+        }
+        (Some(_b), None) => {
+            let n = ladder.len();
+            (
+                n - 2,
+                n - 1,
+                (rpm - ladder[n - 2][1]) / (ladder[n - 1][1] - ladder[n - 2][1]),
+                true,
+            )
+        }
+        _ => return None,
+    };
+
+    let r0 = ladder[i0];
+    let r1 = ladder[i1];
+
+    let (t0, di0, de0) = interpolate_triple_along_disa(r0, disa);
+    let (t1, di1, de1) = interpolate_triple_along_disa(r1, disa);
+    let mut flags = LookupFlags::default();
+    flags.disa_interp |= di0 || di1;
+    flags.disa_extrap |= de0 || de1;
+    flags.rpm_interp = (r1[1] - r0[1]).abs() > RPM_MATCH_TOL;
+    flags.rpm_extrap |= rpm_extrap;
+    Some((lerp_triple(t0, t1, t_rpm), flags))
+}
+
+fn lookup_at_tabulated_pa(
+    rows: &[Vec<f64>],
+    pa_tab: f64,
+    rpm: f64,
+    disa: f64,
+) -> Option<(Triple, LookupFlags)> {
+    lookup_on_pa_ladder(&rows_at_pa(rows, pa_tab), rpm, disa)
+}
+
+fn tabulated_rpm_bounds_for_pas(rows: &[Vec<f64>], pas: &[f64]) -> Option<(f64, f64)> {
+    let mut rpm_min = f64::INFINITY;
+    let mut rpm_max = f64::NEG_INFINITY;
+    for &pa in pas {
+        let ladder = rows_at_pa(rows, pa);
+        if ladder.is_empty() {
+            continue;
+        }
+        rpm_min = rpm_min.min(ladder[0][1]);
+        rpm_max = rpm_max.max(ladder[ladder.len() - 1][1]);
+    }
+    if rpm_min.is_finite() && rpm_max.is_finite() {
+        Some((rpm_min, rpm_max))
+    } else {
+        None
+    }
+}
+
+fn lookup_table3(
+    rows: &[Vec<f64>],
+    pa: f64,
+    rpm: f64,
+    disa: f64,
+) -> Result<(Triple, AfmLookupTag, LookupFlags), CruiseError> {
+    let pas = unique_sorted_pas(rows);
+    if pas.is_empty() {
+        return Err(CruiseError::NotFound);
+    }
+
     let pa_min = pas[0];
     let pa_max = *pas.last().unwrap();
 
-    if pa < pa_min - PA_MATCH_TOL {
-        flags.pa_extrap = true;
-        if at_rpm.len() >= 2 {
-            let r0 = at_rpm[0];
-            let r1 = at_rpm[1];
-            let p0 = r0[0];
-            let p1 = r1[0];
-            let t = (pa - p0) / (p1 - p0);
-            let (t0, di0, de0) = interpolate_triple_along_disa(r0, disa);
-            let (t1, di1, de1) = interpolate_triple_along_disa(r1, disa);
-            flags.disa_interp |= di0 || di1;
-            flags.disa_extrap |= de0 || de1;
-            return Some((lerp_triple(t0, t1, t), flags));
+    let blend_from = |p0: f64, p1: f64, t: f64| -> Result<(Triple, LookupFlags), CruiseError> {
+        let s0 = lookup_at_tabulated_pa(rows, p0, rpm, disa).ok_or(CruiseError::NotFound)?;
+        let s1 = lookup_at_tabulated_pa(rows, p1, rpm, disa).ok_or(CruiseError::NotFound)?;
+        let mut f = LookupFlags::default();
+        merge_flags(&mut f, s0.1);
+        merge_flags(&mut f, s1.1);
+        if t > DISA_NODE_EPS && t < 1.0 - DISA_NODE_EPS {
+            f.pa_interp = true;
         }
-        let row = at_rpm[0];
-        let (tri, di, de) = interpolate_triple_along_disa(row, disa);
-        flags.disa_interp |= di;
-        flags.disa_extrap |= de;
-        return Some((tri, flags));
+        Ok((lerp_triple(s0.0, s1.0, t), f))
+    };
+
+    if pa < pa_min - PA_MATCH_TOL {
+        if pas.len() < 2 {
+            return Err(CruiseError::NotFound);
+        }
+        let (tri, mut f) = blend_from(pas[0], pas[1], (pa - pas[0]) / (pas[1] - pas[0]))?;
+        f.pa_extrap = true;
+        let tag = resolve_tag(pa, rpm, disa, rows, &f);
+        return Ok((tri, tag, f));
     }
     if pa > pa_max + PA_MATCH_TOL {
-        flags.pa_extrap = true;
-        let n = at_rpm.len();
-        if n >= 2 {
-            let r0 = at_rpm[n - 2];
-            let r1 = at_rpm[n - 1];
-            let p0 = r0[0];
-            let p1 = r1[0];
-            let t = (pa - p0) / (p1 - p0);
-            let (t0, di0, de0) = interpolate_triple_along_disa(r0, disa);
-            let (t1, di1, de1) = interpolate_triple_along_disa(r1, disa);
-            flags.disa_interp |= di0 || di1;
-            flags.disa_extrap |= de0 || de1;
-            return Some((lerp_triple(t0, t1, t), flags));
+        if pas.len() < 2 {
+            return Err(CruiseError::NotFound);
         }
-        let row = at_rpm[n - 1];
-        let (tri, di, de) = interpolate_triple_along_disa(row, disa);
-        flags.disa_interp |= di;
-        flags.disa_extrap |= de;
-        return Some((tri, flags));
+        let n = pas.len();
+        let (tri, mut f) = blend_from(
+            pas[n - 2],
+            pas[n - 1],
+            (pa - pas[n - 2]) / (pas[n - 1] - pas[n - 2]),
+        )?;
+        f.pa_extrap = true;
+        let tag = resolve_tag(pa, rpm, disa, rows, &f);
+        return Ok((tri, tag, f));
+    }
+
+    if let Some(&exact) = pas.iter().find(|p| (*p - pa).abs() < PA_MATCH_TOL) {
+        let (tri, f) =
+            lookup_at_tabulated_pa(rows, exact, rpm, disa).ok_or(CruiseError::NotFound)?;
+        let tag = resolve_tag(pa, rpm, disa, rows, &f);
+        return Ok((tri, tag, f));
     }
 
     let mut j = 0usize;
-    while j + 1 < at_rpm.len() && at_rpm[j + 1][0] < pa - PA_MATCH_TOL {
+    while j + 1 < pas.len() && pas[j + 1] < pa - PA_MATCH_TOL {
         j += 1;
     }
-    let r0 = at_rpm[j];
-    let r1 = at_rpm[(j + 1).min(at_rpm.len() - 1)];
-    let p0 = r0[0];
-    let p1 = r1[0];
-
-    if (p1 - p0).abs() < PA_MATCH_TOL {
-        let (tri, di, de) = interpolate_triple_along_disa(r0, disa);
-        flags.disa_interp |= di;
-        flags.disa_extrap |= de;
-        return Some((tri, flags));
-    }
-
+    let p0 = pas[j];
+    let p1 = pas[(j + 1).min(pas.len() - 1)];
     let t = (pa - p0) / (p1 - p0);
-    let (t0, di0, de0) = interpolate_triple_along_disa(r0, disa);
-    let (t1, di1, de1) = interpolate_triple_along_disa(r1, disa);
-    flags.disa_interp |= di0 || di1;
-    flags.disa_extrap |= de0 || de1;
-
-    let interior_pa = t > DISA_NODE_EPS && t < 1.0 - DISA_NODE_EPS;
-    if interior_pa {
-        flags.pa_interp = true;
-    }
-
-    Some((lerp_triple(t0, t1, t), flags))
+    let (tri, f) = blend_from(p0, p1, t)?;
+    let tag = resolve_tag(pa, rpm, disa, rows, &f);
+    Ok((tri, tag, f))
 }
 
 fn merge_flags(a: &mut LookupFlags, b: LookupFlags) {
@@ -243,47 +304,41 @@ fn merge_flags(a: &mut LookupFlags, b: LookupFlags) {
     a.pa_extrap |= b.pa_extrap;
     a.disa_interp |= b.disa_interp;
     a.disa_extrap |= b.disa_extrap;
-    a.rpm_band_gap |= b.rpm_band_gap;
     a.bhp_extrap |= b.bhp_extrap;
 }
 
-fn percent_bhp_at_rpm(
-    rows: &[Vec<f64>],
-    pa: f64,
-    disa: f64,
-    rpm: f64,
-) -> Result<(f64, LookupFlags), CruiseError> {
-    let (tri, _, f) = lookup_table3(rows, pa, rpm, disa)?;
-    Ok((tri.bhp, f))
-}
-
-fn bhp_between(b0: f64, b1: f64, target: f64) -> bool {
-    let lo = b0.min(b1) - 1e-6;
-    let hi = b0.max(b1) + 1e-6;
-    target >= lo && target <= hi
-}
-
-fn push_solution(
-    best: &mut Option<(f64, LookupFlags)>,
-    rpm: f64,
-    flags: LookupFlags,
-    hint_rpm: f64,
-) {
-    let replace = |cur: f64, cand: f64| {
-        let d_cur = (cur - hint_rpm).abs();
-        let d_cand = (cand - hint_rpm).abs();
-        if (d_cand - d_cur).abs() < 1e-6 {
-            cand > cur
-        } else {
-            d_cand < d_cur
-        }
-    };
-    if best.as_ref().is_none_or(|(r, _)| replace(*r, rpm)) {
-        *best = Some((rpm, flags));
+fn pa_bracket_for_lookup(rows: &[Vec<f64>], pa: f64) -> Vec<f64> {
+    let pas = unique_sorted_pas(rows);
+    if pas.is_empty() {
+        return Vec::new();
     }
+    if pa < pas[0] - PA_MATCH_TOL {
+        return vec![pas[0], pas.get(1).copied().unwrap_or(pas[0])];
+    }
+    if pa > *pas.last().unwrap() + PA_MATCH_TOL {
+        let n = pas.len();
+        return vec![pas[n - 2], pas[n - 1]];
+    }
+    if let Some(&exact) = pas.iter().find(|p| (*p - pa).abs() < PA_MATCH_TOL) {
+        return vec![exact];
+    }
+    let mut j = 0usize;
+    while j + 1 < pas.len() && pas[j + 1] < pa - PA_MATCH_TOL {
+        j += 1;
+    }
+    vec![pas[j], pas[(j + 1).min(pas.len() - 1)]]
 }
 
-/// Invert %BHP → RPM by inverting the same piecewise-linear RPM segments as `lookup_table3`.
+#[cfg(test)]
+fn rpm_in_inverse_search_band(rows: &[Vec<f64>], pa: f64, rpm: f64) -> bool {
+    let bracket = pa_bracket_for_lookup(rows, pa);
+    let Some((lo, hi)) = tabulated_rpm_bounds_for_pas(rows, &bracket) else {
+        return false;
+    };
+    rpm >= lo - BHP_INVERSE_RPM_SLACK - 1e-6 && rpm <= hi + BHP_INVERSE_RPM_SLACK + 1e-6
+}
+
+/// Bisection inverse on the monotone forward %BHP(RPM) surface (±100 RPM slack on bracketing PA ladders).
 fn solve_rpm_for_percent_bhp(
     rows: &[Vec<f64>],
     pa: f64,
@@ -291,213 +346,89 @@ fn solve_rpm_for_percent_bhp(
     target_bhp: f64,
     hint_rpm: f64,
 ) -> Result<(f64, LookupFlags), CruiseError> {
-    let levels = unique_sorted_rpms(rows);
-    if levels.is_empty() {
+    let bracket_pas = pa_bracket_for_lookup(rows, pa);
+    let Some((rpm_tab_min, rpm_tab_max)) = tabulated_rpm_bounds_for_pas(rows, &bracket_pas) else {
         return Err(CruiseError::NotFound);
-    }
+    };
+    let rpm_lo = rpm_tab_min - BHP_INVERSE_RPM_SLACK;
+    let rpm_hi = rpm_tab_max + BHP_INVERSE_RPM_SLACK;
 
-    let mut candidates: Option<(f64, LookupFlags)> = None;
-    for &rpm in &levels {
-        let (bhp, f) = percent_bhp_at_rpm(rows, pa, disa, rpm)?;
-        if (bhp - target_bhp).abs() < 1e-4 {
-            push_solution(&mut candidates, rpm, f, hint_rpm);
-        }
-    }
-    if let Some(hit) = candidates {
-        return Ok(hit);
-    }
+    let sample = |rpm: f64| -> Result<(f64, LookupFlags), CruiseError> {
+        let (tri, _, f) = lookup_table3(rows, pa, rpm, disa)?;
+        Ok((tri.bhp, f))
+    };
 
-    let mut best: Option<(f64, LookupFlags)> = None;
-    for w in levels.windows(2) {
-        let r0 = w[0];
-        let r1 = w[1];
-        let (b0, f0) = percent_bhp_at_rpm(rows, pa, disa, r0)?;
-        let (b1, f1) = percent_bhp_at_rpm(rows, pa, disa, r1)?;
-        if !bhp_between(b0, b1, target_bhp) {
-            continue;
-        }
-        let denom = b1 - b0;
-        let t = if denom.abs() < 1e-9 {
-            0.5
-        } else {
-            (target_bhp - b0) / denom
-        };
-        let rpm = lerp(0.0, r0, 1.0, r1, t);
-        let mut merged = LookupFlags::default();
-        merge_flags(&mut merged, f0);
-        merge_flags(&mut merged, f1);
-        merged.rpm_interp = (r1 - r0).abs() > RPM_MATCH_TOL;
-        push_solution(&mut best, rpm, merged, hint_rpm);
-    }
-    if let Some(hit) = best {
-        return Ok(hit);
-    }
-
-    let r_lo = levels[0];
-    let r_hi = *levels.last().unwrap();
-    let (b_lo, f_lo) = percent_bhp_at_rpm(rows, pa, disa, r_lo)?;
-    let (b_hi, f_hi) = percent_bhp_at_rpm(rows, pa, disa, r_hi)?;
+    let (b_lo, f_lo) = sample(rpm_lo)?;
+    let (b_hi, f_hi) = sample(rpm_hi)?;
     let band_min = b_lo.min(b_hi);
+    let band_max = b_lo.max(b_hi);
 
-    let inv_flags = LookupFlags {
-        bhp_extrap: true,
-        rpm_extrap: true,
-        ..Default::default()
-    };
-
-    if levels.len() < 2 {
-        let mut merged = f_lo;
-        merge_flags(&mut merged, inv_flags);
-        return Ok((r_lo, merged));
+    if target_bhp < band_min - 1e-4 || target_bhp > band_max + 1e-4 {
+        return Err(CruiseError::BhpNotAchievable);
     }
 
-    let below_band = target_bhp < band_min;
-    let (rpm_a, rpm_b, b_a, b_b, fa, fb) = if below_band {
-        if b_lo <= b_hi {
-            let r1 = levels[1];
-            let (b1, f1) = percent_bhp_at_rpm(rows, pa, disa, r1)?;
-            (r_lo, r1, b_lo, b1, f_lo, f1)
-        } else {
-            let n = levels.len();
-            let ra = levels[n - 2];
-            let (ba, fa) = percent_bhp_at_rpm(rows, pa, disa, ra)?;
-            (ra, r_hi, ba, b_hi, fa, f_hi)
+    let (b_at_min, _) = sample(rpm_tab_min)?;
+    let (b_at_max, _) = sample(rpm_tab_max)?;
+    let in_tab_band =
+        target_bhp >= b_at_min.min(b_at_max) - 1e-4 && target_bhp <= b_at_min.max(b_at_max) + 1e-4;
+
+    let mut inv_flags = LookupFlags::default();
+    if !in_tab_band {
+        inv_flags.bhp_extrap = true;
+        inv_flags.rpm_extrap = true;
+    }
+
+    let increasing = b_hi >= b_lo - 1e-9;
+    let mut lo = rpm_lo;
+    let mut hi = rpm_hi;
+    if hint_rpm >= rpm_lo && hint_rpm <= rpm_hi {
+        let (b_h, f_h) = sample(hint_rpm)?;
+        if (b_h - target_bhp).abs() < 1e-4 {
+            merge_flags(&mut inv_flags, f_h);
+            return Ok((hint_rpm, inv_flags));
         }
-    } else if b_lo <= b_hi {
-        let n = levels.len();
-        let ra = levels[n - 2];
-        let (ba, fa) = percent_bhp_at_rpm(rows, pa, disa, ra)?;
-        (ra, r_hi, ba, b_hi, fa, f_hi)
-    } else {
-        let r1 = levels[1];
-        let (b1, f1) = percent_bhp_at_rpm(rows, pa, disa, r1)?;
-        (r_lo, r1, b_lo, b1, f_lo, f1)
-    };
-
-    let denom = b_b - b_a;
-    let t = if denom.abs() < 1e-9 {
-        if below_band {
-            -1.0
-        } else {
-            2.0
-        }
-    } else {
-        (target_bhp - b_a) / denom
-    };
-    let solved = lerp(0.0, rpm_a, 1.0, rpm_b, t);
-    let mut merged = LookupFlags::default();
-    merge_flags(&mut merged, fa);
-    merge_flags(&mut merged, fb);
-    merged.rpm_interp = true;
-    merge_flags(&mut merged, inv_flags);
-    Ok((solved, merged))
-}
-
-fn surface_with_rpm_gap_flag(
-    rows: &[Vec<f64>],
-    rpm: f64,
-    pa: f64,
-    disa: f64,
-) -> Option<(Triple, LookupFlags)> {
-    let (tri, mut f) = surface_at_fixed_rpm(rows, rpm, pa, disa)?;
-    if let Some(pas) = pas_for_rpm(rows, rpm) {
-        let pa_min = *pas.first().unwrap();
-        let pa_max = *pas.last().unwrap();
-        if pa < pa_min - PA_MATCH_TOL || pa > pa_max + PA_MATCH_TOL {
-            f.rpm_band_gap = true;
-        }
-    }
-    Some((tri, f))
-}
-
-fn lookup_table3(
-    rows: &[Vec<f64>],
-    pa: f64,
-    rpm: f64,
-    disa: f64,
-) -> Result<(Triple, AfmLookupTag, LookupFlags), CruiseError> {
-    let levels = unique_sorted_rpms(rows);
-    if levels.is_empty() {
-        return Err(CruiseError::NotFound);
-    }
-
-    let nearest_level = |r: f64| -> Option<f64> {
-        levels
-            .iter()
-            .copied()
-            .min_by(|a, b| (a - r).abs().partial_cmp(&(b - r).abs()).unwrap())
-    };
-
-    let exact_rpm_level = levels
-        .iter()
-        .find(|l| (*l - rpm).abs() < RPM_MATCH_TOL)
-        .copied();
-
-    if let Some(rpm_tab) = exact_rpm_level {
-        let (tri, f) =
-            surface_with_rpm_gap_flag(rows, rpm_tab, pa, disa).ok_or(CruiseError::NotFound)?;
-        let tag = resolve_tag(pa, rpm_tab, disa, rows, &f);
-        return Ok((tri, tag, f));
-    }
-
-    let below = levels
-        .iter()
-        .filter(|l| **l < rpm)
-        .max_by(|a, b| a.partial_cmp(b).unwrap());
-    let above = levels
-        .iter()
-        .filter(|l| **l > rpm)
-        .min_by(|a, b| a.partial_cmp(b).unwrap());
-
-    let (r0, r1, t_rpm, rpm_extrap) = match (below, above) {
-        (Some(&b), Some(&a)) => (b, a, (rpm - b) / (a - b), false),
-        (None, Some(&_a)) => {
-            if levels.len() < 2 {
-                return Err(CruiseError::NotFound);
+        if increasing {
+            if b_h < target_bhp {
+                lo = hint_rpm;
+            } else {
+                hi = hint_rpm;
             }
-            let b = levels[0];
-            let a = levels[1];
-            (b, a, (rpm - b) / (a - b), true)
-        }
-        (Some(&_b), None) => {
-            let n = levels.len();
-            if n < 2 {
-                return Err(CruiseError::NotFound);
-            }
-            let b = levels[n - 2];
-            let a = levels[n - 1];
-            (b, a, (rpm - b) / (a - b), true)
-        }
-        _ => return Err(CruiseError::NotFound),
-    };
-
-    let s0 = surface_with_rpm_gap_flag(rows, r0, pa, disa).ok_or(CruiseError::NotFound)?;
-    let s1 = surface_with_rpm_gap_flag(rows, r1, pa, disa).ok_or(CruiseError::NotFound)?;
-
-    let mut f = LookupFlags::default();
-    merge_flags(&mut f, s0.1);
-    merge_flags(&mut f, s1.1);
-    f.rpm_interp = (r1 - r0).abs() > RPM_MATCH_TOL;
-    f.rpm_extrap |= rpm_extrap;
-
-    let tri = lerp_triple(s0.0, s1.0, t_rpm);
-
-    if let Some(near) = nearest_level(rpm) {
-        if pas_for_rpm(rows, near).is_none_or(|pas| {
-            let mn = *pas.first().unwrap();
-            let mx = *pas.last().unwrap();
-            pa < mn - PA_MATCH_TOL || pa > mx + PA_MATCH_TOL
-        }) {
-            f.rpm_band_gap = true;
+        } else if b_h > target_bhp {
+            lo = hint_rpm;
+        } else {
+            hi = hint_rpm;
         }
     }
 
-    let tag = resolve_tag(pa, rpm, disa, rows, &f);
-    Ok((tri, tag, f))
+    for _ in 0..80 {
+        let mid = (lo + hi) * 0.5;
+        let (b_mid, f_mid) = sample(mid)?;
+        merge_flags(&mut inv_flags, f_mid);
+        if (b_mid - target_bhp).abs() < 1e-4 {
+            return Ok((mid, inv_flags));
+        }
+        if increasing {
+            if b_mid < target_bhp {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        } else if b_mid > target_bhp {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    let rpm = (lo + hi) * 0.5;
+    let (_, f_end) = sample(rpm)?;
+    merge_flags(&mut inv_flags, f_end);
+    merge_flags(&mut inv_flags, f_lo);
+    merge_flags(&mut inv_flags, f_hi);
+    Ok((rpm, inv_flags))
 }
 
 fn resolve_tag(pa: f64, rpm: f64, disa: f64, rows: &[Vec<f64>], f: &LookupFlags) -> AfmLookupTag {
-    if f.rpm_band_gap || f.rpm_extrap || f.disa_extrap || f.pa_extrap || f.bhp_extrap {
+    if f.rpm_extrap || f.disa_extrap || f.pa_extrap || f.bhp_extrap {
         return AfmLookupTag::Extrapolated;
     }
 
@@ -505,17 +436,13 @@ fn resolve_tag(pa: f64, rpm: f64, disa: f64, rows: &[Vec<f64>], f: &LookupFlags)
         || disa.abs() < DISA_NODE_EPS
         || (disa - 10.0).abs() < DISA_NODE_EPS;
 
-    let at_rpm: Vec<_> = rows_at_rpm(rows, rpm);
-    let exact_pa = at_rpm.iter().any(|r| (r[0] - pa).abs() < PA_MATCH_TOL);
-
-    let exact = exact_pa
-        && exact_disa
-        && at_rpm
-            .iter()
-            .any(|r| (r[0] - pa).abs() < PA_MATCH_TOL && (r[1] - rpm).abs() < RPM_MATCH_TOL)
+    let exact = exact_disa
         && !f.rpm_interp
         && !f.pa_interp
-        && !f.disa_interp;
+        && !f.disa_interp
+        && rows.iter().any(|r| {
+            row_valid(r) && (r[0] - pa).abs() < PA_MATCH_TOL && (r[1] - rpm).abs() < RPM_MATCH_TOL
+        });
 
     if exact {
         AfmLookupTag::Table
@@ -566,22 +493,31 @@ pub fn compute_cruise(
 
     let (rpm, extra_flags) = match inputs.cruise_solve_mode {
         CruiseSolveMode::SetRpm => (inputs.cruise_rpm, LookupFlags::default()),
-        CruiseSolveMode::SetPercentBhp => {
-            let (solved, inv) = solve_rpm_for_percent_bhp(
-                rows,
-                pa,
-                disa,
-                inputs.cruise_percent_bhp,
-                inputs.cruise_rpm,
-            )?;
-            if inv.bhp_extrap {
+        CruiseSolveMode::SetPercentBhp => match solve_rpm_for_percent_bhp(
+            rows,
+            pa,
+            disa,
+            inputs.cruise_percent_bhp,
+            inputs.cruise_rpm,
+        ) {
+            Ok((solved, inv)) => {
+                if inv.bhp_extrap {
+                    warnings.push(CalculationWarning::with_args(
+                        "CRUISE_BHP_OUT_OF_RANGE",
+                        vec![format!("{:.2}", inputs.cruise_percent_bhp)],
+                    ));
+                }
+                (solved, inv)
+            }
+            Err(CruiseError::BhpNotAchievable) => {
                 warnings.push(CalculationWarning::with_args(
-                    "CRUISE_BHP_OUT_OF_RANGE",
+                    "CRUISE_BHP_NOT_ACHIEVABLE",
                     vec![format!("{:.2}", inputs.cruise_percent_bhp)],
                 ));
+                return Err(CruiseError::BhpNotAchievable);
             }
-            (solved, inv)
-        }
+            Err(e) => return Err(e),
+        },
     };
 
     build_cruise_result(
@@ -698,25 +634,21 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_rpm_bhp_rpm_grid() {
+    fn round_trip_rpm_bhp_on_inverse_band() {
         let data = PerformanceData::production();
         let rows = &data.inner().cruise_table.value.rows;
-        let pas: Vec<f64> = rows.iter().filter(|r| row_valid(r)).map(|r| r[0]).collect();
-        let pas: Vec<f64> = {
-            let mut v = pas;
-            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            v.dedup_by(|a, b| (*a - *b).abs() < PA_MATCH_TOL);
-            v
-        };
-        let rpms = unique_sorted_rpms(rows);
+        let pas = unique_sorted_pas(rows);
         for &pa in &pas {
             for pa_mid in [pa - 250.0, pa, pa + 250.0] {
                 if pa_mid < 0.0 {
                     continue;
                 }
-                let disa = 0.0;
                 let oat = isa_temp_c_at_pa(pa_mid);
-                for &rpm in &rpms {
+                let ladder: Vec<f64> = rows_at_pa(rows, pa).into_iter().map(|r| r[1]).collect();
+                for &rpm in &ladder {
+                    if !rpm_in_inverse_search_band(rows, pa_mid, rpm) {
+                        continue;
+                    }
                     let forward = FlightInputs {
                         cruise_pressure_alt_ft: pa_mid,
                         cruise_rpm: rpm,
@@ -727,24 +659,11 @@ mod tests {
                     };
                     let r_fwd = compute_cruise(&data, &forward).expect("forward");
                     let bhp = r_fwd.percent_bhp.unwrap();
-                    let rpms_lv = unique_sorted_rpms(rows);
-                    let b_lo = percent_bhp_at_rpm(rows, pa_mid, disa, rpms_lv[0])
-                        .expect("bhp lo")
-                        .0;
-                    let b_hi = percent_bhp_at_rpm(rows, pa_mid, disa, *rpms_lv.last().unwrap())
-                        .expect("bhp hi")
-                        .0;
-                    let band_min = b_lo.min(b_hi);
-                    let band_max = b_lo.max(b_hi);
-                    if bhp < band_min - 0.01 || bhp > band_max + 0.01 {
-                        continue;
-                    }
                     let inverse = FlightInputs {
                         cruise_pressure_alt_ft: pa_mid,
                         cruise_oat_c: oat,
                         cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
                         cruise_percent_bhp: bhp,
-                        cruise_rpm: rpm,
                         wheel_fairings_installed: true,
                         ..FlightInputs::default()
                     };
@@ -756,6 +675,112 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn table3_printed_nodes_reproduce_exactly() {
+        let data = PerformanceData::production();
+        let rows = &data.inner().cruise_table.value.rows;
+        for row in rows {
+            if !row_valid(row) {
+                continue;
+            }
+            let pa = row[0];
+            let rpm = row[1];
+            for (disa, bhp, tas, gph) in [
+                (-20.0, row[2], row[3], row[4]),
+                (0.0, row[5], row[6], row[7]),
+                (10.0, row[8], row[9], row[10]),
+            ] {
+                let oat = isa_temp_c_at_pa(pa) + disa;
+                let inputs = FlightInputs {
+                    cruise_pressure_alt_ft: pa,
+                    cruise_rpm: rpm,
+                    cruise_oat_c: oat,
+                    cruise_solve_mode: CruiseSolveMode::SetRpm,
+                    wheel_fairings_installed: true,
+                    ..FlightInputs::default()
+                };
+                let r = compute_cruise(&data, &inputs).unwrap();
+                assert_eq!(
+                    r.afm_lookup_tag,
+                    AfmLookupTag::Table,
+                    "pa={pa} rpm={rpm} disa={disa}"
+                );
+                assert!((r.percent_bhp.unwrap() - bhp).abs() < 1e-6);
+                assert!((r.tas_chart_kt.unwrap() - tas).abs() < 1e-6);
+                assert!((r.fuel_flow_us_gal_h - gph).abs() < 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn bhp_tas_gph_non_decreasing_in_rpm_property() {
+        let data = PerformanceData::production();
+        let disas = [-30.0, -20.0, 0.0, 10.0, 20.0];
+        for pa in (0..=12_000).step_by(250) {
+            let pa = pa as f64;
+            for &disa in &disas {
+                let oat = isa_temp_c_at_pa(pa) + disa;
+                let mut prev_bhp = f64::NEG_INFINITY;
+                let mut prev_tas = f64::NEG_INFINITY;
+                let mut prev_gph = f64::NEG_INFINITY;
+                for rpm in (2300..=2800).step_by(10) {
+                    let rpm = rpm as f64;
+                    let inputs = FlightInputs {
+                        cruise_pressure_alt_ft: pa,
+                        cruise_rpm: rpm,
+                        cruise_oat_c: oat,
+                        cruise_solve_mode: CruiseSolveMode::SetRpm,
+                        wheel_fairings_installed: true,
+                        ..FlightInputs::default()
+                    };
+                    let Ok(r) = compute_cruise(&data, &inputs) else {
+                        continue;
+                    };
+                    let bhp = r.percent_bhp.unwrap();
+                    let tas = r.tas_chart_kt.unwrap();
+                    let gph = r.fuel_flow_us_gal_h;
+                    assert!(
+                        bhp + 1e-6 >= prev_bhp,
+                        "BHP decreased pa={pa} disa={disa} rpm={rpm}: {bhp} < {prev_bhp}"
+                    );
+                    assert!(
+                        tas + 1e-6 >= prev_tas,
+                        "TAS decreased pa={pa} disa={disa} rpm={rpm}: {tas} < {prev_tas}"
+                    );
+                    if (-20.0..=10.0).contains(&disa) {
+                        assert!(
+                            gph + 1e-6 >= prev_gph,
+                            "GPH decreased pa={pa} disa={disa} rpm={rpm}: {gph} < {prev_gph}"
+                        );
+                        prev_gph = gph;
+                    }
+                    prev_bhp = bhp;
+                    prev_tas = tas;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn monotonic_6500_isa_2400_vs_2450() {
+        let data = PerformanceData::production();
+        let oat = isa_temp_c_at_pa(6500.0);
+        let mut prev = 0.0f64;
+        for rpm in [2400.0, 2450.0, 2600.0] {
+            let inputs = FlightInputs {
+                cruise_pressure_alt_ft: 6500.0,
+                cruise_rpm: rpm,
+                cruise_oat_c: oat,
+                wheel_fairings_installed: true,
+                ..FlightInputs::default()
+            };
+            let r = compute_cruise(&data, &inputs).unwrap();
+            let bhp = r.percent_bhp.unwrap();
+            assert!(bhp >= prev - 1e-6, "rpm={rpm} bhp={bhp} prev={prev}");
+            prev = bhp;
         }
     }
 
@@ -779,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn unreachable_bhp_not_clamped_and_tag_extrapolated() {
+    fn unreachable_bhp_five_percent_not_achievable() {
         let data = PerformanceData::production();
         let inputs = FlightInputs {
             cruise_pressure_alt_ft: 6500.0,
@@ -789,46 +814,10 @@ mod tests {
             wheel_fairings_installed: true,
             ..FlightInputs::default()
         };
-        let r = compute_cruise(&data, &inputs).unwrap();
-        assert_eq!(r.afm_lookup_tag, AfmLookupTag::Extrapolated);
-        let rows = &data.inner().cruise_table.value.rows;
-        let disa = disa_c(inputs.cruise_oat_c, inputs.cruise_pressure_alt_ft);
-        let levels = unique_sorted_rpms(rows);
-        let (b_lo, _) =
-            percent_bhp_at_rpm(rows, inputs.cruise_pressure_alt_ft, disa, levels[0]).unwrap();
-        let (b_hi, _) = percent_bhp_at_rpm(
-            rows,
-            inputs.cruise_pressure_alt_ft,
-            disa,
-            *levels.last().unwrap(),
-        )
-        .unwrap();
-        let band_min = b_lo.min(b_hi);
-        assert!(
-            5.0 < band_min - 0.5,
-            "test assumes 5% BHP below band min {band_min}"
+        assert_eq!(
+            compute_cruise(&data, &inputs),
+            Err(CruiseError::BhpNotAchievable)
         );
-        let solved = r.rpm.unwrap();
-        let anchor = if b_lo <= b_hi {
-            levels[0]
-        } else {
-            *levels.last().unwrap()
-        };
-        assert!(
-            (solved - anchor).abs() > 50.0,
-            "expected extrapolated RPM away from anchor {anchor}, got {solved}"
-        );
-        assert!(r
-            .warnings
-            .iter()
-            .any(|w| w.code == "CRUISE_BHP_OUT_OF_RANGE"));
-        assert!(r.tas_kt.is_finite() && r.tas_kt > 0.0, "tas={}", r.tas_kt);
-        assert!(
-            r.fuel_flow_us_gal_h.is_finite() && r.fuel_flow_us_gal_h > 0.0,
-            "gph={}",
-            r.fuel_flow_us_gal_h
-        );
-        assert!(r.percent_bhp.unwrap().is_finite());
     }
 
     #[test]

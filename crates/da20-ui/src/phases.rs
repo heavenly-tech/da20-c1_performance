@@ -20,7 +20,7 @@ use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
-use da20_core::types::{ChartPhase, CruiseSolveMode};
+use da20_core::types::{AfmLookupTag, ChartPhase, CruiseSolveMode};
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -369,6 +369,18 @@ fn phase_results(
                     let bhp = cr.percent_bhp.unwrap_or(0.0);
                     let rpm_out = cr.rpm.map(|x| x.round() as i64).unwrap_or(0);
                     let bhp_mode = inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp;
+                    let off_chart = bhp_mode
+                        && (cr.afm_lookup_tag == AfmLookupTag::Extrapolated
+                            || cr
+                                .warnings
+                                .iter()
+                                .any(|w| w.code == "CRUISE_BHP_OUT_OF_RANGE"));
+                    let off_suffix = if off_chart {
+                        format!(" · {}", c_loc.readout_off_chart)
+                    } else {
+                        String::new()
+                    };
+                    let requested_bhp = inputs.cruise_percent_bhp;
                     view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
@@ -377,23 +389,26 @@ fn phase_results(
                             if fair_on {
                                 view! {
                                     <>
-                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span></p>
-                                        <p class="mono">{format!("{bhp:.2}")}" % BHP · "{format!("{ff:.1}")}" US gal/h"</p>
+                                        <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span>{off_suffix.clone()}</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
                                     </>
                                 }.into_any()
                             } else if tas_c.is_some() {
                                 view! {
                                     <>
-                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                        <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}{off_suffix.clone()}</p>
                                         <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
-                                        <p class="mono">{format!("{bhp:.2}")}" % BHP · "{format!("{ff:.1}")}" US gal/h"</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
                                     </>
                                 }.into_any()
                             } else {
                                 view! {
                                     <>
-                                        <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
-                                        <p class="mono">{format!("{bhp:.2}")}" % BHP · "{format!("{ff:.1}")}" US gal/h"</p>
+                                        <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}{off_suffix.clone()}</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
                                     </>
                                 }.into_any()
                             }
@@ -424,7 +439,22 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    let c_loc = copy(locale);
+                    if b.cruise_bhp_not_achievable
+                        && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
+                    {
+                        view! {
+                            <div class="results-block">
+                                <p class="big mono">{format!("{:.2}", inputs.cruise_percent_bhp)}" % BHP"</p>
+                                <p class="error warn">{c_loc.cruise_bhp_not_achievable}</p>
+                            </div>
+                        }
+                        .into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Endurance => view! {

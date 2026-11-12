@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use da20_core::cruise::CruiseError;
 use da20_core::types::{climb_roc_fairing_multiplier, cruise_fairing_multiplier, FlightInputs};
 use da20_core::wind_format::format_wind;
 use da20_core::PerformanceData;
@@ -254,16 +255,22 @@ pub struct SavedBundle {
     pub takeoff: Option<da20_core::types::TakeoffResult>,
     pub climb: Option<da20_core::types::ClimbResult>,
     pub cruise: Option<da20_core::types::CruiseResult>,
+    /// Set when %BHP inverse has no root within ±100 RPM of the bracketing PA ladders.
+    pub cruise_bhp_not_achievable: bool,
     pub landing: Option<da20_core::types::LandingResult>,
     pub wind: Option<da20_core::types::WindResult>,
     pub endurance: Option<da20_core::types::EnduranceResult>,
 }
 
 pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle {
+    let cruise_res = da20_core::cruise::compute_cruise(data, inputs);
+    let cruise_bhp_not_achievable =
+        matches!(cruise_res.as_ref(), Err(CruiseError::BhpNotAchievable));
     SavedBundle {
         takeoff: da20_core::takeoff::compute_takeoff(data, inputs).ok(),
         climb: da20_core::climb::compute_climb(data, inputs, inputs.cruise_pressure_alt_ft).ok(),
-        cruise: da20_core::cruise::compute_cruise(data, inputs).ok(),
+        cruise: cruise_res.ok(),
+        cruise_bhp_not_achievable,
         landing: da20_core::landing::compute_landing(data, inputs).ok(),
         wind: da20_core::wind::compute_wind(data, inputs).ok(),
         endurance: None,
