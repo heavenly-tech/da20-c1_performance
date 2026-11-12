@@ -29,8 +29,8 @@ pub fn all_methods() -> Vec<MethodEntry> {
             id: "equivalent_altitude",
             title: "Equivalent altitude (Fig 5.2)",
             afm_reference: "AFM page 5-6, Figure 5.2 (digitized grid Rev 27, unchanged Rev 29)",
-            summary: "Bilinear-style interpolation on digitized PA × OAT grid (fan_PA, fan_T, fan_EA).",
-            interpolation: "Linear on temperature per PA row, then linear on PA.",
+            summary: "Interpolation on digitized PA × OAT grid (fan_PA, fan_T, fan_EA).",
+            interpolation: "Linear on OAT per PA row, then linear on PA; out of chart outside PA 0–16000 ft or OAT −20..60 °C.",
             limitations: "Requires complete digitized Fig 5.2 grid from Rev 29 JSON.",
         },
         MethodEntry {
@@ -38,7 +38,7 @@ pub fn all_methods() -> Vec<MethodEntry> {
             title: "Takeoff distance (Fig 5.4)",
             afm_reference: "AFM pages 5-9 / 5-10, Figure 5.4",
             summary: "Chain: base ground roll (OAT×PA) → weight factor → Fig 5.4 wind panel (HW/TW) → obstacle slope from sheet 2. Distances in meters, displayed in feet.",
-            interpolation: "Linear on each panel axis (see validate_rev29 reference script).",
+            interpolation: "Linear on each panel only; out of chart outside PA 0–10000 ft, OAT −20..55 °C, weight 600–800 kg, headwind >20 kt, tailwind >5 kt, or panel entry/obstacle off printed lines.",
             limitations: TAKEOFF_AFM_ROUNDING_NOTE,
         },
         MethodEntry {
@@ -46,15 +46,15 @@ pub fn all_methods() -> Vec<MethodEntry> {
             title: "Climb ROC (Fig 5.5 / 5.6 / 5.8 via Fig 5.2)",
             afm_reference: "AFM pages 5-11, 5-12, 5-16",
             summary: "ROC (fpm) = a + b × EA_ft from digitized linear fits (roc.*). Planner shows Fig 5.5 (cruise flaps) ROC by default.",
-            interpolation: "Linear EA from Fig 5.2; ROC coefficients fixed per figure.",
+            interpolation: "EA from Fig 5.2 (same hull); ROC coefficients fixed per figure.",
             limitations: CLIMB_DERIVED_ESTIMATE_NOTE,
         },
         MethodEntry {
             id: "cruise",
             title: "Cruise performance (Table 3)",
             afm_reference: "AFM pages 5-14 / 5-15, Table 3",
-            summary: "ΔISA = OAT − ISA at PA. On each Table 3 PA row, linearly interpolate or extrapolate in RPM along that row's own tabulated RPM ladder after interpolating along ΔISA (−20 / 0 / +10); then blend those values linearly in PA (and ΔISA is already per row). Set-RPM forward mode reads %BHP, KTAS, and GPH from that surface. Set-%BHP inverse mode bisects RPM on the same forward surface (±100 RPM slack beyond each bracketing row's ladder); requested %BHP outside that envelope is not achievable. Wheel fairing note: apply ~5% lower TAS after Table 3 lookup; GPH is not scaled.",
-            interpolation: "Tags: Table on exact printed PA/RPM/ΔISA nodes; Interpolated inside the grid; Extrapolated when RPM, PA, or ΔISA is outside tabulated limits (inverse hits off-chart when the solved RPM needs extrapolation).",
+            summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) is linear in PA between each row's first tabulated RPM; valid RPM is [rmin(PA), 2800]. Normalize s = (RPM−rmin)/(2800−rmin); on each bracketing row use RPM_row = rmin_row + s(2800−rmin_row), interpolate ΔISA then RPM on that ladder, then blend in PA. Set-%BHP inverts on [rmin(PA), 2800] only. Fairings: ~−5% TAS after lookup; GPH not scaled.",
+            interpolation: "Tags: Tabla (printed node) or Interpolado only. Out of chart if PA, ΔISA, or RPM are outside the hull (e.g. 6500 ft: RPM < 2512.5).",
             limitations: CRUISE_TABLE3_GPH_NOTE,
         },
         MethodEntry {
@@ -62,7 +62,7 @@ pub fn all_methods() -> Vec<MethodEntry> {
             title: "Landing distance (Table 4)",
             afm_reference: "AFM page 5-17, Table 4",
             summary: "Linear interpolation on pressure altitude for ground roll and 50 ft distances (table values in ft). Optional wind panel correction.",
-            interpolation: "1D on land_alt axes.",
+            interpolation: "1D on land_alt axes; out of chart outside PA 0–7000 ft.",
             limitations: LANDING_TABLE_50FT_M_NOTE,
         },
         MethodEntry {

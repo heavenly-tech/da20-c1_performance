@@ -1,9 +1,10 @@
 use crate::afm_tag::takeoff_tag;
 use crate::altitude::effective_pressure_altitude_ft;
+use crate::chart_bounds::ChartOutOfRange;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::{ft_to_m, lb_to_kg, m_to_ft, takeoff_distances_m};
-use crate::types::{CalculationWarning, FlightInputs, TakeoffResult};
+use crate::types::{FlightInputs, TakeoffResult};
 use crate::wind::runway_heading_deg;
 
 pub const TAKEOFF_AFM_ROUNDING_NOTE: &str = "AFM worked examples often round chart distances up to the next 50 ft. The planner shows the raw Fig 5.4 chain result and a conservative value (next 50 ft up, with meters converted from that ft value).";
@@ -20,10 +21,10 @@ pub fn afm_conservative_distance_m_from_ft(conservative_ft: f64) -> f64 {
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TakeoffError {
-    #[error("takeoff calculation failed")]
-    Failed,
     #[error("invalid runway heading")]
     InvalidRunwayHeading,
+    #[error(transparent)]
+    OutOfChart(ChartOutOfRange),
 }
 
 pub fn compute_takeoff(
@@ -50,7 +51,8 @@ pub fn compute_takeoff(
         headwind_kt,
         tailwind_kt,
         inputs.obstacle_height_m,
-    );
+    )
+    .map_err(TakeoffError::OutOfChart)?;
 
     let ground_ft = m_to_ft(dist.ground_roll_m);
     let over_raw_m = dist.over_obstacle_m;
@@ -59,10 +61,8 @@ pub fn compute_takeoff(
     let over_conservative_m = afm_conservative_distance_m_from_ft(over_conservative_ft);
     let wind_delta_ft = m_to_ft(dist.ground_roll_m - dist.after_weight_m);
 
-    let mut warnings = dist.warnings;
-    warnings.push(CalculationWarning::code_only("UNITS"));
-    let chart_off_afm = crate::warnings::takeoff_off_chart(&warnings);
-    let afm_lookup_tag = takeoff_tag(chart_off_afm);
+    let warnings = dist.warnings;
+    let afm_lookup_tag = takeoff_tag(false);
 
     Ok(TakeoffResult {
         provenance: provenance_for(data.inner(), data.takeoff_source()),
@@ -75,7 +75,7 @@ pub fn compute_takeoff(
         distance_over_obstacle_conservative_ft: over_conservative_ft,
         distance_over_50ft_ft: over_raw_ft,
         wind_correction_ft: wind_delta_ft,
-        chart_off_afm,
+        chart_off_afm: false,
         warnings,
     })
 }
@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn takeoff_worked_example_raw_and_afm_rounding() {
         let data = PerformanceData::production();
-        let d = takeoff_distances_m(data.inner(), 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
+        let d = takeoff_distances_m(data.inner(), 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0).unwrap();
         let raw_ft = m_to_ft(d.over_obstacle_m);
         assert!(
             (raw_ft - 1154.0).abs() / 1154.0 <= 0.015,

@@ -89,11 +89,15 @@ pub fn wind_headwind_vs_angle(speed_kt: f64) -> Polyline {
 }
 
 pub fn sample_takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
-    takeoff_base_m(data, pa_ft, oat_c).0
+    takeoff_base_m(data, pa_ft, oat_c)
+        .map(|(v, _)| v)
+        .unwrap_or(f64::NAN)
 }
 
 pub fn sample_equivalent_altitude_ft(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
-    equivalent_altitude_ft(data, pa_ft, oat_c).0
+    equivalent_altitude_ft(data, pa_ft, oat_c)
+        .map(|(v, _)| v)
+        .unwrap_or(f64::NAN)
 }
 
 pub fn sample_roc_fpm(data: &Rev29File, key: &str, pa_ft: f64, oat_c: f64) -> f64 {
@@ -113,7 +117,7 @@ pub fn sample_roc_fpm_with_inputs(
 }
 
 pub fn sample_landing_ft(data: &Rev29File, pa_ft: f64) -> (f64, f64) {
-    let (r, o, _) = landing_lookup_ft(data, pa_ft);
+    let (r, o, _) = landing_lookup_ft(data, pa_ft).unwrap_or((f64::NAN, f64::NAN, vec![]));
     (r, o)
 }
 

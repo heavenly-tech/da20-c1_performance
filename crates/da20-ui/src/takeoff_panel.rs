@@ -489,9 +489,26 @@ fn TakeoffSweepTable(
                         </thead>
                         <tbody>
                             {list.iter().map(|row| {
-                                let rounded = apply_takeoff_distance_rounding(&row.result, mode);
                                 let loc = locale.get();
-                                let tag = afm_lookup_tag_label(loc, row.result.afm_lookup_tag);
+                                let Some(ref result) = row.result else {
+                                    let obs_display = match prefs.get_untracked().obstacle {
+                                        ObstacleUnit::Meters => format!("{:.0} m", row.obstacle_height_m),
+                                        ObstacleUnit::Feet => format!("{:.0} ft", m_to_ft(row.obstacle_height_m)),
+                                    };
+                                    return view! {
+                                        <tr>
+                                            <td>{format!("{:.1}", row.oat_c)}</td>
+                                            <td>{format!("{:.1}", row.signed_headwind_kt)}</td>
+                                            <td>{obs_display}</td>
+                                            <td>"—"</td>
+                                            <td>"—"</td>
+                                            <td><span class="chip">"—"</span></td>
+                                        </tr>
+                                    }
+                                    .into_any();
+                                };
+                                let rounded = apply_takeoff_distance_rounding(result, mode);
+                                let tag = afm_lookup_tag_label(loc, result.afm_lookup_tag);
                                 let obs_display = match prefs.get_untracked().obstacle {
                                     ObstacleUnit::Meters => format!("{:.0} m", row.obstacle_height_m),
                                     ObstacleUnit::Feet => format!("{:.0} ft", m_to_ft(row.obstacle_height_m)),
@@ -506,9 +523,18 @@ fn TakeoffSweepTable(
                                         <td><span class="chip">{tag}</span></td>
                                     </tr>
                                 }
+                                .into_any()
                             }).collect_view()}
                         </tbody>
                     </table>
+                    {move || {
+                        let c = copy(locale.get());
+                        if rows.get().iter().any(|r| r.result.is_none()) {
+                            view! { <p class="lab results-muted">{c.takeoff_sweep_oob_footnote}</p> }.into_any()
+                        } else {
+                            ().into_any()
+                        }
+                    }}
                 </div>
             }
             .into_any()

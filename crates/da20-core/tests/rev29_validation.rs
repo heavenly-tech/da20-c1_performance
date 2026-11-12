@@ -12,7 +12,7 @@ fn validation_rev29_takeoff_and_roc_and_wind() {
     let data = PerformanceData::production();
     let inner = data.inner();
 
-    let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
+    let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0).unwrap();
     let raw_ft = m_to_ft(d.over_obstacle_m);
     assert!(
         (raw_ft - 1154.0).abs() / 1154.0 <= 0.015,

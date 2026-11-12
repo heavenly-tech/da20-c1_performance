@@ -1,9 +1,75 @@
 //! Multi-panel hand-plot geometry (Fig 5.4 takeoff strip, Fig 5.2 → 5.5/5.6/5.8 climb strip).
 
-use crate::rev29::engine::{
-    equivalent_altitude_ft, lb_to_kg, obstacle_add_m, rate_of_climb_fpm, takeoff_base_m,
-    takeoff_distances_m, weight_factor, wind_panel_hw_m, wind_panel_tw_m,
-};
+use crate::rev29::engine::{self, lb_to_kg, rate_of_climb_fpm, TakeoffDistancesM};
+
+fn equivalent_altitude_ft(
+    data: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+) -> (f64, Vec<CalculationWarning>) {
+    engine::equivalent_altitude_ft(data, pa_ft, oat_c).unwrap_or((f64::NAN, vec![]))
+}
+
+fn takeoff_distances_m(
+    data: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+    weight_kg: f64,
+    headwind_kt: f64,
+    tailwind_kt: f64,
+    obstacle_m: f64,
+) -> TakeoffDistancesM {
+    engine::takeoff_distances_m(
+        data,
+        pa_ft,
+        oat_c,
+        weight_kg,
+        headwind_kt,
+        tailwind_kt,
+        obstacle_m,
+    )
+    .unwrap_or_else(|_| TakeoffDistancesM {
+        base_m: f64::NAN,
+        after_weight_m: f64::NAN,
+        wind_panel_entry_m: f64::NAN,
+        obstacle_panel_entry_m: f64::NAN,
+        ground_roll_m: f64::NAN,
+        over_obstacle_m: f64::NAN,
+        warnings: vec![],
+    })
+}
+
+fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<CalculationWarning>) {
+    engine::takeoff_base_m(data, pa_ft, oat_c).unwrap_or((f64::NAN, vec![]))
+}
+
+fn weight_factor(data: &Rev29File, weight_kg: f64) -> (f64, Vec<CalculationWarning>) {
+    engine::weight_factor(data, weight_kg).unwrap_or((f64::NAN, vec![]))
+}
+
+fn wind_panel_hw_m(
+    data: &Rev29File,
+    entry_m: f64,
+    headwind_kt: f64,
+) -> (f64, f64, Vec<CalculationWarning>) {
+    engine::wind_panel_hw_m(data, entry_m, headwind_kt).unwrap_or((f64::NAN, f64::NAN, vec![]))
+}
+
+fn wind_panel_tw_m(
+    data: &Rev29File,
+    entry_m: f64,
+    tailwind_kt: f64,
+) -> (f64, f64, Vec<CalculationWarning>) {
+    engine::wind_panel_tw_m(data, entry_m, tailwind_kt).unwrap_or((f64::NAN, f64::NAN, vec![]))
+}
+
+fn obstacle_add_m(
+    data: &Rev29File,
+    ground_m: f64,
+    obstacle_m: f64,
+) -> (f64, f64, Vec<CalculationWarning>) {
+    engine::obstacle_add_m(data, ground_m, obstacle_m).unwrap_or((f64::NAN, f64::NAN, vec![]))
+}
 use crate::rev29::types::Rev29File;
 use crate::types::climb_roc_fairing_multiplier;
 use crate::types::defaults;
@@ -511,7 +577,7 @@ pub struct ClimbPath {
 pub fn climb_hand_path(data: &Rev29File, inputs: &FlightInputs, pa_ft: f64) -> Option<ClimbPath> {
     let key = inputs.climb_figure.roc_key();
     let (ea, _) = equivalent_altitude_ft(data, pa_ft, inputs.oat_c);
-    let (core_roc_base, _) = rate_of_climb_fpm(data, key, pa_ft, inputs.oat_c)?;
+    let (core_roc_base, _) = rate_of_climb_fpm(data, key, pa_ft, inputs.oat_c).ok()?;
     let fair_m = climb_roc_fairing_multiplier(inputs.wheel_fairings_installed);
     let core_roc = core_roc_base * fair_m;
 
@@ -802,9 +868,7 @@ pub fn takeoff_panel_guides(data: &Rev29File) -> TakeoffPanelGuides {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rev29::engine::{
-        equivalent_altitude_ft, fahrenheit_to_celsius, m_to_ft, takeoff_distances_m,
-    };
+    use crate::rev29::engine::{fahrenheit_to_celsius, m_to_ft};
     use crate::types::FlightInputs;
 
     #[test]
@@ -835,7 +899,7 @@ mod tests {
         let data = Rev29File::production();
         let guides = takeoff_panel_guides(&data);
         let line_m = data.hw_lines.value[2];
-        let (wf, _) = crate::rev29::engine::weight_factor(&data, 650.0);
+        let (wf, _) = weight_factor(&data, 650.0);
         let (wf_chart, _) = weight_factor(&data, defaults::TAKEOFF_CHART_WEIGHT_KG);
         let wrong = headwind_guide_polyline(&data, line_m * wf / wf_chart);
         assert_ne!(guides.headwind_polylines[2], wrong);
@@ -848,7 +912,7 @@ mod tests {
         let oat_a = 10.0;
         let oat_b = 35.0;
         let kg_a = lb_to_kg(1400.0);
-        let kg_b = lb_to_kg(1900.0);
+        let kg_b = lb_to_kg(1700.0);
         assert_eq!(takeoff_panel_guides(&data), takeoff_panel_guides(&data));
         let a = takeoff_distances_m(&data, pa, oat_a, kg_a, 0.0, 0.0, 0.0);
         let b = takeoff_distances_m(&data, pa, oat_b, kg_b, 0.0, 0.0, 0.0);
@@ -992,28 +1056,31 @@ mod tests {
         let d0 = wind_panel_tw_m(&data, entry, 0.0).0;
         assert!((d0 - entry).abs() < 2.0);
         let mut prev = d0;
-        for tw in [2.0, 3.0, 4.0, 5.0] {
+        let tw_max = *data.tw_kt.value.last().expect("tw kt");
+        for tw in [2.0, 3.0, 4.0, tw_max] {
             let d = wind_panel_tw_m(&data, entry, tw).0;
             assert!(d >= prev - 0.5, "TW {tw} kt should not shorten distance");
             let delta = d - prev;
             assert!(delta < 35.0, "per-step jump {delta} m too large at {tw} kt");
             prev = d;
         }
-        let d5 = wind_panel_tw_m(&data, entry, 5.0).0;
+        let d_max = wind_panel_tw_m(&data, entry, tw_max).0;
         assert!(
-            d5 - entry < 120.0,
+            d_max - entry < 120.0,
             "total TW correction should stay on chart scale"
         );
     }
 
     #[test]
-    fn takeoff_ground_roll_increases_monotonically_with_tailwind_0_to_10_kt() {
+    fn takeoff_ground_roll_increases_monotonically_with_tailwind_0_to_5_kt() {
         let data = Rev29File::production();
         let pa = 2500.0;
         let oat = 15.0;
         let kg = 772.0;
         let mut prev = takeoff_distances_m(&data, pa, oat, kg, 0.0, 0.0, 0.0).ground_roll_m;
-        for step in 1..=100 {
+        let tw_max = *data.tw_kt.value.last().expect("tw kt");
+        let steps = (tw_max * 10.0).round() as i32;
+        for step in 1..=steps {
             let tw = step as f64 / 10.0;
             let dist = takeoff_distances_m(&data, pa, oat, kg, 0.0, tw, 0.0).ground_roll_m;
             assert!(
@@ -1035,11 +1102,16 @@ mod tests {
     fn takeoff_tailwind_hand_path_follows_tw_panel_guide_to_core_distance() {
         let data = Rev29File::production();
         let inputs = FlightInputs {
+            oat_c: 15.0,
             runway: "190".into(),
             wind_dir_deg: 10.0,
-            wind_speed_kt: 5.0,
+            wind_speed_kt: 4.0,
             weight_lb: 1700.0,
             obstacle_height_m: 0.0,
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
             ..Default::default()
         };
         let (hw, tw) = headwind_and_tailwind(&inputs);
@@ -1064,11 +1136,16 @@ mod tests {
         use crate::takeoff::compute_takeoff;
         let data = PerformanceData::production();
         let tw_case = FlightInputs {
+            oat_c: 15.0,
             runway: "190".into(),
             wind_dir_deg: 10.0,
-            wind_speed_kt: 5.0,
+            wind_speed_kt: 4.0,
             weight_lb: 1700.0,
             obstacle_height_m: 0.0,
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
             ..Default::default()
         };
         let tw = compute_takeoff(&data, &tw_case).expect("tw");
@@ -1078,11 +1155,16 @@ mod tests {
             tw.distance_over_obstacle_raw_ft
         );
         let hw_case = FlightInputs {
+            oat_c: 15.0,
             runway: "360".into(),
-            wind_dir_deg: 200.0,
+            wind_dir_deg: 360.0,
             wind_speed_kt: 8.0,
-            weight_lb: defaults::WEIGHT_LB,
+            weight_lb: 1700.0,
             obstacle_height_m: 0.0,
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
             ..Default::default()
         };
         let hw = compute_takeoff(&data, &hw_case).expect("hw");
@@ -1094,10 +1176,9 @@ mod tests {
     }
 
     #[test]
-    fn tailwind_chart_limit_emits_warning_no_silent_extrapolation() {
+    fn tailwind_over_5_kt_is_out_of_chart() {
         let data = Rev29File::production();
-        let (_, _, w) = wind_panel_tw_m(&data, 400.0, 8.0);
-        assert!(w.iter().any(|x| x.code == "TAILWIND_CHART_LIMIT"));
+        assert!(crate::rev29::engine::wind_panel_tw_m(&data, 400.0, 8.0).is_err());
     }
 
     #[test]
@@ -1125,7 +1206,7 @@ mod tests {
     #[test]
     fn takeoff_oat_panel_pa_trace_y_matches_engine_base_read() {
         let data = Rev29File::production();
-        for pa_ft in [500.0, 2500.0, 7500.0] {
+        for pa_ft in [500.0, 2500.0, 5000.0] {
             for oat_c in [-10.0, 15.0, 40.0] {
                 let trace = takeoff_oat_panel_pa_trace(&data, pa_ft, oat_c);
                 assert_eq!(trace.pa_ft, pa_ft);
@@ -1431,6 +1512,10 @@ mod tests {
             .obstacle_height_m
             .clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
         let core = takeoff_distances_m(data, pa_ft, inputs.oat_c, weight_kg, hw, tw, obs_m);
+        assert!(
+            core.ground_roll_m.is_finite(),
+            "in-chart inputs required for path geometry test: {inputs:?}"
+        );
         let path = takeoff_hand_path(data, &inputs, pa_ft);
 
         let wt_exit_y = y_dist(core.after_weight_m);
@@ -1478,11 +1563,11 @@ mod tests {
             },
             FlightInputs {
                 oat_c: 5.0,
-                weight_lb: 1800.0,
-                wind_dir_deg: 90.0,
-                wind_speed_kt: 6.0,
-                runway: "190".into(),
-                obstacle_height_m: 12.0,
+                weight_lb: 1700.0,
+                wind_dir_deg: 360.0,
+                wind_speed_kt: 4.0,
+                runway: "360".into(),
+                obstacle_height_m: 8.0,
                 pa_override: Some(crate::types::PaOverride {
                     pa_ft: 500.0,
                     phase: crate::types::ChartPhase::Takeoff,
@@ -1492,7 +1577,7 @@ mod tests {
             FlightInputs {
                 oat_c: 21.0,
                 weight_lb: 1598.0,
-                wind_dir_deg: 180.0,
+                wind_dir_deg: 360.0,
                 wind_speed_kt: 8.0,
                 runway: "360".into(),
                 obstacle_height_m: 5.0,
@@ -1516,13 +1601,14 @@ mod tests {
                 ..Default::default()
             },
         ];
-        for inputs in cases {
+        for (idx, inputs) in cases.into_iter().enumerate() {
             let pa = inputs
                 .pa_override
                 .as_ref()
                 .map(|o| o.pa_ft)
                 .unwrap_or(2130.0);
             panel_y_continuity(&data, inputs, pa);
+            let _ = idx;
         }
     }
 
@@ -1545,15 +1631,20 @@ mod tests {
     fn takeoff_tailwind_path_x_monotonic_outside_tw_subpanel() {
         let data = Rev29File::production();
         let inputs = FlightInputs {
+            oat_c: 15.0,
             runway: "190".into(),
             wind_dir_deg: 10.0,
-            wind_speed_kt: 5.0,
+            wind_speed_kt: 4.0,
             weight_lb: 1700.0,
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
             ..Default::default()
         };
         let (hw, tw) = headwind_and_tailwind(&inputs);
         assert!(takeoff_wind_is_tailwind(hw, tw));
-        let path = takeoff_hand_path(&data, &inputs, 2130.0);
+        let path = takeoff_hand_path(&data, &inputs, 2500.0);
         let (tw_lo, tw_hi) = tailwind_subpanel_x_range();
         for w in path.points.windows(2) {
             let (a, b) = (w[0], w[1]);
@@ -1630,10 +1721,15 @@ mod tests {
             (
                 "tailwind",
                 FlightInputs {
+                    oat_c: 15.0,
                     runway: "190".into(),
                     wind_dir_deg: 10.0,
-                    wind_speed_kt: 5.0,
+                    wind_speed_kt: 4.0,
                     weight_lb: 800.0 / 0.45359237,
+                    pa_override: Some(crate::types::PaOverride {
+                        pa_ft: 2500.0,
+                        phase: crate::types::ChartPhase::Takeoff,
+                    }),
                     ..Default::default()
                 },
             ),
@@ -1733,7 +1829,7 @@ mod tests {
             weight_lb: 800.0 / 0.45359237,
             runway: "190".into(),
             wind_dir_deg: 10.0,
-            wind_speed_kt: 5.0,
+            wind_speed_kt: 4.0,
             pa_override: Some(crate::types::PaOverride {
                 pa_ft: 2500.0,
                 phase: crate::types::ChartPhase::Takeoff,
@@ -1773,9 +1869,16 @@ mod tests {
     fn takeoff_wind_path_ends_at_entered_component_no_flat_tail() {
         let data = Rev29File::production();
         let inputs = FlightInputs {
+            oat_c: 15.0,
+            weight_lb: 1700.0,
+            obstacle_height_m: 0.0,
             wind_dir_deg: 360.0,
             wind_speed_kt: 12.0,
             runway: "360".into(),
+            pa_override: Some(crate::types::PaOverride {
+                pa_ft: 2500.0,
+                phase: crate::types::ChartPhase::Takeoff,
+            }),
             ..Default::default()
         };
         let (hw, _) = headwind_and_tailwind(&inputs);

@@ -2,12 +2,8 @@ use crate::types::CalculationWarning;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ExtrapolationPolicy {
-    /// Return error when query is outside grid bounds.
+    /// Return error when query is outside grid bounds (only policy used in this app).
     Strict,
-    /// Clamp to nearest edge and emit warning.
-    Clamp,
-    /// Linear extrapolation beyond edges and emit warning.
-    AllowExtrapolate,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -37,6 +33,7 @@ pub fn interpolate_1d(
     query: f64,
     policy: ExtrapolationPolicy,
 ) -> Result<(f64, Vec<CalculationWarning>), InterpError> {
+    let _ = policy;
     if axis.is_empty() || values.is_empty() {
         return Err(InterpError::EmptyAxis);
     }
@@ -44,21 +41,37 @@ pub fn interpolate_1d(
         return Err(InterpError::LengthMismatch);
     }
     if axis.len() == 1 {
+        if (query - axis[0]).abs() > 1e-9 {
+            return Err(if query < axis[0] {
+                InterpError::BelowMin { min: axis[0] }
+            } else {
+                InterpError::AboveMax { max: axis[0] }
+            });
+        }
         return Ok((values[0], vec![]));
     }
 
-    let mut warnings = Vec::new();
-    let (q, extrapolated) = clamp_or_extrapolate_query(axis, query, policy, &mut warnings)?;
-    if extrapolated {
-        // already warned in helper
+    let min = axis[0];
+    let max = axis[axis.len() - 1];
+    if query < min - 1e-9 {
+        return Err(InterpError::BelowMin { min });
+    }
+    if query > max + 1e-9 {
+        return Err(InterpError::AboveMax { max });
     }
 
-    let idx = bracket_index(axis, q);
+    let idx = bracket_index(axis, query);
     if idx + 1 >= axis.len() {
-        return Ok((values[axis.len() - 1], warnings));
+        return Ok((values[axis.len() - 1], vec![]));
     }
-    let y = lerp(axis[idx], values[idx], axis[idx + 1], values[idx + 1], q);
-    Ok((y, warnings))
+    let y = lerp(
+        axis[idx],
+        values[idx],
+        axis[idx + 1],
+        values[idx + 1],
+        query,
+    );
+    Ok((y, vec![]))
 }
 
 fn bracket_index(axis: &[f64], q: f64) -> usize {
@@ -69,65 +82,7 @@ fn bracket_index(axis: &[f64], q: f64) -> usize {
     i.min(axis.len().saturating_sub(2))
 }
 
-/// Relative tolerance before emitting clamp warnings (e.g. lb→kg rounding).
-const CLAMP_TOLERANCE: f64 = 0.2;
-
-fn clamp_or_extrapolate_query(
-    axis: &[f64],
-    query: f64,
-    policy: ExtrapolationPolicy,
-    warnings: &mut Vec<CalculationWarning>,
-) -> Result<(f64, bool), InterpError> {
-    let min = axis[0];
-    let max = axis[axis.len() - 1];
-    if query < min {
-        return match policy {
-            ExtrapolationPolicy::Strict => Err(InterpError::BelowMin { min }),
-            ExtrapolationPolicy::Clamp => {
-                if min - query <= CLAMP_TOLERANCE {
-                    return Ok((min, false));
-                }
-                warnings.push(CalculationWarning::with_args(
-                    "CLAMP_LOW",
-                    vec![format!("{query}"), format!("{min}")],
-                ));
-                Ok((min, true))
-            }
-            ExtrapolationPolicy::AllowExtrapolate => {
-                warnings.push(CalculationWarning::with_args(
-                    "EXTRAP_LOW",
-                    vec![format!("{query}"), format!("{min}")],
-                ));
-                Ok((query, true))
-            }
-        };
-    }
-    if query > max {
-        return match policy {
-            ExtrapolationPolicy::Strict => Err(InterpError::AboveMax { max }),
-            ExtrapolationPolicy::Clamp => {
-                if query - max <= CLAMP_TOLERANCE {
-                    return Ok((max, false));
-                }
-                warnings.push(CalculationWarning::with_args(
-                    "CLAMP_HIGH",
-                    vec![format!("{query}"), format!("{max}")],
-                ));
-                Ok((max, true))
-            }
-            ExtrapolationPolicy::AllowExtrapolate => {
-                warnings.push(CalculationWarning::with_args(
-                    "EXTRAP_HIGH",
-                    vec![format!("{query}"), format!("{max}")],
-                ));
-                Ok((query, true))
-            }
-        };
-    }
-    Ok((query, false))
-}
-
-/// Bilinear interpolation on a rectilinear grid.
+/// Bilinear interpolation on a rectilinear grid (strict axes only).
 pub fn interpolate_2d(
     x_axis: &[f64],
     y_axis: &[f64],
@@ -148,26 +103,39 @@ pub fn interpolate_2d(
         }
     }
 
-    let mut warnings = Vec::new();
-    let (xq_eff, _) = clamp_or_extrapolate_query(x_axis, xq, policy, &mut warnings)?;
-    let (yq_eff, _) = clamp_or_extrapolate_query(y_axis, yq, policy, &mut warnings)?;
+    let min_x = x_axis[0];
+    let max_x = x_axis[x_axis.len() - 1];
+    if xq < min_x - 1e-9 {
+        return Err(InterpError::BelowMin { min: min_x });
+    }
+    if xq > max_x + 1e-9 {
+        return Err(InterpError::AboveMax { max: max_x });
+    }
+    let min_y = y_axis[0];
+    let max_y = y_axis[y_axis.len() - 1];
+    if yq < min_y - 1e-9 {
+        return Err(InterpError::BelowMin { min: min_y });
+    }
+    if yq > max_y + 1e-9 {
+        return Err(InterpError::AboveMax { max: max_y });
+    }
+    let xq_eff = xq;
+    let yq_eff = yq;
 
     let xi = bracket_index(x_axis, xq_eff);
     let yi = bracket_index(y_axis, yq_eff);
 
     if x_axis.len() == 1 && y_axis.len() == 1 {
-        return Ok((grid[0][0], warnings));
+        return Ok((grid[0][0], vec![]));
     }
     if x_axis.len() == 1 {
         let (v, w) = interpolate_1d(y_axis, &grid[0], yq_eff, policy)?;
-        warnings.extend(w);
-        return Ok((v, warnings));
+        return Ok((v, w));
     }
     if y_axis.len() == 1 {
         let row = &grid[0];
         let (v, w) = interpolate_1d(x_axis, row, xq_eff, policy)?;
-        warnings.extend(w);
-        return Ok((v, warnings));
+        return Ok((v, w));
     }
 
     let x0 = x_axis[xi];
@@ -183,7 +151,7 @@ pub fn interpolate_2d(
     let r1 = lerp(x0, q11, x1, q21, xq_eff);
     let r2 = lerp(x0, q12, x1, q22, xq_eff);
     let v = lerp(y0, r1, y1, r2, yq_eff);
-    Ok((v, warnings))
+    Ok((v, vec![]))
 }
 
 #[cfg(test)]
@@ -209,15 +177,14 @@ mod tests {
     }
 
     #[test]
-    fn interpolate_1d_clamp_warns() {
-        let (v, w) = interpolate_1d(
+    fn interpolate_1d_below_strict_errors() {
+        let err = interpolate_1d(
             &[0.0, 10.0],
             &[0.0, 100.0],
             -5.0,
-            ExtrapolationPolicy::Clamp,
+            ExtrapolationPolicy::Strict,
         )
-        .unwrap();
-        assert!((v - 0.0).abs() < 1e-9);
-        assert_eq!(w.len(), 1);
+        .unwrap_err();
+        assert_eq!(err, InterpError::BelowMin { min: 0.0 });
     }
 }

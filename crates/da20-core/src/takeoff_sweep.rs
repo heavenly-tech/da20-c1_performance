@@ -26,7 +26,7 @@ pub struct TakeoffSweepRow {
     pub oat_c: f64,
     pub signed_headwind_kt: f64,
     pub obstacle_height_m: f64,
-    pub result: TakeoffResult,
+    pub result: Option<TakeoffResult>,
 }
 
 #[derive(Debug, Error, PartialEq)]
@@ -216,8 +216,7 @@ pub fn compute_takeoff_sweep(
         inputs.oat_c = oat;
         inputs.obstacle_height_m = obs;
         apply_sweep_headwind(&mut inputs, hw);
-        let result =
-            compute_takeoff(data, &inputs).map_err(|_| TakeoffSweepError::InvalidRunway)?;
+        let result = compute_takeoff(data, &inputs).ok();
         rows.push(TakeoffSweepRow {
             oat_c: oat,
             signed_headwind_kt: hw,
@@ -265,11 +264,10 @@ mod tests {
         let rows = compute_takeoff_sweep(&data, &base, &axes, hw).unwrap();
         assert_eq!(rows.len(), 1);
         let direct = compute_takeoff(&data, &base).unwrap();
-        assert!((rows[0].result.ground_roll_ft - direct.ground_roll_ft).abs() < 1e-6);
+        let row = rows[0].result.as_ref().unwrap();
+        assert!((row.ground_roll_ft - direct.ground_roll_ft).abs() < 1e-6);
         assert!(
-            (rows[0].result.distance_over_obstacle_raw_ft - direct.distance_over_obstacle_raw_ft)
-                .abs()
-                < 1e-6
+            (row.distance_over_obstacle_raw_ft - direct.distance_over_obstacle_raw_ft).abs() < 1e-6
         );
     }
 

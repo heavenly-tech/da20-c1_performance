@@ -1,125 +1,37 @@
-use crate::interpolation::{interpolate_1d, ExtrapolationPolicy};
+use crate::chart_bounds::{self, limits, ChartOutOfRange};
+use crate::interpolation::{interpolate_1d, ExtrapolationPolicy, InterpError};
 use crate::rev29::types::Rev29File;
 use crate::types::CalculationWarning;
 
 const M_TO_FT: f64 = 3.280839895;
+const AXIS_TOL: f64 = 1e-6;
 
-const CLAMP_TOLERANCE: f64 = 0.2;
-
-/// Clamp a chart distance query to the AFM axis; emit at most one conservative low/high warning.
-pub fn clamp_chart_distance_m(
-    axis: &[f64],
-    query_m: f64,
-    chart_label: &str,
-) -> (f64, Vec<CalculationWarning>) {
-    if axis.is_empty() {
-        return (query_m, vec![]);
+fn interp_err_to_chart(label: &'static str, axis: &[f64], err: InterpError) -> ChartOutOfRange {
+    let min = axis.first().copied().unwrap_or(0.0);
+    let max = axis.last().copied().unwrap_or(min);
+    match err {
+        InterpError::BelowMin { min } => ChartOutOfRange { label, min, max },
+        InterpError::AboveMax { max } => ChartOutOfRange { label, min, max },
+        _ => ChartOutOfRange { label, min, max },
     }
-    let min = axis[0];
-    let max = axis[axis.len() - 1];
-    if query_m < min - CLAMP_TOLERANCE {
-        return (
-            min,
-            vec![CalculationWarning::with_args(
-                "CHART_CLAMP_LOW",
-                vec![
-                    chart_label.to_string(),
-                    format!("{:.0}", query_m.round()),
-                    format!("{:.0}", min.round()),
-                ],
-            )],
-        );
-    }
-    if query_m > max + CLAMP_TOLERANCE {
-        return (
-            max,
-            vec![CalculationWarning::with_args(
-                "CHART_CLAMP_HIGH",
-                vec![
-                    chart_label.to_string(),
-                    format!("{:.0}", query_m.round()),
-                    format!("{:.0}", max.round()),
-                ],
-            )],
-        );
-    }
-    (query_m, vec![])
 }
 
 pub(crate) fn linear_interp_quiet(axis: &[f64], values: &[f64], x: f64) -> f64 {
-    match interpolate_1d(axis, values, x, ExtrapolationPolicy::Strict) {
-        Ok((v, _)) => v,
-        Err(_) => {
-            if axis.is_empty() {
-                0.0
-            } else if x <= axis[0] {
-                values[0]
-            } else {
-                *values.last().unwrap_or(&values[0])
-            }
-        }
-    }
+    linear_interp(axis, values, x, "")
+        .map(|(v, _)| v)
+        .unwrap_or(f64::NAN)
 }
 
 pub fn linear_interp(
     axis: &[f64],
     values: &[f64],
     x: f64,
-    axis_label: &str,
-) -> (f64, Vec<CalculationWarning>) {
-    match interpolate_1d(axis, values, x, ExtrapolationPolicy::Clamp) {
-        Ok((v, mut w)) => {
-            for warn in &mut w {
-                if !axis_label.is_empty() {
-                    warn.args.insert(0, axis_label.to_string());
-                }
-            }
-            (v, w)
-        }
-        Err(_) => {
-            if axis.is_empty() {
-                (0.0, vec![])
-            } else if x <= axis[0] {
-                (values[0], vec![])
-            } else {
-                (*values.last().unwrap_or(&values[0]), vec![])
-            }
-        }
+    axis_label: &'static str,
+) -> Result<(f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    match interpolate_1d(axis, values, x, ExtrapolationPolicy::Strict) {
+        Ok(pair) => Ok(pair),
+        Err(e) => Err(interp_err_to_chart(axis_label, axis, e)),
     }
-}
-
-pub fn equivalent_altitude_ft(
-    data: &Rev29File,
-    pa_ft: f64,
-    oat_c: f64,
-) -> (f64, Vec<CalculationWarning>) {
-    let fan_t = &data.fan_t.value;
-    let fan_pa = &data.fan_pa.value;
-    let fan_ea = &data.fan_ea.value;
-    let mut warnings = Vec::new();
-
-    let mut ea_at_row = |row_idx: usize| -> f64 {
-        let row = &fan_ea[row_idx];
-        let (v, w) = linear_interp(fan_t, row, oat_c, "Fig 5.2 OAT");
-        warnings.extend(w);
-        v
-    };
-
-    let n = fan_pa.len();
-    if n == 0 {
-        return (0.0, warnings);
-    }
-    if n == 1 || pa_ft <= fan_pa[0] {
-        return (ea_at_row(0), warnings);
-    }
-    if pa_ft >= fan_pa[n - 1] {
-        return (ea_at_row(n - 1), warnings);
-    }
-    let j = bracket_pa_index(fan_pa, pa_ft);
-    let v0 = ea_at_row(j);
-    let v1 = ea_at_row(j + 1);
-    let ea = crate::interpolation::lerp(fan_pa[j], v0, fan_pa[j + 1], v1, pa_ft);
-    (ea, warnings)
 }
 
 fn bracket_pa_index(axis: &[f64], pa_ft: f64) -> usize {
@@ -130,13 +42,77 @@ fn bracket_pa_index(axis: &[f64], pa_ft: f64) -> usize {
     j.min(axis.len().saturating_sub(2))
 }
 
-pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<CalculationWarning>) {
+/// CL1 + CL2 — Fig 5.2 equivalent altitude (PA and OAT strict).
+pub fn equivalent_altitude_ft(
+    data: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+) -> Result<(f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    chart_bounds::require_in_range(
+        "Fig 5.2 PA",
+        limits::FIG52_PA_FT.0,
+        limits::FIG52_PA_FT.1,
+        pa_ft,
+        AXIS_TOL,
+    )?;
+    chart_bounds::require_in_range(
+        "Fig 5.2 OAT",
+        limits::FIG52_OAT_C.0,
+        limits::FIG52_OAT_C.1,
+        oat_c,
+        AXIS_TOL,
+    )?;
+
+    let fan_t = &data.fan_t.value;
+    let fan_pa = &data.fan_pa.value;
+    let fan_ea = &data.fan_ea.value;
+
+    let ea_at_row = |row_idx: usize| -> Result<f64, ChartOutOfRange> {
+        let row = &fan_ea[row_idx];
+        let (v, _) = linear_interp(fan_t, row, oat_c, "Fig 5.2 OAT")?;
+        Ok(v)
+    };
+
+    let n = fan_pa.len();
+    if n == 0 {
+        return Ok((0.0, vec![]));
+    }
+    if n == 1 {
+        return Ok((ea_at_row(0)?, vec![]));
+    }
+    let j = bracket_pa_index(fan_pa, pa_ft);
+    let v0 = ea_at_row(j)?;
+    let v1 = ea_at_row(j + 1)?;
+    let ea = crate::interpolation::lerp(fan_pa[j], v0, fan_pa[j + 1], v1, pa_ft);
+    Ok((ea, vec![]))
+}
+
+/// T1 + T2 — Fig 5.4 base ground roll.
+pub fn takeoff_base_m(
+    data: &Rev29File,
+    pa_ft: f64,
+    oat_c: f64,
+) -> Result<(f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    chart_bounds::require_in_range(
+        "Fig 5.4 PA",
+        limits::FIG54_PA_FT.0,
+        limits::FIG54_PA_FT.1,
+        pa_ft,
+        AXIS_TOL,
+    )?;
+    chart_bounds::require_in_range(
+        "Fig 5.4 OAT",
+        limits::FIG54_OAT_C.0,
+        limits::FIG54_OAT_C.1,
+        oat_c,
+        AXIS_TOL,
+    )?;
+
     let to_t = &data.to_t.value;
     let to_pa = &data.to_pa.value;
     let to_base = &data.to_base_m.value;
-    let mut warnings = Vec::new();
 
-    let mut base_at_row = |row_idx: usize| -> f64 {
+    let base_at_row = |row_idx: usize| -> Result<f64, ChartOutOfRange> {
         let row = &to_base[row_idx];
         let xs: Vec<f64> = to_t
             .iter()
@@ -144,29 +120,36 @@ pub fn takeoff_base_m(data: &Rev29File, pa_ft: f64, oat_c: f64) -> (f64, Vec<Cal
             .filter_map(|(t, v)| v.map(|_| *t))
             .collect();
         let ys: Vec<f64> = row.iter().filter_map(|v| *v).collect();
-        let (v, w) = linear_interp(&xs, &ys, oat_c, "Fig 5.4 OAT");
-        warnings.extend(w);
-        v
+        let (v, _) = linear_interp(&xs, &ys, oat_c, "Fig 5.4 OAT")?;
+        Ok(v)
     };
 
     let n = to_pa.len();
     if n == 0 {
-        return (0.0, warnings);
+        return Ok((0.0, vec![]));
     }
-    let raw = if n == 1 || pa_ft <= to_pa[0] {
-        base_at_row(0)
-    } else if pa_ft >= to_pa[n - 1] {
-        base_at_row(n - 1)
-    } else {
-        let j = bracket_pa_index(to_pa, pa_ft);
-        let v0 = base_at_row(j);
-        let v1 = base_at_row(j + 1);
-        crate::interpolation::lerp(to_pa[j], v0, to_pa[j + 1], v1, pa_ft)
-    };
-    (raw, warnings)
+    if n == 1 {
+        return Ok((base_at_row(0)?, vec![]));
+    }
+    let j = bracket_pa_index(to_pa, pa_ft);
+    let v0 = base_at_row(j)?;
+    let v1 = base_at_row(j + 1)?;
+    let raw = crate::interpolation::lerp(to_pa[j], v0, to_pa[j + 1], v1, pa_ft);
+    Ok((raw, vec![]))
 }
 
-pub fn weight_factor(data: &Rev29File, weight_kg: f64) -> (f64, Vec<CalculationWarning>) {
+/// T3 — weight factor panel.
+pub fn weight_factor(
+    data: &Rev29File,
+    weight_kg: f64,
+) -> Result<(f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    chart_bounds::require_in_range(
+        "Fig 5.4 weight",
+        limits::FIG54_WEIGHT_KG.0,
+        limits::FIG54_WEIGHT_KG.1,
+        weight_kg,
+        AXIS_TOL,
+    )?;
     linear_interp(
         &data.wt_kg.value,
         &data.wt_f.value,
@@ -175,142 +158,153 @@ pub fn weight_factor(data: &Rev29File, weight_kg: f64) -> (f64, Vec<CalculationW
     )
 }
 
+pub const TAILWIND_PANEL_MAX_KT: f64 = 5.0;
+
+fn require_panel_entry_m(lines: &[f64], entry_m: f64) -> Result<(), ChartOutOfRange> {
+    if lines.is_empty() {
+        return Err(ChartOutOfRange {
+            label: "Fig 5.4 panel distance",
+            min: 0.0,
+            max: 0.0,
+        });
+    }
+    chart_bounds::require_in_range(
+        "Fig 5.4 panel distance",
+        lines[0],
+        lines[lines.len() - 1],
+        entry_m,
+        0.5,
+    )
+}
+
+fn interp_panel_row(lines: &[f64], row: &[f64], entry_m: f64) -> Result<f64, ChartOutOfRange> {
+    let (v, _) = linear_interp(lines, row, entry_m, "Fig 5.4 panel distance")?;
+    Ok(v)
+}
+
+/// T4 — headwind panel (0–20 kt, entry distance on grid lines only).
 pub fn wind_panel_hw_m(
     data: &Rev29File,
     base_distance_m: f64,
     headwind_kt: f64,
-) -> (f64, f64, Vec<CalculationWarning>) {
+) -> Result<(f64, f64, Vec<CalculationWarning>), ChartOutOfRange> {
     wind_panel_kt_rows(
         &data.hw_lines.value,
         &data.hw_kt.value,
         &data.hw_m.value,
         base_distance_m,
         headwind_kt,
-        "Fig 5.4 headwind panel",
-        data.hw_kt.value.last().copied().unwrap_or(20.0),
-        "HEADWIND_CHART_LIMIT",
+        limits::FIG54_HEADWIND_KT.1,
     )
 }
 
-/// Fig 5.4 tailwind sub-panel tick scale (0–5 kt); AFM tabulated speeds may stop below this.
-pub const TAILWIND_PANEL_MAX_KT: f64 = 5.0;
-
+/// T5 — tailwind panel (0–5 kt).
 pub fn wind_panel_tw_m(
     data: &Rev29File,
     base_distance_m: f64,
     tailwind_kt: f64,
-) -> (f64, f64, Vec<CalculationWarning>) {
+) -> Result<(f64, f64, Vec<CalculationWarning>), ChartOutOfRange> {
     wind_panel_kt_rows(
         &data.tw_lines.value,
         &data.tw_kt.value,
         &data.tw_m.value,
         base_distance_m,
         tailwind_kt,
-        "Fig 5.4 tailwind panel",
-        TAILWIND_PANEL_MAX_KT,
-        "TAILWIND_CHART_LIMIT",
+        limits::FIG54_TAILWIND_KT.1,
     )
 }
 
-/// Headwind grid: each row is a wind speed; columns are distance guide lines.
-#[allow(clippy::too_many_arguments)]
 fn wind_panel_kt_rows(
     lines: &[f64],
     wind_kt: &[f64],
     grid: &[Vec<f64>],
     entry_distance_m: f64,
     wind_component_kt: f64,
-    label: &str,
     max_chart_kt: f64,
-    limit_code: &str,
-) -> (f64, f64, Vec<CalculationWarning>) {
-    let (entry_eff, clamp_w) = clamp_chart_distance_m(lines, entry_distance_m, label);
-    let mut warnings = clamp_w;
+) -> Result<(f64, f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    require_panel_entry_m(lines, entry_distance_m)?;
     let at_wind: Vec<f64> = grid
         .iter()
-        .map(|row| linear_interp_quiet(lines, row, entry_eff))
-        .collect();
-    let (ground, delta_w) = wind_panel_delta(
+        .map(|row| interp_panel_row(lines, row, entry_distance_m))
+        .collect::<Result<_, _>>()?;
+    let ground = wind_panel_delta(
         wind_kt,
         &at_wind,
-        entry_eff,
+        entry_distance_m,
         wind_component_kt,
-        label,
         max_chart_kt,
-        limit_code,
-        &mut warnings,
-    );
-    (ground, entry_eff, delta_w)
+    )?;
+    Ok((ground, entry_distance_m, vec![]))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn wind_panel_delta(
     wind_kt: &[f64],
     at_wind: &[f64],
     entry_distance_m: f64,
     wind_component_kt: f64,
-    label: &str,
     max_chart_kt: f64,
-    limit_code: &str,
-    warnings: &mut Vec<CalculationWarning>,
-) -> (f64, Vec<CalculationWarning>) {
-    let sample_at_kt = |kt: f64| -> (f64, Vec<CalculationWarning>) {
-        let (v, w) = linear_interp(wind_kt, at_wind, kt, label);
-        (v, w)
-    };
+) -> Result<f64, ChartOutOfRange> {
     if wind_component_kt <= 0.0 {
-        return (entry_distance_m, std::mem::take(warnings));
+        return Ok(entry_distance_m);
     }
-    let kt_sample = if wind_component_kt > max_chart_kt {
-        warnings.push(CalculationWarning::with_args(
-            limit_code,
-            vec![
-                format!("{:.1}", max_chart_kt),
-                format!("{:.1}", wind_component_kt),
-            ],
-        ));
-        max_chart_kt
-    } else {
-        wind_component_kt
-    };
-    let (v0, w0) = sample_at_kt(0.0);
-    warnings.extend(w0);
-    let (v_w, w_w) = sample_at_kt(kt_sample);
-    warnings.extend(w_w);
-    (entry_distance_m + (v_w - v0), std::mem::take(warnings))
+    if wind_component_kt > max_chart_kt + AXIS_TOL {
+        let label = if (max_chart_kt - limits::FIG54_TAILWIND_KT.1).abs() < 0.01 {
+            "Fig 5.4 tailwind"
+        } else {
+            "Fig 5.4 headwind"
+        };
+        return Err(ChartOutOfRange {
+            label,
+            min: 0.0,
+            max: max_chart_kt,
+        });
+    }
+    let (v0, _) = linear_interp(wind_kt, at_wind, 0.0, label_if_hw(max_chart_kt))?;
+    let (v_w, _) = linear_interp(
+        wind_kt,
+        at_wind,
+        wind_component_kt,
+        label_if_hw(max_chart_kt),
+    )?;
+    Ok(entry_distance_m + (v_w - v0))
 }
 
+fn label_if_hw(max_chart_kt: f64) -> &'static str {
+    if (max_chart_kt - limits::FIG54_TAILWIND_KT.1).abs() < 0.01 {
+        "Fig 5.4 tailwind"
+    } else {
+        "Fig 5.4 headwind"
+    }
+}
+
+/// T6 — obstacle add-on (entry on obstacle panel axis only).
 pub fn obstacle_add_m(
     data: &Rev29File,
     ground_after_wind_m: f64,
     obstacle_m: f64,
-) -> (f64, f64, Vec<CalculationWarning>) {
+) -> Result<(f64, f64, Vec<CalculationWarning>), ChartOutOfRange> {
     if obstacle_m <= 0.0 {
-        return (ground_after_wind_m, ground_after_wind_m, vec![]);
+        return Ok((ground_after_wind_m, ground_after_wind_m, vec![]));
     }
-    let (ground_eff, clamp_w) = clamp_chart_distance_m(
-        &data.obs_lines.value,
+    let lines = &data.obs_lines.value;
+    require_panel_entry_m(lines, ground_after_wind_m)?;
+    let (slope, _) = linear_interp(
+        lines,
+        &data.obs_slope_m_per_m.value,
         ground_after_wind_m,
         "Fig 5.4 obstacle panel",
-    );
-    let slope = linear_interp_quiet(
-        &data.obs_lines.value,
-        &data.obs_slope_m_per_m.value,
-        ground_eff,
-    );
-    (
+    )?;
+    Ok((
         ground_after_wind_m + slope * obstacle_m,
-        ground_eff,
-        clamp_w,
-    )
+        ground_after_wind_m,
+        vec![],
+    ))
 }
 
 pub struct TakeoffDistancesM {
     pub base_m: f64,
     pub after_weight_m: f64,
-    /// Distance row used on the wind panel (may be chart-clamped above `after_weight_m`).
     pub wind_panel_entry_m: f64,
-    /// Ground-roll row used on the obstacle slope axis (may be chart-clamped).
     pub obstacle_panel_entry_m: f64,
     pub ground_roll_m: f64,
     pub over_obstacle_m: f64,
@@ -325,31 +319,29 @@ pub fn takeoff_distances_m(
     headwind_kt: f64,
     tailwind_kt: f64,
     obstacle_m: f64,
-) -> TakeoffDistancesM {
-    let (base, mut warnings) = takeoff_base_m(data, pa_ft, oat_c);
-    let (wf, w1) = weight_factor(data, weight_kg);
-    warnings.extend(w1);
+) -> Result<TakeoffDistancesM, ChartOutOfRange> {
+    let (base, _) = takeoff_base_m(data, pa_ft, oat_c)?;
+    let (wf, _) = weight_factor(data, weight_kg)?;
     let after_weight = base * wf;
-    let (ground, wind_panel_entry_m, w2) = if headwind_kt > 0.0 {
-        wind_panel_hw_m(data, after_weight, headwind_kt)
+    let (ground, wind_panel_entry_m) = if headwind_kt > 0.0 {
+        let (g, e, _) = wind_panel_hw_m(data, after_weight, headwind_kt)?;
+        (g, e)
     } else if tailwind_kt > 0.0 {
-        wind_panel_tw_m(data, after_weight, tailwind_kt)
+        let (g, e, _) = wind_panel_tw_m(data, after_weight, tailwind_kt)?;
+        (g, e)
     } else {
-        (after_weight, after_weight, vec![])
+        (after_weight, after_weight)
     };
-    warnings.extend(w2);
-    let (over_obstacle, obstacle_panel_entry_m, w3) = obstacle_add_m(data, ground, obstacle_m);
-    warnings.extend(w3);
-    warnings = crate::warnings::dedupe_warnings(warnings);
-    TakeoffDistancesM {
+    let (over_obstacle, obstacle_panel_entry_m, _) = obstacle_add_m(data, ground, obstacle_m)?;
+    Ok(TakeoffDistancesM {
         base_m: base,
         after_weight_m: after_weight,
         wind_panel_entry_m,
         obstacle_panel_entry_m,
         ground_roll_m: ground,
         over_obstacle_m: over_obstacle,
-        warnings,
-    }
+        warnings: vec![CalculationWarning::code_only("UNITS")],
+    })
 }
 
 pub fn rate_of_climb_fpm(
@@ -357,28 +349,41 @@ pub fn rate_of_climb_fpm(
     roc_key: &str,
     pa_ft: f64,
     oat_c: f64,
-) -> Option<(f64, Vec<CalculationWarning>)> {
-    let [a, b] = *data.roc.value.get(roc_key)?;
-    let (ea, warnings) = equivalent_altitude_ft(data, pa_ft, oat_c);
-    Some((a + b * ea, warnings))
+) -> Result<(f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    let [a, b] = *data.roc.value.get(roc_key).ok_or(ChartOutOfRange {
+        label: "ROC figure",
+        min: 0.0,
+        max: 0.0,
+    })?;
+    let (ea, warnings) = equivalent_altitude_ft(data, pa_ft, oat_c)?;
+    Ok((a + b * ea, warnings))
 }
 
-pub fn landing_lookup_ft(data: &Rev29File, pa_ft: f64) -> (f64, f64, Vec<CalculationWarning>) {
-    let (roll, w1) = linear_interp(
+/// L1 — Table 4 landing distances (PA strict 0–7000 ft).
+pub fn landing_lookup_ft(
+    data: &Rev29File,
+    pa_ft: f64,
+) -> Result<(f64, f64, Vec<CalculationWarning>), ChartOutOfRange> {
+    chart_bounds::require_in_range(
+        "Table 4 PA",
+        limits::TABLE4_PA_FT.0,
+        limits::TABLE4_PA_FT.1,
+        pa_ft,
+        AXIS_TOL,
+    )?;
+    let (roll, _) = linear_interp(
         &data.land_alt.value,
         &data.land_roll.value,
         pa_ft,
         "Table 4 PA",
-    );
-    let (over_50, w2) = linear_interp(
+    )?;
+    let (over_50, _) = linear_interp(
         &data.land_alt.value,
         &data.land_50ft.value,
         pa_ft,
         "Table 4 PA",
-    );
-    let mut warnings = w1;
-    warnings.extend(w2);
-    (roll, over_50, warnings)
+    )?;
+    Ok((roll, over_50, vec![]))
 }
 
 pub fn lb_to_kg(lb: f64) -> f64 {
@@ -401,99 +406,114 @@ pub fn fahrenheit_to_celsius(f: f64) -> f64 {
     (f - 32.0) / 1.8
 }
 
-// Back-compat helpers for tests expecting f64 only
 pub fn equivalent_altitude_ft_value(data: &Rev29File, pa_ft: f64, oat_c: f64) -> f64 {
-    equivalent_altitude_ft(data, pa_ft, oat_c).0
+    equivalent_altitude_ft(data, pa_ft, oat_c)
+        .map(|(v, _)| v)
+        .unwrap_or(f64::NAN)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chart_bounds::limits;
+
+    fn prod() -> Rev29File {
+        Rev29File::production()
+    }
 
     #[test]
     fn rev29_worked_takeoff_chain_matches_reference_script() {
-        let d = Rev29File::production();
-        let t = takeoff_distances_m(&d, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
+        let d = prod();
+        let t = takeoff_distances_m(&d, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0).unwrap();
         let raw_ft = m_to_ft(t.over_obstacle_m);
-        assert!(
-            (raw_ft - 1154.0).abs() / 1154.0 <= 0.015,
-            "raw chart {raw_ft:.0} ft"
-        );
+        assert!((raw_ft - 1154.0).abs() / 1154.0 <= 0.015);
         assert_eq!((raw_ft / 50.0).ceil() as i64 * 50, 1200);
     }
 
     #[test]
+    fn cl1_pa_below_fig52_out_of_chart() {
+        let d = prod();
+        let err = equivalent_altitude_ft(&d, -1.0, 15.0).unwrap_err();
+        assert_eq!(err.label, "Fig 5.2 PA");
+        assert_eq!(err.min, limits::FIG52_PA_FT.0);
+    }
+
+    #[test]
+    fn cl1_pa_above_fig52_out_of_chart() {
+        let d = prod();
+        assert!(equivalent_altitude_ft(&d, 16001.0, 15.0).is_err());
+    }
+
+    #[test]
+    fn cl2_oat_outside_fig52_out_of_chart() {
+        let d = prod();
+        assert!(equivalent_altitude_ft(&d, 5000.0, -21.0).is_err());
+        assert!(equivalent_altitude_ft(&d, 5000.0, 60.1).is_err());
+    }
+
+    #[test]
+    fn t1_pa_out_of_chart() {
+        let d = prod();
+        assert!(takeoff_base_m(&d, -1.0, 15.0).is_err());
+        assert!(takeoff_base_m(&d, 10001.0, 15.0).is_err());
+    }
+
+    #[test]
+    fn t2_oat_out_of_chart() {
+        let d = prod();
+        assert!(takeoff_base_m(&d, 1000.0, -21.0).is_err());
+        assert!(takeoff_base_m(&d, 1000.0, 56.0).is_err());
+    }
+
+    #[test]
+    fn t3_weight_out_of_chart() {
+        let d = prod();
+        assert!(weight_factor(&d, 599.0).is_err());
+        assert!(weight_factor(&d, 801.0).is_err());
+    }
+
+    #[test]
+    fn t4_headwind_over_20_out_of_chart() {
+        let d = prod();
+        let base = takeoff_base_m(&d, 1000.0, 21.0).unwrap().0;
+        let wf = weight_factor(&d, 725.0).unwrap().0;
+        let entry = base * wf;
+        assert!(wind_panel_hw_m(&d, entry, 20.1).is_err());
+    }
+
+    #[test]
+    fn t5_tailwind_over_5_out_of_chart() {
+        let d = prod();
+        let entry = 400.0;
+        assert!(wind_panel_tw_m(&d, entry, 5.01).is_err());
+    }
+
+    #[test]
+    fn t6_obstacle_entry_below_panel_lines_out_of_chart() {
+        let d = prod();
+        let min_line = d.obs_lines.value[0];
+        assert!(obstacle_add_m(&d, min_line - 1.0, 5.0).is_err());
+    }
+
+    #[test]
+    fn t4_panel_entry_below_hw_lines_out_of_chart() {
+        let d = prod();
+        let min = d.hw_lines.value[0];
+        assert!(wind_panel_hw_m(&d, min - 1.0, 4.0).is_err());
+    }
+
+    #[test]
+    fn l1_landing_pa_out_of_chart() {
+        let d = prod();
+        assert!(landing_lookup_ft(&d, -1.0).is_err());
+        assert!(landing_lookup_ft(&d, 7001.0).is_err());
+    }
+
+    #[test]
     fn wind_panel_anchors_at_entry_distance() {
-        let d = Rev29File::production();
-        let entry = 296.0;
-        let (d0, entry_eff, _) = wind_panel_hw_m(&d, entry, 0.0);
+        let d = prod();
+        let entry = 400.0;
+        let (d0, entry_eff, _) = wind_panel_hw_m(&d, entry, 0.0).unwrap();
         assert!((d0 - entry_eff).abs() < f64::EPSILON);
-        let (d4, _, _) = wind_panel_hw_m(&d, entry, 4.0);
-        assert!(d4.is_finite() && d4 > 0.0);
-    }
-
-    #[test]
-    fn wind_panel_output_depends_only_on_entry_and_component() {
-        let d = Rev29File::production();
-        let entry = 520.0;
-        let hw = 10.0;
-        let once = wind_panel_hw_m(&d, entry, hw).0;
-        let twice = wind_panel_hw_m(&d, entry, hw).0;
-        assert_eq!(once, twice);
-        assert!((once - entry - (wind_panel_hw_m(&d, entry, 4.0).0 - entry)).abs() > 0.0);
-    }
-
-    #[test]
-    fn headwind_panel_clamp_warning_emitted_once_not_per_row() {
-        let data = Rev29File::production();
-        let min_line = data.hw_lines.value[0];
-        let (_, _, single) = wind_panel_hw_m(&data, 206.0, 16.7);
-        let hw_clamps: Vec<_> = single
-            .iter()
-            .filter(|w| w.code == "CHART_CLAMP_LOW")
-            .collect();
-        assert_eq!(hw_clamps.len(), 1);
-
-        let cases = [
-            (2500.0, 15.0, 680.0),
-            (5000.0, 45.0, 600.0),
-            (1000.0, 50.0, 600.0),
-        ];
-        for (pa, oat, kg) in cases {
-            let dist = takeoff_distances_m(&data, pa, oat, kg, 16.7, 0.0, 10.0);
-            if dist.after_weight_m >= min_line {
-                continue;
-            }
-            let n = dist
-                .warnings
-                .iter()
-                .filter(|w| w.code == "CHART_CLAMP_LOW")
-                .count();
-            assert_eq!(n, 1, "takeoff_distances_m should emit one clamp warning");
-            return;
-        }
-    }
-
-    #[test]
-    fn chart_clamp_low_is_conservative_for_headwind_panel() {
-        let data = Rev29File::production();
-        let dist = takeoff_distances_m(&data, 2500.0, 15.0, 680.0, 16.7, 0.0, 10.0);
-        if dist.wind_panel_entry_m <= dist.after_weight_m + 0.01 {
-            return;
-        }
-        assert!(dist.wind_panel_entry_m >= dist.after_weight_m);
-        assert!(dist.ground_roll_m >= dist.after_weight_m);
-    }
-
-    #[test]
-    fn obstacle_add_depends_only_on_ground_entry_and_height() {
-        let d = Rev29File::production();
-        let ground = 410.0;
-        let h = 5.0;
-        assert_eq!(
-            obstacle_add_m(&d, ground, h).0,
-            obstacle_add_m(&d, ground, h).0
-        );
-        assert!((obstacle_add_m(&d, ground, 0.0).0 - ground).abs() < 1e-9);
     }
 }

@@ -8,8 +8,6 @@ pub enum AfmLookupTag {
     /// Between published points (interpolation within chart/table range).
     #[default]
     Interpolated,
-    /// Outside published range or RPM not tabulated in that region (extrapolation / off-chart).
-    Extrapolated,
 }
 
 /// Default flight-planning inputs for SCTB (Santa Clara County).

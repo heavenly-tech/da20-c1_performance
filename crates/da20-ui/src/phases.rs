@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
     afm_lookup_tag_label, copy, format_along_runway_component, format_crosswind_component,
-    format_obstacle_over, format_takeoff_conservative_estimate, Locale,
+    format_obstacle_over, format_out_of_chart, format_takeoff_conservative_estimate, Locale,
 };
 use crate::inputs::{
     AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, SharedAirfieldInputs,
@@ -20,7 +20,7 @@ use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
-use da20_core::types::{AfmLookupTag, ChartPhase, CruiseSolveMode};
+use da20_core::types::{ChartPhase, CruiseSolveMode};
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,7 +56,13 @@ pub fn PhaseShell(
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Climb>
                     <NumField label=move || copy(locale.get()).weight.to_string()
                         get=move || inputs.get().weight_lb
-                        set=move |v| inputs.update(|i| i.weight_lb = v)/>
+                        set=move |v| inputs.update(|i| {
+                            let kg_min = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.0;
+                            let kg_max = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.1;
+                            let lb_min = kg_min / 0.45359237;
+                            let lb_max = kg_max / 0.45359237;
+                            i.weight_lb = v.clamp(lb_min, lb_max);
+                        })/>
                     <ClimbFlapToggle locale=locale inputs=inputs data=data/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     {move || {
@@ -299,7 +305,13 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if let Some(ooc) = &b.takeoff_ooc {
+                        view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }.into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }} else {
                 view! { <p class="lab results-muted">{c.results_runway_required}</p> }.into_any()
             }}
@@ -353,7 +365,13 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if let Some(ooc) = &b.climb_ooc {
+                        view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }.into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Cruise => view! {
@@ -369,12 +387,7 @@ fn phase_results(
                     let bhp = cr.percent_bhp.unwrap_or(0.0);
                     let rpm_out = cr.rpm.map(|x| x.round() as i64).unwrap_or(0);
                     let bhp_mode = inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp;
-                    let off_chart = bhp_mode
-                        && (cr.afm_lookup_tag == AfmLookupTag::Extrapolated
-                            || cr
-                                .warnings
-                                .iter()
-                                .any(|w| w.code == "CRUISE_BHP_OUT_OF_RANGE"));
+                    let off_chart = false;
                     let off_suffix = if off_chart {
                         format!(" · {}", c_loc.readout_off_chart)
                     } else {
@@ -441,7 +454,14 @@ fn phase_results(
                 },
                 None => {
                     let c_loc = copy(locale);
-                    if b.cruise_bhp_not_achievable
+                    if let Some(ooc) = &b.cruise_ooc {
+                        view! {
+                            <div class="results-block">
+                                <p class="error warn">{format_out_of_chart(locale, ooc)}</p>
+                            </div>
+                        }
+                        .into_any()
+                    } else if b.cruise_bhp_not_achievable
                         && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
                     {
                         view! {
@@ -517,7 +537,13 @@ fn phase_results(
                         <WarningsList locale=locale warnings=l.warnings.clone()/>
                     </div>
                 }.into_any(),
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if let Some(ooc) = &b.landing_ooc {
+                        view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }.into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Manual => view! { <span></span> }.into_any(),

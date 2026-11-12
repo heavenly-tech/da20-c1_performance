@@ -68,7 +68,8 @@ pub fn InteractiveChart(
             }
             ChartKind::Climb => {
                 let fan_t = &inner.fan_t.value;
-                let (ea, _) = equivalent_altitude_ft(inner, pa, i.oat_c);
+                let (ea, _) =
+                    equivalent_altitude_ft(inner, pa, i.oat_c).unwrap_or((f64::NAN, vec![]));
                 (norm_axis(fan_t, i.oat_c), norm_axis_ea(ea))
             }
             ChartKind::Landing => {
@@ -415,7 +416,8 @@ fn readout_pair(
             sample_takeoff_base_m(inner, pa, inputs.oat_c)
         ),
         ChartKind::Climb => {
-            let (ea, _) = equivalent_altitude_ft(inner, pa, inputs.oat_c);
+            let (ea, _) =
+                equivalent_altitude_ft(inner, pa, inputs.oat_c).unwrap_or((f64::NAN, vec![]));
             let roc_u =
                 sample_roc_fpm_with_inputs(inner, inputs.climb_figure.roc_key(), pa, inputs);
             let (chart_line, _) = format_climb_readout_interactive_pair(

@@ -4,6 +4,9 @@
 
 pub mod afm_tag;
 pub mod altitude;
+pub mod chart_bounds;
+#[cfg(test)]
+mod chart_hull_tests;
 pub mod climb;
 pub mod cruise;
 pub mod data;

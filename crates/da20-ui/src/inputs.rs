@@ -1,4 +1,5 @@
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
+use da20_core::chart_bounds::limits;
 use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::types::CruiseSolveMode;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
@@ -21,20 +22,37 @@ pub enum AirfieldInputsMode {
     Climb,
 }
 
+const CHART_CLAMP_UNSET: f64 = f64::NAN;
+
+fn clamp_chart(v: f64, min: f64, max: f64) -> f64 {
+    let mut x = v;
+    if min.is_finite() {
+        x = x.max(min);
+    }
+    if max.is_finite() {
+        x = x.min(max);
+    }
+    x
+}
+
 #[component]
 pub fn NumField(
     label: impl Fn() -> String + Send + 'static,
     get: impl Fn() -> f64 + Send + 'static,
     set: impl Fn(f64) + Send + Copy + 'static,
+    #[prop(default = CHART_CLAMP_UNSET)] min: f64,
+    #[prop(default = CHART_CLAMP_UNSET)] max: f64,
 ) -> impl IntoView {
     view! {
         <div class="f">
             <label>{move || label()}</label>
             <input type="number" step="any" class="mono"
+                min=min.is_finite().then_some(min)
+                max=max.is_finite().then_some(max)
                 prop:value=move || format!("{}", get())
                 on:input=move |ev| {
                     if let Ok(v) = input_value(&ev).parse() {
-                        set(v);
+                        set(clamp_chart(v, min, max));
                     }
                 }
             />
@@ -57,8 +75,44 @@ pub fn SharedAirfieldInputs(
             let override_active = chart_phase.is_some_and(|p| {
                 i.pa_override.as_ref().is_some_and(|o| o.phase == p)
             });
+            let (pa_min, pa_max, oat_min, oat_max) = match chart_phase {
+                Some(ChartPhase::Takeoff) => (
+                    limits::FIG54_PA_FT.0,
+                    limits::FIG54_PA_FT.1,
+                    limits::FIG54_OAT_C.0,
+                    limits::FIG54_OAT_C.1,
+                ),
+                Some(ChartPhase::Landing) => (
+                    limits::TABLE4_PA_FT.0,
+                    limits::TABLE4_PA_FT.1,
+                    CHART_CLAMP_UNSET,
+                    CHART_CLAMP_UNSET,
+                ),
+                Some(ChartPhase::Climb) | None => match mode {
+                    AirfieldInputsMode::Takeoff => (
+                        limits::FIG54_PA_FT.0,
+                        limits::FIG54_PA_FT.1,
+                        limits::FIG54_OAT_C.0,
+                        limits::FIG54_OAT_C.1,
+                    ),
+                    AirfieldInputsMode::Climb => (
+                        limits::FIG52_PA_FT.0,
+                        limits::FIG52_PA_FT.1,
+                        limits::FIG52_OAT_C.0,
+                        limits::FIG52_OAT_C.1,
+                    ),
+                    AirfieldInputsMode::Full => (
+                        limits::FIG52_PA_FT.0,
+                        limits::FIG52_PA_FT.1,
+                        limits::FIG52_OAT_C.0,
+                        limits::FIG52_OAT_C.1,
+                    ),
+                },
+            };
             view! {
                 <NumField label=move || c.pressure_altitude_ft.to_string()
+                    min=pa_min
+                    max=pa_max
                     get=move || inputs.get().pressure_altitude_input_ft
                     set=move |v| {
                         inputs.update(|i| {
@@ -67,6 +121,8 @@ pub fn SharedAirfieldInputs(
                         });
                     }/>
                 <NumField label=move || c.oat.to_string()
+                    min=oat_min
+                    max=oat_max
                     get=move || inputs.get().oat_c
                     set=move |v| inputs.update(|i| i.oat_c = v)/>
                 {(mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full).then(|| {
@@ -158,14 +214,22 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
             let c = copy(locale.get());
             view! {
                 <NumField label=move || c.cruise_pa.to_string()
+                    min=limits::TABLE3_PA_FT.0
+                    max=limits::TABLE3_PA_FT.1
                     get=move || inputs.get().cruise_pressure_alt_ft
                     set=move |v| inputs.update(|i| {
                         i.cruise_pressure_alt_ft = v;
-                        i.cruise_oat_c = isa_temp_c_at_pa(v);
+                        let isa = isa_temp_c_at_pa(v);
+                        let (dmin, dmax) = limits::TABLE3_DISA_C;
+                        i.cruise_oat_c = i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
                     })/>
                 <NumField label=move || c.cruise_oat.to_string()
                     get=move || inputs.get().cruise_oat_c
-                    set=move |v| inputs.update(|i| i.cruise_oat_c = v)/>
+                    set=move |v| inputs.update(|i| {
+                        let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
+                        let (dmin, dmax) = limits::TABLE3_DISA_C;
+                        i.cruise_oat_c = v.clamp(isa + dmin, isa + dmax);
+                    })/>
                 <div class="toggle-row">
                     <button type="button" class="btn g"
                         class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm
