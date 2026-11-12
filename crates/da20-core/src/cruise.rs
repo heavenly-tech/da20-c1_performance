@@ -1157,6 +1157,62 @@ mod tests {
     }
 
     #[test]
+    fn table3_trace_blend_weights_6500_isa_2600() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_rpm: 2600.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
+            ..Default::default()
+        };
+        let trace = compute_cruise(&data, &inputs)
+            .unwrap()
+            .table3_source
+            .expect("trace");
+        assert_eq!(trace.pa_rows.len(), 2);
+        let p6000 = trace
+            .pa_rows
+            .iter()
+            .find(|p| (p.pa_ft - 6000.0).abs() < PA_MATCH_TOL)
+            .expect("6000 row");
+        let p8000 = trace
+            .pa_rows
+            .iter()
+            .find(|p| (p.pa_ft - 8000.0).abs() < PA_MATCH_TOL)
+            .expect("8000 row");
+        assert!((p6000.pa_weight - 0.75).abs() < 1e-9);
+        assert!((p8000.pa_weight - 0.25).abs() < 1e-9);
+        let w6000_lo = p6000
+            .rpm_rows
+            .iter()
+            .find(|r| (r.rpm - 2500.0).abs() < RPM_MATCH_TOL)
+            .expect("2500")
+            .rpm_weight;
+        let w6000_hi = p6000
+            .rpm_rows
+            .iter()
+            .find(|r| (r.rpm - 2600.0).abs() < RPM_MATCH_TOL)
+            .expect("2600")
+            .rpm_weight;
+        assert!((w6000_lo - 2.0 / 23.0).abs() < 1e-9);
+        assert!((w6000_hi - 21.0 / 23.0).abs() < 1e-9);
+        let w8000_lo = p8000
+            .rpm_rows
+            .iter()
+            .find(|r| (r.rpm - 2600.0).abs() < RPM_MATCH_TOL)
+            .expect("2600")
+            .rpm_weight;
+        let w8000_hi = p8000
+            .rpm_rows
+            .iter()
+            .find(|r| (r.rpm - 2700.0).abs() < RPM_MATCH_TOL)
+            .expect("2700")
+            .rpm_weight;
+        assert!((w8000_lo - 17.0 / 23.0).abs() < 1e-9);
+        assert!((w8000_hi - 6.0 / 23.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn table3_source_recomputes_6500_isa_2600() {
         let data = PerformanceData::production();
         let inputs = FlightInputs {

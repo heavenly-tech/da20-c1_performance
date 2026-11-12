@@ -1,17 +1,14 @@
 //! Per-phase interactive chart (numeric entry + drag on same SVG).
 
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
-use da20_core::climb::compute_climb;
 use da20_core::cruise::cruise_cell_tag_for_column;
-use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
     equivalent_altitude_curves, landing_table_curves, map_to_svg, sample_landing_ft,
     sample_takeoff_base_m, takeoff_base_curves, wind_headwind_vs_angle, Polyline,
 };
 use da20_core::rev29::ea_inverse::pressure_altitude_for_equivalent_altitude;
-use da20_core::rev29::engine::lb_to_kg;
+use da20_core::rev29::engine::{equivalent_altitude_ft, lb_to_kg};
 use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points;
-use da20_core::takeoff::compute_takeoff;
 use da20_core::types::{ChartPhase, FlightInputs};
 
 use crate::table_source_panel::{
@@ -26,7 +23,7 @@ use crate::chart_axes::{interactive_chart_axis_ticks, interactive_chart_major_gr
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
-    afm_lookup_tag_label, copy, format_climb_readout_interactive_pair,
+    afm_lookup_tag_label, copy, format_climb_readout_interactive_pair, format_out_of_chart,
     format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::inputs::set_chart_pa;
@@ -72,13 +69,9 @@ pub fn InteractiveChart(
             }
             ChartKind::Climb => {
                 let fan_t = &inner.fan_t.value;
-                match compute_climb(&d, &i, i.cruise_pressure_alt_ft) {
-                    Ok(cl) => (
-                        norm_axis(fan_t, i.oat_c),
-                        norm_axis_ea(cl.equivalent_altitude_ft),
-                    ),
-                    Err(_) => (norm_axis(fan_t, i.oat_c), 0.5),
-                }
+                let (ea, _) =
+                    equivalent_altitude_ft(inner, pa, i.oat_c).unwrap_or((f64::NAN, vec![]));
+                (norm_axis(fan_t, i.oat_c), norm_axis_ea(ea))
             }
             ChartKind::Landing => {
                 let alts = &inner.land_alt.value;
@@ -415,76 +408,101 @@ fn takeoff_overlays(
     .into_any()
 }
 
-fn readout_pair(
+/// Chart readout + core result strings (interpolate-only: no sample numbers when solver is OOC).
+pub(crate) fn readout_pair(
     locale: Locale,
     kind: ChartKind,
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> (String, String) {
-    let inner = data.inner();
-    let phase = chart_phase(kind);
-    let pa = effective_pressure_altitude_ft(inputs, phase);
-    let chart = match kind {
-        ChartKind::Takeoff => format!(
-            "{:.0} m base",
-            sample_takeoff_base_m(inner, pa, inputs.oat_c)
-        ),
-        ChartKind::Climb => match compute_climb(data, inputs, inputs.cruise_pressure_alt_ft) {
-            Ok(cl) => {
-                let chart_roc = cl.rate_of_climb_chart_fpm.unwrap_or(cl.rate_of_climb_fpm);
-                let (chart_line, _) = format_climb_readout_interactive_pair(
-                    locale,
-                    chart_roc,
-                    cl.rate_of_climb_chart_fpm,
-                    inputs.wheel_fairings_installed,
-                    cl.afm_lookup_tag,
-                );
-                format!(
-                    "{:.0} ft EA · {chart_line}",
-                    cl.equivalent_altitude_ft.round()
-                )
+    let bundle = compute_all(data, inputs);
+    let ooc_msg = |ooc: &da20_core::chart_bounds::ChartOutOfRange| format_out_of_chart(locale, ooc);
+    match kind {
+        ChartKind::Takeoff => {
+            if let Some(ooc) = &bundle.takeoff_ooc {
+                let msg = ooc_msg(ooc);
+                return (msg.clone(), msg);
             }
-            Err(_) => "—".into(),
-        },
-        ChartKind::Landing => {
-            let (r, d) = da20_core::rev29::charts::sample_landing_ft(inner, pa);
-            format!("{:.0} / {:.0} ft", r, d)
+            let inner = data.inner();
+            let pa = effective_pressure_altitude_ft(inputs, Some(ChartPhase::Takeoff));
+            let chart = format!(
+                "{:.0} m base",
+                sample_takeoff_base_m(inner, pa, inputs.oat_c)
+            );
+            let core = bundle
+                .takeoff
+                .map(|t| format!("{:.0} ft roll", t.ground_roll_ft))
+                .unwrap_or_else(|| "—".into());
+            (chart, core)
         }
-        ChartKind::Wind => format!("{:.1} kt HW", {
-            compute_wind(data, inputs)
-                .map(|w| w.components.headwind_kt)
-                .unwrap_or(0.0)
-        }),
-    };
-    let core = match kind {
-        ChartKind::Takeoff => compute_takeoff(data, inputs)
-            .map(|t| format!("{:.0} ft roll", t.ground_roll_ft))
-            .unwrap_or_else(|_| "—".into()),
-        ChartKind::Climb => compute_climb(data, inputs, inputs.cruise_pressure_alt_ft)
-            .map(|cl| {
-                let (_, core) = format_climb_readout_interactive_pair(
-                    locale,
-                    cl.rate_of_climb_fpm,
-                    cl.rate_of_climb_chart_fpm,
-                    inputs.wheel_fairings_installed,
-                    cl.afm_lookup_tag,
-                );
-                core
-            })
-            .unwrap_or_else(|_| "—".into()),
-        ChartKind::Landing => compute_landing(data, inputs)
-            .map(|l| format!("{:.0} ft", l.distance_over_50ft_ft))
-            .unwrap_or_else(|_| "—".into()),
-        ChartKind::Wind => compute_wind(data, inputs)
-            .map(|w| {
-                format!(
-                    "{:.1} / {:.1} kt",
-                    w.components.headwind_kt, w.components.crosswind_kt
-                )
-            })
-            .unwrap_or_else(|_| "—".into()),
-    };
-    (chart, core)
+        ChartKind::Climb => {
+            if let Some(ooc) = &bundle.climb_ooc {
+                let msg = ooc_msg(ooc);
+                return (msg.clone(), msg);
+            }
+            let cl = bundle.climb.expect("climb ok");
+            let (chart_line, core) = format_climb_readout_interactive_pair(
+                locale,
+                cl.rate_of_climb_fpm,
+                cl.rate_of_climb_chart_fpm,
+                inputs.wheel_fairings_installed,
+                cl.afm_lookup_tag,
+            );
+            let chart = format!(
+                "{:.0} ft EA · {chart_line}",
+                cl.equivalent_altitude_ft.round()
+            );
+            (chart, core)
+        }
+        ChartKind::Landing => {
+            if let Some(ooc) = &bundle.landing_ooc {
+                let msg = ooc_msg(ooc);
+                return (msg.clone(), msg);
+            }
+            let l = bundle.landing.expect("landing ok");
+            let chart = format!(
+                "{:.0} / {:.0} ft",
+                l.ground_roll_ft, l.distance_over_50ft_ft
+            );
+            let core = format!("{:.0} ft", l.distance_over_50ft_ft);
+            (chart, core)
+        }
+        ChartKind::Wind => {
+            let core = compute_wind(data, inputs)
+                .map(|w| {
+                    format!(
+                        "{:.1} / {:.1} kt",
+                        w.components.headwind_kt, w.components.crosswind_kt
+                    )
+                })
+                .unwrap_or_else(|_| "—".into());
+            let chart = format!("{:.1} kt HW", {
+                compute_wind(data, inputs)
+                    .map(|w| w.components.headwind_kt)
+                    .unwrap_or(0.0)
+            });
+            (chart, core)
+        }
+    }
+}
+
+/// Climb chart drag: set OAT/PA override, or clear climb PA when EA is off the Fig 5.2 hull.
+pub(crate) fn apply_climb_chart_drag(
+    inner: &da20_core::rev29::types::Rev29File,
+    oat_c: f64,
+    ea_target_ft: f64,
+    inputs: &mut FlightInputs,
+) {
+    inputs.oat_c = oat_c;
+    if let Some(pa) = pressure_altitude_for_equivalent_altitude(inner, ea_target_ft, oat_c) {
+        set_pa_override(inputs, pa, ChartPhase::Climb);
+    } else if inputs
+        .pa_override
+        .as_ref()
+        .is_some_and(|o| o.phase == ChartPhase::Climb)
+    {
+        clear_pa_override(inputs);
+    }
 }
 
 fn chart_axis_labels(locale: Locale, kind: ChartKind) -> (&'static str, &'static str) {
@@ -561,18 +579,7 @@ fn apply_drag(
         ChartKind::Climb => {
             let oat_c = lerp_axis(&inner.fan_t.value, nx);
             let ea = ny * 14_000.0;
-            inputs.update(|i| {
-                i.oat_c = oat_c;
-                if let Some(pa) = pressure_altitude_for_equivalent_altitude(inner, ea, oat_c) {
-                    set_pa_override(i, pa, ChartPhase::Climb);
-                } else if i
-                    .pa_override
-                    .as_ref()
-                    .is_some_and(|o| o.phase == ChartPhase::Climb)
-                {
-                    clear_pa_override(i);
-                }
-            });
+            inputs.update(|i| apply_climb_chart_drag(inner, oat_c, ea, i));
         }
         ChartKind::Landing => {
             let pa = lerp_axis(&inner.land_alt.value, nx);
@@ -704,8 +711,8 @@ pub fn LandingTableView(
                 <thead>
                     <tr>
                         <th>{move || copy(locale.get()).table_source_pa_lbl}</th>
-                        <th>{move || copy(locale.get()).landing_tbl_roll_ft}</th>
-                        <th>{move || copy(locale.get()).landing_tbl_50ft_ft}</th>
+                        <th>{move || copy(locale.get()).table_source_landing_roll_ft}</th>
+                        <th>{move || copy(locale.get()).table_source_landing_over_50ft_ft}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -732,5 +739,49 @@ pub fn LandingTableView(
                 </tbody>
             </table>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use da20_core::altitude::set_pa_override;
+    use da20_core::data::PerformanceData;
+    use da20_core::types::{ChartPhase, FlightInputs};
+
+    #[test]
+    fn readout_landing_ooc_shows_range_only() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            pressure_altitude_input_ft: 8000.0,
+            ..Default::default()
+        };
+        let (chart, core) = readout_pair(Locale::En, ChartKind::Landing, &data, &inputs);
+        assert!(chart.contains("Out of chart"));
+        assert_eq!(chart, core);
+        assert!(!chart.contains('/'));
+    }
+
+    #[test]
+    fn readout_climb_ooc_shows_range_only() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            oat_c: -21.0,
+            ..Default::default()
+        };
+        let (chart, core) = readout_pair(Locale::En, ChartKind::Climb, &data, &inputs);
+        assert!(chart.contains("Out of chart"));
+        assert_eq!(chart, core);
+        assert!(!chart.contains("ft EA"));
+    }
+
+    #[test]
+    fn climb_drag_clears_climb_pa_override_when_inverse_none() {
+        let data = PerformanceData::production();
+        let inner = data.inner();
+        let mut inputs = FlightInputs::default();
+        set_pa_override(&mut inputs, 6000.0, ChartPhase::Climb);
+        apply_climb_chart_drag(inner, 15.0, -500.0, &mut inputs);
+        assert!(inputs.pa_override.is_none());
     }
 }
