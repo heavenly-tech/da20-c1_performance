@@ -451,12 +451,20 @@ fn lookup_table3(
 
     let (r0, r1, t_rpm, rpm_extrap) = match (below, above) {
         (Some(&b), Some(&a)) => (b, a, (rpm - b) / (a - b), false),
-        (None, Some(&a)) => {
+        (None, Some(&_a)) => {
+            if levels.len() < 2 {
+                return Err(CruiseError::NotFound);
+            }
             let b = levels[0];
+            let a = levels[1];
             (b, a, (rpm - b) / (a - b), true)
         }
-        (Some(&b), None) => {
+        (Some(&_b), None) => {
             let n = levels.len();
+            if n < 2 {
+                return Err(CruiseError::NotFound);
+            }
+            let b = levels[n - 2];
             let a = levels[n - 1];
             (b, a, (rpm - b) / (a - b), true)
         }
@@ -814,6 +822,29 @@ mod tests {
             .warnings
             .iter()
             .any(|w| w.code == "CRUISE_BHP_OUT_OF_RANGE"));
+        assert!(r.tas_kt.is_finite() && r.tas_kt > 0.0, "tas={}", r.tas_kt);
+        assert!(
+            r.fuel_flow_us_gal_h.is_finite() && r.fuel_flow_us_gal_h > 0.0,
+            "gph={}",
+            r.fuel_flow_us_gal_h
+        );
+        assert!(r.percent_bhp.unwrap().is_finite());
+    }
+
+    #[test]
+    fn lookup_high_rpm_extrapolation_finite_at_6500ft() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
+            cruise_rpm: 3000.0,
+            cruise_solve_mode: CruiseSolveMode::SetRpm,
+            wheel_fairings_installed: true,
+            ..FlightInputs::default()
+        };
+        let r = compute_cruise(&data, &inputs).unwrap();
+        assert!(r.tas_chart_kt.unwrap().is_finite());
+        assert!(r.fuel_flow_us_gal_h.is_finite());
     }
 
     #[test]
