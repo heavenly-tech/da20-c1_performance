@@ -117,11 +117,7 @@ fn parse_speed_curves(fig: &Value) -> std::collections::HashMap<String, SpeedCur
         let quad_coef = c.get("fit").and_then(|f| {
             let coef = f.get("coef")?.as_array()?;
             if coef.len() >= 3 {
-                Some([
-                    coef[0].as_f64()?,
-                    coef[1].as_f64()?,
-                    coef[2].as_f64()?,
-                ])
+                Some([coef[0].as_f64()?, coef[1].as_f64()?, coef[2].as_f64()?])
             } else {
                 None
             }
@@ -153,7 +149,11 @@ impl Mt175rData {
             .iter()
             .map(|r| vec![r.da_ft, r.rpm, r.pct_bhp, r.ktas, r.gph])
             .collect();
-        let fig2 = inner.figures.get("fig2_power").cloned().unwrap_or(Value::Null);
+        let fig2 = inner
+            .figures
+            .get("fig2_power")
+            .cloned()
+            .unwrap_or(Value::Null);
         let fig3 = inner
             .figures
             .get("fig3_speed_power")
@@ -168,8 +168,10 @@ impl Mt175rData {
     }
 
     pub fn production() -> Self {
-        Self::from_json_str(include_str!("../../../../data/mt175r/mt175r_cruise_data.json"))
-            .expect("embedded MT175R supplement data must parse")
+        Self::from_json_str(include_str!(
+            "../../../../data/mt175r/mt175r_cruise_data.json"
+        ))
+        .expect("embedded MT175R supplement data must parse")
     }
 
     pub fn inner(&self) -> &Mt175rFile {

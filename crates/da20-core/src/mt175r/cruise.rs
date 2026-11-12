@@ -63,10 +63,7 @@ fn cell_for_row(row: &[f64]) -> MtFig4PublishedCell {
     }
 }
 
-fn trace_on_da_ladder(
-    ladder: &[&Vec<f64>],
-    rpm: f64,
-) -> Option<Vec<MtFig4RpmBracketRow>> {
+fn trace_on_da_ladder(ladder: &[&Vec<f64>], rpm: f64) -> Option<Vec<MtFig4RpmBracketRow>> {
     if ladder.is_empty() || !rpm_on_ladder(ladder, rpm) {
         return None;
     }
@@ -205,9 +202,11 @@ fn normalized_s(rpm: f64, rmin: f64, rpm_max: f64) -> f64 {
     (rpm - rmin) / (rpm_max - rmin)
 }
 
-fn rpm_row_at_tabulated_da(rows: &[Vec<f64>], da_tab: f64, s: f64, rpm_max: f64) -> Option<f64> {
-    let rmin = rmin_on_tabulated_da(rows, da_tab)?;
-    Some(rmin + s * (rpm_max - rmin))
+const FIG4_RPM_FLOOR: f64 = 2200.0;
+
+fn rpm_row_at_tabulated_da(rows: &[Vec<f64>], da_tab: f64, s: f64) -> Option<f64> {
+    let rmax = rmax_on_tabulated_da(rows, da_tab)?;
+    Some(FIG4_RPM_FLOOR + s * (rmax - FIG4_RPM_FLOOR))
 }
 
 fn lookup_on_da_ladder(ladder: &[&Vec<f64>], rpm: f64) -> Option<(Triple, LookupFlags)> {
@@ -237,8 +236,10 @@ fn lookup_on_da_ladder(ladder: &[&Vec<f64>], rpm: f64) -> Option<(Triple, Lookup
     let r0 = ladder[b];
     let r1 = ladder[a];
     let t_rpm = (rpm - r0[1]) / (r1[1] - r0[1]);
-    let mut flags = LookupFlags::default();
-    flags.rpm_interp = true;
+    let flags = LookupFlags {
+        rpm_interp: true,
+        ..LookupFlags::default()
+    };
     Some((
         lerp_triple(
             Triple {
@@ -306,12 +307,7 @@ fn merge_flags(a: &mut LookupFlags, b: LookupFlags) {
     a.da_interp |= b.da_interp;
 }
 
-fn resolve_tag(
-    da: f64,
-    rpm: f64,
-    rows: &[Vec<f64>],
-    f: &LookupFlags,
-) -> AfmLookupTag {
+fn resolve_tag(da: f64, rpm: f64, rows: &[Vec<f64>], f: &LookupFlags) -> AfmLookupTag {
     let exact = !f.rpm_interp
         && !f.da_interp
         && rows.iter().any(|r| {
@@ -328,7 +324,6 @@ fn lookup_fig4(
     rows: &[Vec<f64>],
     da: f64,
     rpm: f64,
-    rpm_max: f64,
 ) -> Result<(Triple, AfmLookupTag, LookupFlags, MtFig4SourceTrace), CruiseError> {
     if da < limits::FIG4_DA_FT.0 - CHART_EDGE_TOL || da > limits::FIG4_DA_FT.1 + CHART_EDGE_TOL {
         return Err(CruiseError::OutOfChart {
@@ -348,6 +343,7 @@ fn lookup_fig4(
     }
 
     let rpm_lo = rmin_at_da(rows, da)?;
+    let rpm_max = rmax_at_da(rows, da)?;
     if rpm < rpm_lo - CHART_EDGE_TOL || rpm > rpm_max + CHART_EDGE_TOL {
         return Err(CruiseError::OutOfChart {
             axis: "Fig 4 RPM",
@@ -375,29 +371,29 @@ fn lookup_fig4(
     };
 
     if (d0 - d1).abs() < DA_MATCH_TOL {
-        let rpm_row = rpm_row_at_tabulated_da(rows, d0, s, rpm_max).ok_or(CruiseError::OutOfChart {
+        let rpm_row = rpm_row_at_tabulated_da(rows, d0, s).ok_or(CruiseError::OutOfChart {
             axis: "Fig 4 RPM",
             min: rpm_lo,
             max: rpm_max,
         })?;
-        let rpm_rows = trace_on_da_ladder(&rows_at_da(rows, d0), rpm_row).ok_or(
-            CruiseError::OutOfChart {
+        let rpm_rows =
+            trace_on_da_ladder(&rows_at_da(rows, d0), rpm_row).ok_or(CruiseError::OutOfChart {
                 axis: "Fig 4 RPM",
                 min: rpm_lo,
                 max: rpm_max,
-            },
-        )?;
+            })?;
         source.da_rows.push(MtFig4DaBracketRow {
             da_ft: d0,
             rpm_sample: rpm_row,
             da_weight: 1.0,
             rpm_rows,
         });
-        let (tri, f) = lookup_at_tabulated_da(rows, d0, rpm_row).ok_or(CruiseError::OutOfChart {
-            axis: "Fig 4 RPM",
-            min: rpm_lo,
-            max: rpm_max,
-        })?;
+        let (tri, f) =
+            lookup_at_tabulated_da(rows, d0, rpm_row).ok_or(CruiseError::OutOfChart {
+                axis: "Fig 4 RPM",
+                min: rpm_lo,
+                max: rpm_max,
+            })?;
         let tag = resolve_tag(da, rpm, rows, &f);
         return Ok((tri, tag, f, source));
     }
@@ -407,13 +403,11 @@ fn lookup_fig4(
     let mut tri0 = None;
     let mut tri1 = None;
     for (d_tab, w) in [(d0, 1.0 - t), (d1, t)] {
-        let rpm_row = rpm_row_at_tabulated_da(rows, d_tab, s, rpm_max).ok_or(
-            CruiseError::OutOfChart {
-                axis: "Fig 4 RPM",
-                min: rpm_lo,
-                max: rpm_max,
-            },
-        )?;
+        let rpm_row = rpm_row_at_tabulated_da(rows, d_tab, s).ok_or(CruiseError::OutOfChart {
+            axis: "Fig 4 RPM",
+            min: rpm_lo,
+            max: rpm_max,
+        })?;
         let rpm_rows = trace_on_da_ladder(&rows_at_da(rows, d_tab), rpm_row).ok_or(
             CruiseError::OutOfChart {
                 axis: "Fig 4 RPM",
@@ -427,13 +421,12 @@ fn lookup_fig4(
             da_weight: w,
             rpm_rows,
         });
-        let (tri, f) = lookup_at_tabulated_da(rows, d_tab, rpm_row).ok_or(
-            CruiseError::OutOfChart {
+        let (tri, f) =
+            lookup_at_tabulated_da(rows, d_tab, rpm_row).ok_or(CruiseError::OutOfChart {
                 axis: "Fig 4 RPM",
                 min: rpm_lo,
                 max: rpm_max,
-            },
-        )?;
+            })?;
         merge_flags(&mut combined, f);
         if d_tab == d0 {
             tri0 = Some(tri);
@@ -452,14 +445,12 @@ fn solve_rpm_for_percent_bhp(
     da: f64,
     target_bhp: f64,
     hint_rpm: f64,
-    rpm_max: f64,
 ) -> Result<(f64, LookupFlags), CruiseError> {
     let rpm_lo = rmin_at_da(rows, da)?;
-    let ladder_hi = rmax_at_da(rows, da)?;
-    let rpm_hi = ladder_hi.min(rpm_max);
+    let rpm_hi = rmax_at_da(rows, da)?;
 
     let sample = |rpm: f64| -> Result<(f64, LookupFlags), CruiseError> {
-        let (tri, _, f, _) = lookup_fig4(rows, da, rpm, rpm_max)?;
+        let (tri, _, f, _) = lookup_fig4(rows, da, rpm)?;
         Ok((tri.bhp, f))
     };
 
@@ -481,7 +472,7 @@ fn solve_rpm_for_percent_bhp(
     let mut hi = rpm_hi;
     if hint_rpm >= rpm_lo - CHART_EDGE_TOL
         && hint_rpm <= rpm_hi + CHART_EDGE_TOL
-        && lookup_fig4(rows, da, hint_rpm, rpm_max).is_ok()
+        && lookup_fig4(rows, da, hint_rpm).is_ok()
     {
         let (b_h, f_h) = sample(hint_rpm)?;
         if (b_h - target_bhp).abs() < 1e-4 {
@@ -523,29 +514,66 @@ fn solve_rpm_for_percent_bhp(
     Ok(((lo + hi) * 0.5, inv_flags))
 }
 
-fn build_mt_cruise_result(
-    mt: &Mt175rData,
+fn doubtful_gph_warnings(trace: &MtFig4SourceTrace) -> Vec<CalculationWarning> {
+    const DOUBTFUL: [(f64, f64); 2] = [(10_000.0, 2200.0), (12_000.0, 2200.0)];
+    let mut out = Vec::new();
+    for (da_tgt, rpm_tgt) in DOUBTFUL {
+        for da_row in &trace.da_rows {
+            for rpm_row in &da_row.rpm_rows {
+                if (da_row.da_ft - da_tgt).abs() < DA_MATCH_TOL
+                    && (rpm_row.rpm - rpm_tgt).abs() < RPM_MATCH_TOL
+                {
+                    let used = rpm_row.cells.iter().any(|c| c.used && c.weight > 1e-9);
+                    let weight = da_row.da_weight * rpm_row.rpm_weight;
+                    if used && weight > 1e-9 {
+                        out.push(CalculationWarning::with_args(
+                            "MT_DOUBTFUL_GPH",
+                            vec![format!("{da_tgt:.0}"), format!("{rpm_tgt:.0}")],
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn mt_fig4_trace_uses_cell(trace: &MtFig4SourceTrace, da_ft: f64, rpm: f64) -> bool {
+    trace.da_rows.iter().any(|dr| {
+        (dr.da_ft - da_ft).abs() < DA_MATCH_TOL
+            && dr.rpm_rows.iter().any(|rr| {
+                (rr.rpm - rpm).abs() < RPM_MATCH_TOL
+                    && rr.cells.iter().any(|c| c.used && c.weight > 1e-9)
+            })
+    })
+}
+
+struct MtCruiseBuild<'a> {
+    mt: &'a Mt175rData,
     pa: f64,
     da: f64,
     rpm: f64,
-    rows: &[Vec<f64>],
     extra_flags: LookupFlags,
     warnings: Vec<CalculationWarning>,
     fairings: bool,
-) -> Result<CruiseResult, CruiseError> {
-    let rpm_max = mt.rpm_max();
-    let (tri, _, mut flags, mut mt_source) = lookup_fig4(rows, da, rpm, rpm_max)?;
-    merge_flags(&mut flags, extra_flags);
-    mt_source.query_pa_ft = pa;
-    let tag = resolve_tag(da, rpm, rows, &flags);
+}
 
-    let m = cruise_fairing_multiplier(fairings);
+fn build_mt_cruise_result(ctx: MtCruiseBuild<'_>) -> Result<CruiseResult, CruiseError> {
+    let rows = ctx.mt.fig4_rows();
+    let (tri, _, mut flags, mut mt_source) = lookup_fig4(rows, ctx.da, ctx.rpm)?;
+    merge_flags(&mut flags, ctx.extra_flags);
+    mt_source.query_pa_ft = ctx.pa;
+    let tag = resolve_tag(ctx.da, ctx.rpm, rows, &flags);
+    let mut warnings = ctx.warnings;
+    warnings.extend(doubtful_gph_warnings(&mt_source));
+
+    let m = cruise_fairing_multiplier(ctx.fairings);
     let tas = tri.tas * m;
 
     Ok(CruiseResult {
-        provenance: mt.provenance(),
+        provenance: ctx.mt.provenance(),
         afm_lookup_tag: tag,
-        rpm: Some(rpm),
+        rpm: Some(ctx.rpm),
         percent_bhp: Some(tri.bhp),
         tas_chart_kt: Some(tri.tas),
         tas_kt: tas,
@@ -553,7 +581,7 @@ fn build_mt_cruise_result(
         fuel_flow_us_gal_h: tri.gph,
         table3_source: None,
         mt_fig4_source: Some(mt_source),
-        density_altitude_ft: Some(da),
+        density_altitude_ft: Some(ctx.da),
         warnings,
     })
 }
@@ -565,13 +593,12 @@ pub fn compute_mt175r_cruise(
     let pa = inputs.cruise_pressure_alt_ft;
     let da = nws_density_altitude_ft(pa, inputs.cruise_oat_c);
     let rows = mt.fig4_rows();
-    let rpm_max = mt.rpm_max();
     let mut warnings = vec![CalculationWarning::code_only("FIG4_GPH")];
 
     let (rpm, extra_flags) = match inputs.cruise_solve_mode {
         CruiseSolveMode::SetRpm => (inputs.cruise_rpm, LookupFlags::default()),
         CruiseSolveMode::SetPercentBhp => {
-            match solve_rpm_for_percent_bhp(rows, da, inputs.cruise_percent_bhp, inputs.cruise_rpm, rpm_max)
+            match solve_rpm_for_percent_bhp(rows, da, inputs.cruise_percent_bhp, inputs.cruise_rpm)
             {
                 Ok((solved, inv)) => (solved, inv),
                 Err(CruiseError::BhpNotAchievable) => {
@@ -586,7 +613,15 @@ pub fn compute_mt175r_cruise(
         }
     };
 
-    build_mt_cruise_result(mt, pa, da, rpm, rows, extra_flags, warnings, inputs.wheel_fairings_installed)
+    build_mt_cruise_result(MtCruiseBuild {
+        mt,
+        pa,
+        da,
+        rpm,
+        extra_flags,
+        warnings,
+        fairings: inputs.wheel_fairings_installed,
+    })
 }
 
 static MT_DATA: std::sync::OnceLock<Mt175rData> = std::sync::OnceLock::new();
@@ -620,10 +655,9 @@ mod tests {
         let mt = Mt175rData::production();
         let da = 6000.0;
         let rows = mt.fig4_rows();
-        let (rpm, _) =
-            solve_rpm_for_percent_bhp(rows, da, 65.0, 2400.0, mt.rpm_max()).unwrap();
+        let (rpm, _) = solve_rpm_for_percent_bhp(rows, da, 65.0, 2400.0).unwrap();
         assert!((rpm - 2440.0).abs() < 1e-3, "rpm={rpm}");
-        let (tri, tag, _, _) = lookup_fig4(rows, da, rpm, mt.rpm_max()).unwrap();
+        let (tri, tag, _, _) = lookup_fig4(rows, da, rpm).unwrap();
         assert!((tri.bhp - 65.0).abs() < 1e-2, "bhp={}", tri.bhp);
         assert!((tri.tas - 122.4).abs() < 1e-2, "tas={}", tri.tas);
         assert!((tri.gph - 6.14).abs() < 1e-2, "gph={}", tri.gph);
@@ -634,7 +668,7 @@ mod tests {
     fn fig4_exact_node_da6000_rpm2400() {
         let mt = Mt175rData::production();
         let rows = mt.fig4_rows();
-        let (tri, tag, _, trace) = lookup_fig4(rows, 6000.0, 2400.0, mt.rpm_max()).unwrap();
+        let (tri, tag, _, trace) = lookup_fig4(rows, 6000.0, 2400.0).unwrap();
         assert_eq!(tag, AfmLookupTag::Table);
         assert!((tri.bhp - 63.0).abs() < 1e-6);
         assert!((tri.tas - 120.0).abs() < 1e-6);
@@ -653,12 +687,13 @@ mod tests {
         let da = 6500.0;
         let rpm = 2550.0;
         let rmin = rmin_at_da(rows, da).unwrap();
-        let s = normalized_s(rpm, rmin, mt.rpm_max());
-        let rpm6 = rpm_row_at_tabulated_da(rows, 6000.0, s, mt.rpm_max()).unwrap();
-        let rpm8 = rpm_row_at_tabulated_da(rows, 8000.0, s, mt.rpm_max()).unwrap();
+        let rpm_max = rmax_at_da(rows, da).unwrap();
+        let s = normalized_s(rpm, rmin, rpm_max);
+        let rpm6 = rpm_row_at_tabulated_da(rows, 6000.0, s).unwrap();
+        let rpm8 = rpm_row_at_tabulated_da(rows, 8000.0, s).unwrap();
         let t6 = lookup_at_tabulated_da(rows, 6000.0, rpm6).unwrap().0;
         let t8 = lookup_at_tabulated_da(rows, 8000.0, rpm8).unwrap().0;
-        let (blend, _, _, trace) = lookup_fig4(rows, da, rpm, mt.rpm_max()).unwrap();
+        let (blend, _, _, trace) = lookup_fig4(rows, da, rpm).unwrap();
         assert_eq!(trace.da_rows.len(), 2);
         let (b, t, g) = recompute_triple_from_mt_fig4_source(&trace);
         assert!((b - blend.bhp).abs() < 1e-9);
@@ -666,5 +701,89 @@ mod tests {
         assert!((g - blend.gph).abs() < 1e-9);
         let expected_bhp = lerp(6000.0, t6.bhp, 8000.0, t8.bhp, da);
         assert!((blend.bhp - expected_bhp).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rmax_interpolates_9000_to_2600() {
+        let mt = Mt175rData::production();
+        let rows = mt.fig4_rows();
+        let r = rmax_at_da(rows, 9000.0).unwrap();
+        assert!((r - 2600.0).abs() < 1e-6, "rmax={r}");
+    }
+
+    #[test]
+    fn da_edges_out_of_chart() {
+        let mt = Mt175rData::production();
+        let rows = mt.fig4_rows();
+        assert!(lookup_fig4(rows, 1999.9, 2400.0).is_err());
+        assert!(lookup_fig4(rows, 12_000.1, 2400.0).is_err());
+    }
+
+    #[test]
+    fn rpm_edges_out_of_chart() {
+        let mt = Mt175rData::production();
+        let rows = mt.fig4_rows();
+        let hi = rmax_at_da(rows, 6000.0).unwrap() + 0.1;
+        assert!(lookup_fig4(rows, 6000.0, hi).is_err());
+        assert!(lookup_fig4(rows, 6000.0, 2199.9).is_err());
+    }
+
+    #[test]
+    fn inverse_matches_forward() {
+        let mt = Mt175rData::production();
+        let rows = mt.fig4_rows();
+        let da = 6000.0;
+        let target = 58.0;
+        let (rpm, _) = solve_rpm_for_percent_bhp(rows, da, target, 2400.0).unwrap();
+        let (tri, _, _, _) = lookup_fig4(rows, da, rpm).unwrap();
+        assert!((tri.bhp - target).abs() < 0.05);
+    }
+
+    #[test]
+    fn doubtful_gph_warning_at_10000_2200() {
+        let mt = Mt175rData::production();
+        let inputs = FlightInputs {
+            propeller: crate::types::PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: 10_000.0,
+            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(10_000.0),
+            cruise_rpm: 2200.0,
+            cruise_solve_mode: CruiseSolveMode::SetRpm,
+            ..FlightInputs::default()
+        };
+        let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
+        assert!(
+            r.warnings
+                .iter()
+                .any(|w| w.code == "MT_DOUBTFUL_GPH" && w.args == ["10000", "2200"]),
+            "{:?}",
+            r.warnings
+        );
+    }
+
+    #[test]
+    fn printed_example_pa6000_oat15_da() {
+        let da = nws_density_altitude_ft(6000.0, 15.0);
+        assert!((da - 7391.0).abs() <= 5.0, "da={da}");
+    }
+
+    #[test]
+    fn compute_full_inputs_da6000_rpm2440() {
+        use crate::cruise::isa_temp_c_at_pa;
+
+        let mt = Mt175rData::production();
+        let pa = 6000.0;
+        let inputs = FlightInputs {
+            propeller: crate::types::PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: pa,
+            cruise_oat_c: isa_temp_c_at_pa(pa),
+            cruise_rpm: 2440.0,
+            ..FlightInputs::default()
+        };
+        let da = nws_density_altitude_ft(pa, inputs.cruise_oat_c);
+        let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
+        assert!((r.density_altitude_ft.unwrap() - da).abs() <= 1.0);
+        assert!((r.percent_bhp.unwrap() - 65.0).abs() < 0.15);
+        assert!((r.tas_chart_kt.unwrap() - 122.4).abs() < 0.1);
+        assert!((r.fuel_flow_us_gal_h - 6.14).abs() < 0.02);
     }
 }

@@ -5,12 +5,13 @@ use crate::components::{Disclaimer, Nav};
 use crate::i18n::Locale;
 use crate::palette::{apply_palette, PaletteChoice, PaletteThemeEffect};
 use crate::phases::{Phase, PhaseShell};
-use crate::prefs::TakeoffPrefs;
+use crate::prefs::{FlightPrefs, TakeoffPrefs};
 use crate::routing::{
     read_phase_from_location, redirect_legacy_manual_hash, write_phase_to_location,
 };
 use crate::storage::ReadingsStore;
 use crate::theme::ThemePreference;
+use da20_core::types::FlightInputs;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -21,7 +22,12 @@ pub fn App() -> impl IntoView {
     let theme = RwSignal::new(ThemePreference::load());
     let palette = RwSignal::new(PaletteChoice::for_theme(theme.get_untracked()));
     let data = RwSignal::new(PerformanceData::production());
-    let inputs = RwSignal::new(da20_core::types::FlightInputs::default());
+    let flight_prefs = FlightPrefs::load();
+    let inputs = RwSignal::new(FlightInputs {
+        propeller: flight_prefs.propeller,
+        wheel_fairings_installed: flight_prefs.wheel_fairings_installed,
+        ..Default::default()
+    });
     let store = RwSignal::new(ReadingsStore::load());
     let takeoff_prefs = RwSignal::new(TakeoffPrefs::load());
 

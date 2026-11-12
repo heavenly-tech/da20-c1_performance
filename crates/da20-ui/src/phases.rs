@@ -7,21 +7,26 @@ use leptos::prelude::*;
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
     afm_lookup_tag_label, copy, format_along_runway_component, format_crosswind_component,
-    format_obstacle_over, format_out_of_chart, format_takeoff_conservative_estimate, Locale,
+    format_mt_cruise_bhp_not_achievable, format_obstacle_over, format_out_of_chart,
+    format_takeoff_conservative_estimate, Locale,
 };
 use crate::inputs::{
     AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, SharedAirfieldInputs,
-    SharedWheelFairingToggle,
+    SharedPropellerSelector, SharedWheelFairingToggle,
 };
 use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, LandingTableView};
+use crate::mt_cruise_panel::MtCruisePanel;
 use crate::phase_readouts::PhaseReadoutsPanel;
 use crate::prefs::TakeoffPrefs;
 use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
-use crate::table_source_panel::{Table3SourcePanel, Table4SourcePanel};
+use crate::table_source_panel::{MtFig4SourcePanel, Table3SourcePanel, Table4SourcePanel};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
+use da20_core::altitude::nws_density_altitude_ft;
+use da20_core::mt175r::cruise::{rmax_at_da, rmin_at_da};
+use da20_core::mt175r::Mt175rData;
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
-use da20_core::types::{ChartPhase, CruiseSolveMode};
+use da20_core::types::{ChartPhase, CruiseSolveMode, PropellerKind};
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +53,8 @@ pub fn PhaseShell(
             Phase::Takeoff => view! {
                 <>
                     <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff takeoff_prefs=takeoff_prefs>
+                        <SharedPropellerSelector locale=locale inputs=inputs/>
+                        <SharedWheelFairingToggle locale=locale inputs=inputs/>
                         <TakeoffNumericBlock locale=locale inputs=inputs prefs=takeoff_prefs/>
                     </PhaseGrid>
                     <TakeoffSweepPanel locale=locale data=data inputs=inputs prefs=takeoff_prefs/>
@@ -65,6 +72,7 @@ pub fn PhaseShell(
                             i.weight_lb = v.clamp(lb_min, lb_max);
                         })/>
                     <ClimbFlapToggle locale=locale inputs=inputs data=data/>
+                    <SharedPropellerSelector locale=locale inputs=inputs/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     {move || {
                         let c = copy(locale.get());
@@ -76,12 +84,14 @@ pub fn PhaseShell(
             }.into_any(),
             Phase::Cruise => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Cruise airfield=false>
+                    <SharedPropellerSelector locale=locale inputs=inputs/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     <CruiseInputs locale=locale inputs=inputs/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Endurance => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Endurance airfield=false>
+                    <SharedPropellerSelector locale=locale inputs=inputs/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     <CruiseInputs locale=locale inputs=inputs/>
                     <NumField label=move || copy(locale.get()).fuel_usable.to_string()
@@ -94,6 +104,8 @@ pub fn PhaseShell(
             }.into_any(),
             Phase::Landing => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Landing>
+                    <SharedPropellerSelector locale=locale inputs=inputs/>
+                    <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     <p class="lab warn">{move || copy(locale.get()).landing_no_corr}</p>
                 </PhaseGrid>
             }.into_any(),
@@ -139,7 +151,7 @@ fn PhaseGrid(
                     {children()}
                 </div>
                 <div class="card chart-card">
-                    <h3>{phase_title(locale, phase)}</h3>
+                    <h3>{phase_title(locale, phase, inputs)}</h3>
                     {phase_chart(phase, locale, data, inputs, store, overlay_ids)}
                     {move || phase_results(locale.get(), phase, bundle.get(), inputs.get(), takeoff_prefs.map(|p| p.get()))}
                     <PhaseReadoutsPanel
@@ -173,16 +185,26 @@ fn airfield_mode_for(phase: Phase) -> AirfieldInputsMode {
     }
 }
 
-fn phase_title(locale: RwSignal<Locale>, phase: Phase) -> impl IntoView {
+fn phase_title(
+    locale: RwSignal<Locale>,
+    phase: Phase,
+    inputs: RwSignal<da20_core::types::FlightInputs>,
+) -> impl IntoView {
     move || {
         let c = copy(locale.get());
         match phase {
-            Phase::Takeoff => c.takeoff,
-            Phase::Climb => c.climb,
-            Phase::Cruise => c.cruise,
-            Phase::Endurance => c.tab_endurance,
-            Phase::Landing => c.landing,
-            Phase::Manual => "",
+            Phase::Takeoff => c.takeoff.into(),
+            Phase::Climb => c.climb.into(),
+            Phase::Cruise => {
+                let sub = match inputs.get().propeller {
+                    PropellerKind::Mt175R => c.cruise_subtitle_mt,
+                    PropellerKind::Sensenich => c.cruise_subtitle_table3,
+                };
+                format!("{} · {sub}", c.cruise)
+            }
+            Phase::Endurance => c.tab_endurance.into(),
+            Phase::Landing => c.landing.into(),
+            Phase::Manual => String::new(),
         }
     }
 }
@@ -245,7 +267,14 @@ fn phase_chart(
         }
         .into_any(),
         Phase::Cruise => view! {
-            <CruiseTableView locale=locale data=data inputs=inputs/>
+            {move || match inputs.get().propeller {
+                PropellerKind::Mt175R => view! {
+                    <MtCruisePanel locale=locale data=data inputs=inputs/>
+                }.into_any(),
+                PropellerKind::Sensenich => view! {
+                    <CruiseTableView locale=locale data=data inputs=inputs/>
+                }.into_any(),
+            }}
         }
         .into_any(),
         Phase::Endurance => view! {
@@ -303,6 +332,9 @@ fn phase_results(
                         })}
                         <p class="lab">{format_obstacle_over(locale, inputs.obstacle_height_m)}</p>
                         <WarningsList locale=locale warnings=t.warnings.clone()/>
+                        {(inputs.propeller == PropellerKind::Mt175R).then(|| view! {
+                            <p class="lab afm-quote">{c.propeller_no_change_note}</p>
+                        })}
                     </div>
                     }.into_any()
                 },
@@ -363,6 +395,9 @@ fn phase_results(
                         }}
                         <p>"EA "{cl.equivalent_altitude_ft.round() as i64}" ft"</p>
                         <WarningsList locale=locale warnings=cl.warnings.clone()/>
+                        {(inputs.propeller == PropellerKind::Mt175R).then(|| view! {
+                            <p class="lab afm-quote">{c_loc.propeller_no_change_note}</p>
+                        })}
                     </div>
                     }.into_any()
                 },
@@ -389,9 +424,16 @@ fn phase_results(
                     let rpm_out = cr.rpm.map(|x| x.round() as i64).unwrap_or(0);
                     let bhp_mode = inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp;
                     let requested_bhp = inputs.cruise_percent_bhp;
+                    let mt_prop = inputs.propeller == PropellerKind::Mt175R;
                     view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
+                        {mt_prop.then(|| view! {
+                            <p class="chip warn">{c_loc.mt_tcca_badge}</p>
+                        })}
+                        {mt_prop.then(|| cr.density_altitude_ft.map(|da| view! {
+                            <p class="mono">{c_loc.density_altitude_readout}": "{da.round() as i64}" ft"</p>
+                        }))}
                         <p class="chip">{afm_lookup_tag_label(locale, cr.afm_lookup_tag)}</p>
                         {if bhp_mode {
                             if fair_on {
@@ -444,9 +486,15 @@ fn phase_results(
                             }.into_any()
                         }}
                         <WarningsList locale=locale warnings=cr.warnings.clone()/>
-                        {cr.table3_source.clone().map(|trace| {
-                            view! { <Table3SourcePanel locale=locale trace=trace /> }
-                        })}
+                        {if mt_prop {
+                            cr.mt_fig4_source.clone().map(|trace| {
+                                view! { <MtFig4SourcePanel locale=locale trace=trace /> }
+                            }).into_any()
+                        } else {
+                            cr.table3_source.clone().map(|trace| {
+                                view! { <Table3SourcePanel locale=locale trace=trace /> }
+                            }).into_any()
+                        }}
                     </div>
                     }.into_any()
                 },
@@ -462,10 +510,29 @@ fn phase_results(
                     } else if b.cruise_bhp_not_achievable
                         && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
                     {
+                        let bhp_msg = if inputs.propeller == PropellerKind::Mt175R {
+                            let da = nws_density_altitude_ft(
+                                inputs.cruise_pressure_alt_ft,
+                                inputs.cruise_oat_c,
+                            );
+                            let mt = Mt175rData::production();
+                            let rows = mt.fig4_rows();
+                            match (rmin_at_da(rows, da), rmax_at_da(rows, da)) {
+                                (Ok(rmin), Ok(rmax)) => format_mt_cruise_bhp_not_achievable(
+                                    locale,
+                                    inputs.cruise_percent_bhp,
+                                    rmin,
+                                    rmax,
+                                ),
+                                _ => c_loc.cruise_bhp_not_achievable.to_string(),
+                            }
+                        } else {
+                            c_loc.cruise_bhp_not_achievable.to_string()
+                        };
                         view! {
                             <div class="results-block">
                                 <p class="big mono">{format!("{:.2}", inputs.cruise_percent_bhp)}" % BHP"</p>
-                                <p class="error warn">{c_loc.cruise_bhp_not_achievable}</p>
+                                <p class="error warn">{bhp_msg}</p>
                             </div>
                         }
                         .into_any()
@@ -533,6 +600,9 @@ fn phase_results(
                         <p class="big">{l.ground_roll_ft.round() as i64}<span class="u">" ft"</span></p>
                         <p>"50 ft: "{l.distance_over_50ft_ft.round() as i64}" ft"</p>
                         <WarningsList locale=locale warnings=l.warnings.clone()/>
+                        {(inputs.propeller == PropellerKind::Mt175R).then(|| view! {
+                            <p class="lab afm-quote">{c.propeller_no_change_note}</p>
+                        })}
                         {l.table4_source.clone().map(|trace| {
                             view! { <Table4SourcePanel locale=locale trace=trace /> }
                         })}
