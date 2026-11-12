@@ -745,7 +745,8 @@ mod tests {
         let inputs = FlightInputs {
             propeller: crate::types::PropellerKind::Mt175R,
             cruise_pressure_alt_ft: 10_000.0,
-            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(10_000.0),
+            // OAT chosen so NWS DA matches the Fig 4 row at 10000 ft (ISA overshoots DA).
+            cruise_oat_c: -4.954249,
             cruise_rpm: 2200.0,
             cruise_solve_mode: CruiseSolveMode::SetRpm,
             ..FlightInputs::default()
@@ -758,6 +759,76 @@ mod tests {
             "{:?}",
             r.warnings
         );
+        assert!((r.fuel_flow_us_gal_h - 3.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn doubtful_gph_warning_at_12000_2200() {
+        let mt = Mt175rData::production();
+        let pa = 12_000.0;
+        let inputs = FlightInputs {
+            propeller: crate::types::PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: pa,
+            // OAT chosen so NWS DA matches the Fig 4 row at 12000 ft (ISA gives DA above chart).
+            cruise_oat_c: -8.916752156701492,
+            cruise_rpm: 2200.0,
+            cruise_solve_mode: CruiseSolveMode::SetRpm,
+            ..FlightInputs::default()
+        };
+        let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
+        assert!(
+            r.warnings
+                .iter()
+                .any(|w| w.code == "MT_DOUBTFUL_GPH" && w.args == ["12000", "2200"]),
+            "{:?}",
+            r.warnings
+        );
+        assert!((r.fuel_flow_us_gal_h - 1.7).abs() < 1e-6);
+    }
+
+    #[test]
+    fn mt_cruise_without_fairings_reduces_tas_five_percent_not_fuel_flow() {
+        use crate::cruise::isa_temp_c_at_pa;
+
+        let mt = Mt175rData::production();
+        let cases: &[(f64, f64)] = &[(2000.0, 2400.0), (6000.0, 2440.0), (10_000.0, 2300.0)];
+        for &(pa, rpm) in cases {
+            let fairings_on = FlightInputs {
+                propeller: crate::types::PropellerKind::Mt175R,
+                cruise_pressure_alt_ft: pa,
+                cruise_oat_c: isa_temp_c_at_pa(pa),
+                cruise_rpm: rpm,
+                cruise_solve_mode: CruiseSolveMode::SetRpm,
+                wheel_fairings_installed: true,
+                ..FlightInputs::default()
+            };
+            let fairings_off = FlightInputs {
+                wheel_fairings_installed: false,
+                ..fairings_on.clone()
+            };
+            let on = compute_mt175r_cruise(&mt, &fairings_on).unwrap();
+            let off = compute_mt175r_cruise(&mt, &fairings_off).unwrap();
+            let chart_tas = off.tas_chart_kt.expect("chart TAS");
+            assert!(
+                (off.tas_kt - chart_tas * 0.95).abs() < 1e-6,
+                "pa={pa} rpm={rpm} off_tas={}",
+                off.tas_kt
+            );
+            assert!(
+                (on.tas_kt - chart_tas).abs() < 1e-6,
+                "pa={pa} rpm={rpm} on_tas={}",
+                on.tas_kt
+            );
+            let chart_ff = off.fuel_flow_chart_us_gal_h.expect("chart GPH");
+            assert!(
+                (off.fuel_flow_us_gal_h - chart_ff).abs() < 1e-9,
+                "pa={pa} rpm={rpm}"
+            );
+            assert!(
+                (on.fuel_flow_us_gal_h - chart_ff).abs() < 1e-9,
+                "pa={pa} rpm={rpm}"
+            );
+        }
     }
 
     #[test]

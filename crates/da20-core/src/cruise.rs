@@ -1309,10 +1309,14 @@ mod tests {
         use crate::takeoff::compute_takeoff;
 
         let data = PerformanceData::production();
-        let mut base = FlightInputs::default();
-        base.weight_lb = 1600.0;
-        let mut mt = base.clone();
-        mt.propeller = PropellerKind::Mt175R;
+        let base = FlightInputs {
+            weight_lb: 1600.0,
+            ..FlightInputs::default()
+        };
+        let mt = FlightInputs {
+            propeller: PropellerKind::Mt175R,
+            ..base.clone()
+        };
         let to0 = compute_takeoff(&data, &base).unwrap();
         let to1 = compute_takeoff(&data, &mt).unwrap();
         assert_eq!(to0.ground_roll_ft, to1.ground_roll_ft);

@@ -142,4 +142,19 @@ mod tests {
         assert!((rpm - 2438.7).abs() < 2.0, "rpm={rpm}");
         assert!((tas - 122.12).abs() < 0.5, "tas={tas}");
     }
+
+    #[test]
+    fn fig3_seventy_five_meets_full_throttle_at_8500_ft_134_2_kt() {
+        let data = Mt175rData::production();
+        let tas_75 = fig3_tas_at_da(&data, 75, 8500.0).expect("75% curve at DA 8500");
+        let ft = data
+            .fig3_curves()
+            .get("Full Throttle")
+            .expect("Full Throttle");
+        let tas_ft = sample_curve_f64(&ft.samples, 8500.0, |s| s.tas_kt.expect("tas"))
+            .expect("Full Throttle at DA 8500");
+        assert!((tas_75 - 134.2).abs() < 0.05, "75% tas={tas_75}");
+        assert!((tas_ft - 134.2).abs() < 0.05, "full throttle tas={tas_ft}");
+        assert!((tas_75 - tas_ft).abs() < 0.05, "75%={tas_75} ft={tas_ft}");
+    }
 }
