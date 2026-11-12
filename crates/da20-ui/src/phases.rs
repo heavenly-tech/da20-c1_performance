@@ -282,7 +282,7 @@ fn phase_chart(
         }
         .into_any(),
         Phase::Landing => view! {
-            <LandingTableView data=data inputs=inputs/>
+            <LandingTableView locale=locale data=data inputs=inputs/>
             <InteractiveChart locale=locale kind=ChartKind::Landing data=data inputs=inputs/>
         }
         .into_any(),
