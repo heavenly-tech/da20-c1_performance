@@ -135,7 +135,6 @@ pub struct Copy {
     pub plot_hint: &'static str,
     pub plot_readout_chart: &'static str,
     pub plot_readout_core: &'static str,
-    pub readout_off_chart: &'static str,
     pub pa_override_chip: &'static str,
     pub pa_override_reset: &'static str,
     pub axis_hw_kt: &'static str,
@@ -158,7 +157,12 @@ pub struct Copy {
     /// AFM grid / interpolation tag (short, shown on results).
     pub afm_tag_table: &'static str,
     pub afm_tag_interpolated: &'static str,
-    pub afm_tag_extrapolated: &'static str,
+    pub table_rows_used_title: &'static str,
+    pub table_source_pa_lbl: &'static str,
+    pub table_source_pa_weight_lbl: &'static str,
+    pub table_source_rpm_lbl: &'static str,
+    pub table_source_rpm_sample_lbl: &'static str,
+    pub table_source_rpm_weight_lbl: &'static str,
     pub cruise_tbl_group_disa_m20: &'static str,
     pub cruise_tbl_group_isa: &'static str,
     pub cruise_tbl_group_disa_p10: &'static str,
@@ -322,7 +326,6 @@ const ES: Copy = Copy {
     plot_hint: "Arrastre el cursor sobre las curvas digitalizadas (no son copias del AFM). Compatible con puntero y táctil.",
     plot_readout_chart: "Lectura carta",
     plot_readout_core: "Resultado núcleo",
-    readout_off_chart: "Extrapolado / fuera de carta",
     pa_override_chip: "PA carta",
     pa_override_reset: "Restablecer PA",
     axis_hw_kt: "HW kt",
@@ -344,7 +347,12 @@ const ES: Copy = Copy {
     cruise_disa_plus10: "dISA +10",
     afm_tag_table: "Tabla",
     afm_tag_interpolated: "Interpolado",
-    afm_tag_extrapolated: "Extrapolado / fuera de carta",
+    table_rows_used_title: "Filas de la tabla",
+    table_source_pa_lbl: "PA",
+    table_source_pa_weight_lbl: "Peso PA",
+    table_source_rpm_lbl: "RPM",
+    table_source_rpm_sample_lbl: "RPM muestra",
+    table_source_rpm_weight_lbl: "Peso RPM",
     cruise_tbl_group_disa_m20: "ΔISA −20",
     cruise_tbl_group_isa: "ISA",
     cruise_tbl_group_disa_p10: "ΔISA +10",
@@ -491,7 +499,6 @@ const EN: Copy = Copy {
     plot_hint: "Drag the cursor on digitized curves (not AFM scans). Pointer and touch supported.",
     plot_readout_chart: "Chart read",
     plot_readout_core: "Core result",
-    readout_off_chart: "Extrapolated / off chart",
     pa_override_chip: "Chart PA",
     pa_override_reset: "Reset PA",
     axis_hw_kt: "HW kt",
@@ -513,7 +520,12 @@ const EN: Copy = Copy {
     cruise_disa_plus10: "dISA +10",
     afm_tag_table: "Table",
     afm_tag_interpolated: "Interpolated",
-    afm_tag_extrapolated: "Extrapolated / off chart",
+    table_rows_used_title: "Table rows used",
+    table_source_pa_lbl: "PA",
+    table_source_pa_weight_lbl: "PA weight",
+    table_source_rpm_lbl: "RPM",
+    table_source_rpm_sample_lbl: "Sample RPM",
+    table_source_rpm_weight_lbl: "RPM weight",
     cruise_tbl_group_disa_m20: "ΔISA −20",
     cruise_tbl_group_isa: "ISA",
     cruise_tbl_group_disa_p10: "ΔISA +10",
@@ -915,23 +927,6 @@ pub fn data_status_label(locale: Locale, status: &str) -> String {
     }
 }
 
-fn chart_range_warn(locale: Locale, below: bool, actual_m: &str, bound_m: &str) -> String {
-    match (locale, below) {
-        (Locale::Es, true) => format!(
-            "Fuera del rango de la carta ({actual_m} m < {bound_m} m mín.): se usa el mínimo de la carta, resultado conservador"
-        ),
-        (Locale::En, true) => format!(
-            "Below AFM chart range ({actual_m} m < {bound_m} m min.): chart minimum used, conservative result"
-        ),
-        (Locale::Es, false) => format!(
-            "Fuera del rango de la carta ({actual_m} m > {bound_m} m máx.): se usa el máximo de la carta, resultado conservador"
-        ),
-        (Locale::En, false) => format!(
-            "Above AFM chart range ({actual_m} m > {bound_m} m max.): chart maximum used, conservative result"
-        ),
-    }
-}
-
 pub fn format_out_of_chart(
     locale: Locale,
     ooc: &da20_core::chart_bounds::ChartOutOfRange,
@@ -946,13 +941,8 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
     let c = copy(locale);
     let ctx = w.args.first().map(String::as_str).unwrap_or("");
     let a1 = w.args.get(1).map(String::as_str).unwrap_or("");
-    let a2 = w.args.get(2).map(String::as_str).unwrap_or("");
+    let _a2 = w.args.get(2).map(String::as_str).unwrap_or("");
     match w.code.as_str() {
-        "CHART_CLAMP_LOW" => chart_range_warn(locale, true, a1, a2),
-        "CHART_CLAMP_HIGH" => chart_range_warn(locale, false, a1, a2),
-        "CLAMP_LOW" => chart_range_warn(locale, true, a1, a2),
-        "CLAMP_HIGH" => chart_range_warn(locale, false, a1, a2),
-        "EXTRAP_LOW" | "EXTRAP_HIGH" => format!("{ctx}: extrapolation ({a1})"),
         "ENDURANCE_DERIVED" => c.derived_not_afm.to_string(),
         "AFM_FUEL_CAPACITY" => match locale {
             Locale::Es => {
@@ -1102,19 +1092,6 @@ mod i18n_display_tests {
             warn_text(Locale::En, &w),
             "Tailwind 6.0 kt exceeds chart (max 5.0 kt); not extrapolated."
         );
-    }
-
-    #[test]
-    fn chart_clamp_warning_plain_bilingual_text() {
-        let w = da20_core::types::CalculationWarning::with_args(
-            "CHART_CLAMP_LOW",
-            vec!["Fig 5.4 headwind panel".into(), "206".into(), "300".into()],
-        );
-        assert_eq!(
-            warn_text(Locale::En, &w),
-            "Below AFM chart range (206 m < 300 m min.): chart minimum used, conservative result"
-        );
-        assert!(warn_text(Locale::Es, &w).contains("206 m < 300 m"));
     }
 
     #[test]

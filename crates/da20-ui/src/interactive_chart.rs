@@ -2,7 +2,7 @@
 
 use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
 use da20_core::climb::compute_climb;
-use da20_core::cruise::{cruise_cell_tag_for_column, effective_cruise_highlight_rpm};
+use da20_core::cruise::cruise_cell_tag_for_column;
 use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
     equivalent_altitude_curves, landing_table_curves, map_to_svg, sample_landing_ft,
@@ -13,7 +13,13 @@ use da20_core::rev29::ea_inverse::pressure_altitude_for_equivalent_altitude;
 use da20_core::rev29::engine::{equivalent_altitude_ft, lb_to_kg};
 use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points;
 use da20_core::takeoff::compute_takeoff;
-use da20_core::types::{AfmLookupTag, ChartPhase, FlightInputs};
+use da20_core::types::{
+    AfmLookupTag, ChartPhase, FlightInputs,
+};
+
+use crate::table_source_panel::{
+    cruise_table_cell_highlight, cruise_table_row_highlight, landing_table_row_highlight,
+};
 use da20_core::wind::{compute_wind, runway_heading_deg};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
@@ -27,6 +33,7 @@ use crate::i18n::{
     format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::inputs::set_chart_pa;
+use crate::storage::compute_all;
 
 fn chart_phase(kind: ChartKind) -> Option<ChartPhase> {
     match kind {
@@ -210,21 +217,27 @@ fn render_svg(
     );
 
     let climb_pa_guide: Option<(String, String)> = if kind == ChartKind::Climb {
-        let raw = climb_fan_pa_curve_chart_points(inner, pa);
-        if raw.is_empty() {
-            None
-        } else {
-            let pts: String = raw
-                .iter()
-                .map(|(t, ea)| {
-                    let (sx, sy) = map_to_svg(
-                        *t, *ea, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0,
-                    );
-                    format!("{sx:.1},{sy:.1}")
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-            Some((pts, format_takeoff_strip_pa_trace_label(locale, pa)))
+        let ea_at_cursor_guide = y_min + cy * (y_max - y_min);
+        match pressure_altitude_for_equivalent_altitude(inner, ea_at_cursor_guide, inputs.oat_c) {
+            None => None,
+            Some(pa_inv) => {
+                let raw = climb_fan_pa_curve_chart_points(inner, pa_inv);
+                if raw.is_empty() {
+                    None
+                } else {
+                    let pts: String = raw
+                        .iter()
+                        .map(|(t, ea)| {
+                            let (sx, sy) = map_to_svg(
+                                *t, *ea, x_min, x_max, y_min, y_max, 40.0, 20.0, 340.0, 250.0,
+                            );
+                            format!("{sx:.1},{sy:.1}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    Some((pts, format_takeoff_strip_pa_trace_label(locale, pa_inv)))
+                }
+            }
         }
     } else {
         None
@@ -544,10 +557,11 @@ fn apply_drag(
         ChartKind::Climb => {
             let oat_c = lerp_axis(&inner.fan_t.value, nx);
             let ea = ny * 14_000.0;
-            let pa = pressure_altitude_for_equivalent_altitude(inner, ea, oat_c);
             inputs.update(|i| {
                 i.oat_c = oat_c;
-                set_pa_override(i, pa, ChartPhase::Climb);
+                if let Some(pa) = pressure_altitude_for_equivalent_altitude(inner, ea, oat_c) {
+                    set_pa_override(i, pa, ChartPhase::Climb);
+                }
             });
         }
         ChartKind::Landing => {
@@ -597,6 +611,11 @@ pub fn CruiseTableView(
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
 ) -> impl IntoView {
+    let table3_source = Memo::new(move |_| {
+        compute_all(&data.get(), &inputs.get())
+            .cruise
+            .and_then(|c| c.table3_source)
+    });
     view! {
         <div class="table-scroll">
             <table class="data-table cruise-table-full">
@@ -620,29 +639,34 @@ pub fn CruiseTableView(
                         let loc = locale.get();
                         let d = data.get();
                         let rows = &d.inner().cruise_table.value.rows;
-                        let i = inputs.get();
-                        let hi_rpm = effective_cruise_highlight_rpm(&d, &i);
+                        let trace = table3_source.get();
                         rows.iter().filter(|r| r.len() >= 11).map(|r| {
                             let pa = r[0];
                             let rpm = r[1];
-                            let highlight = (pa - i.cruise_pressure_alt_ft).abs() < 500.0
-                                && (rpm - hi_rpm).abs() < 0.5;
+                            let row_band = cruise_table_row_highlight(trace.as_ref(), pa, rpm);
+                            let cell = |disa: f64| {
+                                if cruise_table_cell_highlight(trace.as_ref(), pa, rpm, disa) {
+                                    "mono cell-used-emphasis"
+                                } else {
+                                    "mono"
+                                }
+                            };
                             let tag_m20 = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, -20.0));
                             let tag_isa = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, 0.0));
                             let tag_p10 = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, 10.0));
                             view! {
-                                <tr class:row-hi=highlight>
+                                <tr class:row-source-band=row_band>
                                     <td>{pa as i64}</td>
                                     <td>{rpm as i64}</td>
-                                    <td class="mono">{format!("{:.0}", r[2])}<br/><span class="cell-tag">{tag_m20}</span></td>
-                                    <td class="mono">{format!("{:.0}", r[3])}</td>
-                                    <td class="mono">{format!("{:.1}", r[4])}</td>
-                                    <td class="mono">{format!("{:.0}", r[5])}<br/><span class="cell-tag">{tag_isa}</span></td>
-                                    <td class="mono">{format!("{:.0}", r[6])}</td>
-                                    <td class="mono">{format!("{:.1}", r[7])}</td>
-                                    <td class="mono">{format!("{:.0}", r[8])}<br/><span class="cell-tag">{tag_p10}</span></td>
-                                    <td class="mono">{format!("{:.0}", r[9])}</td>
-                                    <td class="mono">{format!("{:.1}", r[10])}</td>
+                                    <td class=cell(-20.0)>{format!("{:.0}", r[2])}<br/><span class="cell-tag">{tag_m20}</span></td>
+                                    <td class=cell(-20.0)>{format!("{:.0}", r[3])}</td>
+                                    <td class=cell(-20.0)>{format!("{:.1}", r[4])}</td>
+                                    <td class=cell(0.0)>{format!("{:.0}", r[5])}<br/><span class="cell-tag">{tag_isa}</span></td>
+                                    <td class=cell(0.0)>{format!("{:.0}", r[6])}</td>
+                                    <td class=cell(0.0)>{format!("{:.1}", r[7])}</td>
+                                    <td class=cell(10.0)>{format!("{:.0}", r[8])}<br/><span class="cell-tag">{tag_p10}</span></td>
+                                    <td class=cell(10.0)>{format!("{:.0}", r[9])}</td>
+                                    <td class=cell(10.0)>{format!("{:.1}", r[10])}</td>
                                 </tr>
                             }
                         }).collect_view()
@@ -658,6 +682,11 @@ pub fn LandingTableView(
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
 ) -> impl IntoView {
+    let table4_source = Memo::new(move |_| {
+        compute_all(&data.get(), &inputs.get())
+            .landing
+            .and_then(|l| l.table4_source)
+    });
     view! {
         <div class="table-scroll">
             <table class="data-table">
@@ -672,15 +701,19 @@ pub fn LandingTableView(
                     {move || {
                         let d = data.get();
                         let inner = d.inner();
-                        let pa = effective_pressure_altitude_ft(&inputs.get(), Some(ChartPhase::Landing));
+                        let trace = table4_source.get();
                         inner.land_alt.value.iter().enumerate().map(|(idx, alt)| {
-                            let highlight = (*alt - pa).abs()
-                                < 500.0;
+                            let row_band = landing_table_row_highlight(trace.as_ref(), *alt);
+                            let td = if row_band {
+                                "cell-used-emphasis"
+                            } else {
+                                ""
+                            };
                             view! {
-                                <tr class:row-hi=highlight>
-                                    <td>{*alt as i64}</td>
-                                    <td>{inner.land_roll.value[idx] as i64}</td>
-                                    <td>{inner.land_50ft.value[idx] as i64}</td>
+                                <tr class:row-source-band=row_band>
+                                    <td class=td>{*alt as i64}</td>
+                                    <td class=td>{inner.land_roll.value[idx] as i64}</td>
+                                    <td class=td>{inner.land_50ft.value[idx] as i64}</td>
                                 </tr>
                             }
                         }).collect_view()

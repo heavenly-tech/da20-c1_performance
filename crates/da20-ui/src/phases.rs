@@ -18,6 +18,7 @@ use crate::phase_readouts::PhaseReadoutsPanel;
 use crate::prefs::TakeoffPrefs;
 use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
+use crate::table_source_panel::{Table3SourcePanel, Table4SourcePanel};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
 use da20_core::types::{ChartPhase, CruiseSolveMode};
@@ -387,12 +388,6 @@ fn phase_results(
                     let bhp = cr.percent_bhp.unwrap_or(0.0);
                     let rpm_out = cr.rpm.map(|x| x.round() as i64).unwrap_or(0);
                     let bhp_mode = inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp;
-                    let off_chart = false;
-                    let off_suffix = if off_chart {
-                        format!(" · {}", c_loc.readout_off_chart)
-                    } else {
-                        String::new()
-                    };
                     let requested_bhp = inputs.cruise_percent_bhp;
                     view! {
                     <div class="results-block">
@@ -403,25 +398,25 @@ fn phase_results(
                                 view! {
                                     <>
                                         <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
-                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span>{off_suffix.clone()}</p>
-                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span></p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"</p>
                                     </>
                                 }.into_any()
                             } else if tas_c.is_some() {
                                 view! {
                                     <>
                                         <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
-                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}{off_suffix.clone()}</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
                                         <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
-                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"</p>
                                     </>
                                 }.into_any()
                             } else {
                                 view! {
                                     <>
                                         <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
-                                        <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}{off_suffix.clone()}</p>
-                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"</p>
                                     </>
                                 }.into_any()
                             }
@@ -449,6 +444,9 @@ fn phase_results(
                             }.into_any()
                         }}
                         <WarningsList locale=locale warnings=cr.warnings.clone()/>
+                        {cr.table3_source.clone().map(|trace| {
+                            view! { <Table3SourcePanel locale=locale trace=trace /> }
+                        })}
                     </div>
                     }.into_any()
                 },
@@ -535,6 +533,9 @@ fn phase_results(
                         <p class="big">{l.ground_roll_ft.round() as i64}<span class="u">" ft"</span></p>
                         <p>"50 ft: "{l.distance_over_50ft_ft.round() as i64}" ft"</p>
                         <WarningsList locale=locale warnings=l.warnings.clone()/>
+                        {l.table4_source.clone().map(|trace| {
+                            view! { <Table4SourcePanel locale=locale trace=trace /> }
+                        })}
                     </div>
                 }.into_any(),
                 None => {

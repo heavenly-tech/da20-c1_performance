@@ -2,6 +2,9 @@
 
 use crate::types::CalculationWarning;
 
+/// Tolerance for inclusive printed chart edges (float noise only).
+pub const CHART_EDGE_TOL: f64 = 1e-6;
+
 /// Published AFM axis limits used for validation and UI clamps (Rev 29 digitization).
 pub mod limits {
     pub const TABLE3_PA_FT: (f64, f64) = (2000.0, 12000.0);
