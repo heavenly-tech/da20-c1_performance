@@ -409,14 +409,8 @@ fn readout_line(
                 path.chart_ground_m,
                 path.chart_over_obstacle_m,
             );
-            let off = takeoff.as_ref().map(|t| t.chart_off_afm).unwrap_or(false);
-            let off_lbl = if off {
-                format!(" · {}", c.readout_off_chart)
-            } else {
-                String::new()
-            };
             format!(
-                "{}: {chart}{off_lbl} | {}: {core}",
+                "{}: {chart} | {}: {core}",
                 c.plot_readout_chart, c.plot_readout_core
             )
         }

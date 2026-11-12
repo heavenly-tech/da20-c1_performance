@@ -496,6 +496,52 @@ body {
   font-weight: 600;
 }
 
+/* Table trace: light row band + stronger cell border (not color-only). */
+.data-table tr.row-source-band td {
+  background: color-mix(in srgb, var(--amb) 10%, var(--bg));
+  box-shadow: inset 4px 0 0 var(--amb);
+}
+
+.data-table td.cell-used-emphasis,
+.data-table th.cell-used-emphasis {
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px var(--txt);
+}
+
+.table-source-block {
+  max-width: 100%;
+  margin-top: 0.75rem;
+}
+
+.table-source-block .table-scroll {
+  max-width: 100%;
+}
+
+.table-source-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mut);
+  margin: 0 0 0.5rem;
+}
+
+.table-source-meta {
+  font-size: 12px;
+  margin: 0.25rem 0 0.5rem;
+  color: var(--mut);
+}
+
+.table-source-pa-group + .table-source-pa-group {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.table-source-rpm {
+  margin-bottom: 0.5rem;
+  min-width: 480px;
+}
+
 .data-table .cell-tag {
   display: block;
   font-size: 10px;

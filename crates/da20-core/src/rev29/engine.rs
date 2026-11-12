@@ -1,10 +1,10 @@
-use crate::chart_bounds::{self, limits, ChartOutOfRange};
+use crate::chart_bounds::{self, limits, ChartOutOfRange, CHART_EDGE_TOL};
 use crate::interpolation::{interpolate_1d, ExtrapolationPolicy, InterpError};
 use crate::rev29::types::Rev29File;
 use crate::types::CalculationWarning;
 
 const M_TO_FT: f64 = 3.280839895;
-const AXIS_TOL: f64 = 1e-6;
+const AXIS_TOL: f64 = CHART_EDGE_TOL;
 
 fn interp_err_to_chart(label: &'static str, axis: &[f64], err: InterpError) -> ChartOutOfRange {
     let min = axis.first().copied().unwrap_or(0.0);
@@ -14,12 +14,6 @@ fn interp_err_to_chart(label: &'static str, axis: &[f64], err: InterpError) -> C
         InterpError::AboveMax { max } => ChartOutOfRange { label, min, max },
         _ => ChartOutOfRange { label, min, max },
     }
-}
-
-pub(crate) fn linear_interp_quiet(axis: &[f64], values: &[f64], x: f64) -> f64 {
-    linear_interp(axis, values, x, "")
-        .map(|(v, _)| v)
-        .unwrap_or(f64::NAN)
 }
 
 pub fn linear_interp(
@@ -173,7 +167,7 @@ fn require_panel_entry_m(lines: &[f64], entry_m: f64) -> Result<(), ChartOutOfRa
         lines[0],
         lines[lines.len() - 1],
         entry_m,
-        0.5,
+        AXIS_TOL,
     )
 }
 

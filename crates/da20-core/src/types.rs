@@ -253,7 +253,6 @@ pub struct TakeoffResult {
     pub distance_over_obstacle_conservative_ft: f64,
     pub distance_over_50ft_ft: f64,
     pub wind_correction_ft: f64,
-    pub chart_off_afm: bool,
     pub warnings: Vec<CalculationWarning>,
 }
 
@@ -272,6 +271,57 @@ pub struct ClimbResult {
     pub fuel_to_altitude_us_gal: Option<f64>,
     pub distance_to_altitude_nm: Option<f64>,
     pub warnings: Vec<CalculationWarning>,
+}
+
+/// One printed Table 3 cell (ΔISA column) with optional blend weight in a lookup trace.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Table3PublishedCell {
+    pub disa_c: f64,
+    pub percent_bhp: f64,
+    pub tas_kt: f64,
+    pub gph: f64,
+    #[serde(default)]
+    pub disa_weight: f64,
+    #[serde(default)]
+    pub disa_used: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Table3RpmBracketRow {
+    pub pa_ft: f64,
+    pub rpm: f64,
+    pub rpm_weight: f64,
+    pub cells: Vec<Table3PublishedCell>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Table3PaBracketRow {
+    pub pa_ft: f64,
+    pub rpm_sample: f64,
+    pub pa_weight: f64,
+    pub rpm_rows: Vec<Table3RpmBracketRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Table3SourceTrace {
+    pub query_pa_ft: f64,
+    pub query_rpm: f64,
+    pub query_disa_c: f64,
+    pub pa_rows: Vec<Table3PaBracketRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Table4PaBracketRow {
+    pub pa_ft: f64,
+    pub pa_weight: f64,
+    pub ground_roll_ft: f64,
+    pub distance_over_50ft_ft: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Table4SourceTrace {
+    pub query_pa_ft: f64,
+    pub pa_rows: Vec<Table4PaBracketRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -293,6 +343,8 @@ pub struct CruiseResult {
     #[serde(default)]
     pub fuel_flow_chart_us_gal_h: Option<f64>,
     pub fuel_flow_us_gal_h: f64,
+    #[serde(default)]
+    pub table3_source: Option<Table3SourceTrace>,
     pub warnings: Vec<CalculationWarning>,
 }
 
@@ -304,6 +356,8 @@ pub struct LandingResult {
     pub ground_roll_ft: f64,
     pub distance_over_50ft_ft: f64,
     pub wind_correction_ft: f64,
+    #[serde(default)]
+    pub table4_source: Option<Table4SourceTrace>,
     pub warnings: Vec<CalculationWarning>,
 }
 

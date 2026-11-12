@@ -105,7 +105,6 @@ mod tests {
             distance_over_obstacle_conservative_ft: 0.0,
             distance_over_50ft_ft: over_ft,
             wind_correction_ft: 0.0,
-            chart_off_afm: false,
             warnings: vec![],
         }
     }

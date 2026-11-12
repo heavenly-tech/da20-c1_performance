@@ -62,7 +62,7 @@ pub fn compute_takeoff(
     let wind_delta_ft = m_to_ft(dist.ground_roll_m - dist.after_weight_m);
 
     let warnings = dist.warnings;
-    let afm_lookup_tag = takeoff_tag(false);
+    let afm_lookup_tag = takeoff_tag();
 
     Ok(TakeoffResult {
         provenance: provenance_for(data.inner(), data.takeoff_source()),
@@ -75,7 +75,6 @@ pub fn compute_takeoff(
         distance_over_obstacle_conservative_ft: over_conservative_ft,
         distance_over_50ft_ft: over_raw_ft,
         wind_correction_ft: wind_delta_ft,
-        chart_off_afm: false,
         warnings,
     })
 }

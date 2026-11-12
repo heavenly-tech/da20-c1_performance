@@ -12,7 +12,7 @@ pub fn landing_tag_from_pa(pa_ft: f64, published_pa: &[f64]) -> AfmLookupTag {
     }
 }
 
-pub fn takeoff_tag(_chart_off_afm: bool) -> AfmLookupTag {
+pub fn takeoff_tag() -> AfmLookupTag {
     AfmLookupTag::Interpolated
 }
 

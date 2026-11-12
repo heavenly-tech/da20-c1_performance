@@ -14,12 +14,6 @@ pub fn dedupe_warnings(warnings: Vec<CalculationWarning>) -> Vec<CalculationWarn
     out
 }
 
-pub fn takeoff_off_chart(warnings: &[CalculationWarning]) -> bool {
-    warnings
-        .iter()
-        .any(|w| matches!(w.code.as_str(), "CHART_CLAMP_LOW" | "CHART_CLAMP_HIGH"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -27,8 +21,8 @@ mod tests {
     #[test]
     fn dedupe_identical_warnings() {
         let w = CalculationWarning::with_args(
-            "CHART_CLAMP_LOW",
-            vec!["panel".into(), "206".into(), "300".into()],
+            "CHART_OUT_OF_RANGE",
+            vec!["Fig 5.4 PA".into(), "0".into(), "10000".into()],
         );
         let out = dedupe_warnings(vec![w.clone(), w.clone(), w]);
         assert_eq!(out.len(), 1);

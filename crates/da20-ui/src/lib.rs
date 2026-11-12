@@ -15,6 +15,7 @@ mod prefs;
 mod routing;
 mod storage;
 mod strip_plot;
+mod table_source_panel;
 mod takeoff_panel;
 mod theme;
 
