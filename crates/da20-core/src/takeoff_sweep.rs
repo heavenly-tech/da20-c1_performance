@@ -336,6 +336,22 @@ mod tests {
     }
 
     #[test]
+    fn sweep_out_of_chart_combination_yields_none_result() {
+        let data = PerformanceData::production();
+        let base = base_inputs();
+        let hw_base = signed_along_runway_kt(&base).unwrap();
+        let axes = vec![TakeoffSweepAxis {
+            var: TakeoffSweepVar::SignedHeadwindKt,
+            start: 25.0,
+            end: 25.0,
+            step: 1.0,
+        }];
+        let rows = compute_takeoff_sweep(&data, &base, &axes, hw_base).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].result.is_none());
+    }
+
+    #[test]
     fn sweep_invalid_range_direction() {
         let err = build_value_series(30.0, 10.0, 1.0).unwrap_err();
         assert_eq!(err, TakeoffSweepError::RangeDirection);

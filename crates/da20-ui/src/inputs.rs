@@ -4,8 +4,9 @@ use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::types::CruiseSolveMode;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
-    runway_heading_deg, runway_heading_status, wind_chart_panel_needs_crosswind_note,
-    wind_components, RunwayHeadingStatus,
+    apply_signed_along_runway_wind, runway_heading_deg, runway_heading_status,
+    signed_along_runway_kt, wind_chart_panel_needs_crosswind_note, wind_components,
+    RunwayHeadingStatus,
 };
 use da20_core::wind_format::{format_wind, parse_wind};
 use da20_core::PerformanceData;
@@ -22,7 +23,23 @@ pub enum AirfieldInputsMode {
     Climb,
 }
 
-const CHART_CLAMP_UNSET: f64 = f64::NAN;
+pub(crate) const CHART_CLAMP_UNSET: f64 = f64::NAN;
+
+/// Fig 5.4 panel: tailwind up to 5 kt (signed −5), headwind up to 20 kt.
+fn clamp_along_runway_wind(inputs: &mut da20_core::types::FlightInputs) {
+    if runway_heading_status(&inputs.runway) != RunwayHeadingStatus::Valid {
+        return;
+    }
+    let Some(signed) = signed_along_runway_kt(inputs) else {
+        return;
+    };
+    let lo = -limits::FIG54_TAILWIND_KT.1;
+    let hi = limits::FIG54_HEADWIND_KT.1;
+    let clamped = signed.clamp(lo, hi);
+    if (clamped - signed).abs() > 1e-9 {
+        apply_signed_along_runway_wind(inputs, clamped);
+    }
+}
 
 fn clamp_chart(v: f64, min: f64, max: f64) -> f64 {
     let mut x = v;
@@ -300,6 +317,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                             i.wind_dir_deg = d;
                             i.wind_speed_kt = s;
                             i.wind_strip_crosswind_clamped = false;
+                            clamp_along_runway_wind(i);
                         });
                     }
                 }
@@ -310,6 +328,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                             i.wind_dir_deg = d;
                             i.wind_speed_kt = s;
                             i.wind_strip_crosswind_clamped = false;
+                            clamp_along_runway_wind(i);
                         });
                     }
                 }

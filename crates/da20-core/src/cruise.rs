@@ -540,6 +540,35 @@ mod tests {
     use crate::data::PerformanceData;
 
     #[test]
+    fn normalized_6500_isa_2600_row_samples_and_blend() {
+        let data = PerformanceData::production();
+        let rows = &data.inner().cruise_table.value.rows;
+        let pa = 6500.0;
+        let rpm = 2600.0;
+        let disa = 0.0;
+        let rmin = rmin_at_pa(rows, pa).unwrap();
+        let s = normalized_s(rpm, rmin);
+        let rpm6 = rpm_row_at_tabulated_pa(rows, 6000.0, s).unwrap();
+        let rpm8 = rpm_row_at_tabulated_pa(rows, 8000.0, s).unwrap();
+        assert!((rmin - 2512.5).abs() < 1e-9);
+        assert!((s - 87.5 / 287.5).abs() < 1e-9);
+        assert!((rpm6 - 2_591.3043478261).abs() < 1e-6);
+        assert!((rpm8 - 2_626.0869565217).abs() < 1e-6);
+        let t6 = lookup_at_tabulated_pa(rows, 6000.0, rpm6, disa).unwrap().0;
+        let t8 = lookup_at_tabulated_pa(rows, 8000.0, rpm8, disa).unwrap().0;
+        assert!((t6.bhp - 56.4782608696).abs() < 1e-6);
+        assert!((t6.tas - 115.5652173913).abs() < 1e-6);
+        assert!((t6.gph - 5.5565217391).abs() < 1e-6);
+        assert!((t8.bhp - 55.5652173913).abs() < 1e-6);
+        assert!((t8.tas - 117.3043478261).abs() < 1e-6);
+        assert!((t8.gph - 5.4304347826).abs() < 1e-6);
+        let (blend, _, _) = lookup_table3(rows, pa, rpm, disa).unwrap();
+        assert!((blend.bhp - 56.25).abs() < 1e-9);
+        assert!((blend.tas - 116.0).abs() < 1e-9);
+        assert!((blend.gph - 5.525).abs() < 1e-9);
+    }
+
+    #[test]
     fn worked_example_6500ft_2600rpm_isa() {
         let data = PerformanceData::production();
         let inputs = FlightInputs {
@@ -551,12 +580,12 @@ mod tests {
         };
         let r = compute_cruise(&data, &inputs).unwrap();
         assert!(
-            (r.percent_bhp.unwrap() - 56.25).abs() < 0.01,
+            (r.percent_bhp.unwrap() - 56.25).abs() < 1e-6,
             "bhp={}",
             r.percent_bhp.unwrap()
         );
-        assert!((r.tas_chart_kt.unwrap() - 116.0).abs() < 0.01);
-        assert!((r.fuel_flow_us_gal_h - 5.525).abs() < 0.01);
+        assert!((r.tas_chart_kt.unwrap() - 116.0).abs() < 1e-6);
+        assert!((r.fuel_flow_us_gal_h - 5.525).abs() < 1e-6);
         assert_eq!(r.afm_lookup_tag, AfmLookupTag::Interpolated);
     }
 
@@ -813,10 +842,10 @@ mod tests {
             ..FlightInputs::default()
         };
         let r = compute_cruise(&data, &inputs).unwrap();
-        assert!((r.rpm.unwrap() - 2600.0).abs() < 0.5);
-        assert!((r.percent_bhp.unwrap() - 56.25).abs() < 0.01);
-        assert!((r.tas_chart_kt.unwrap() - 116.0).abs() < 0.01);
-        assert!((r.fuel_flow_us_gal_h - 5.525).abs() < 0.01);
+        assert!((r.rpm.unwrap() - 2600.0).abs() < 1e-6);
+        assert!((r.percent_bhp.unwrap() - 56.25).abs() < 1e-6);
+        assert!((r.tas_chart_kt.unwrap() - 116.0).abs() < 1e-6);
+        assert!((r.fuel_flow_us_gal_h - 5.525).abs() < 1e-6);
         assert_eq!(r.afm_lookup_tag, AfmLookupTag::Interpolated);
     }
 
