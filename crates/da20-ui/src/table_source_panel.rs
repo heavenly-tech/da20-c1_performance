@@ -128,8 +128,8 @@ pub fn Table4SourcePanel(locale: Locale, #[prop(into)] trace: Table4SourceTrace)
                         <tr>
                             <th>{c.table_source_pa_lbl}</th>
                             <th>{c.table_source_pa_weight_lbl}</th>
-                            <th>"Roll ft"</th>
-                            <th>"50 ft ft"</th>
+                            <th>{c.table_source_landing_roll_ft}</th>
+                            <th>{c.table_source_landing_over_50ft_ft}</th>
                         </tr>
                     </thead>
                     <tbody>
