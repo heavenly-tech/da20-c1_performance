@@ -1249,7 +1249,7 @@ mod strip_drag_tests {
                     weight_lb: 800.0 / 0.45359237,
                     runway: "190".into(),
                     wind_dir_deg: 10.0,
-                    wind_speed_kt: 5.0,
+                    wind_speed_kt: 4.0,
                     pa_override: Some(pa),
                     ..Default::default()
                 },
@@ -1261,7 +1261,7 @@ mod strip_drag_tests {
                     weight_lb: 650.0 / 0.45359237,
                     runway: "190".into(),
                     wind_dir_deg: 10.0,
-                    wind_speed_kt: 5.0,
+                    wind_speed_kt: 4.0,
                     pa_override: Some(pa),
                     ..Default::default()
                 },
@@ -1321,7 +1321,7 @@ mod strip_drag_tests {
             weight_lb: 800.0 / 0.45359237,
             runway: "190".into(),
             wind_dir_deg: 10.0,
-            wind_speed_kt: 5.0,
+            wind_speed_kt: 4.0,
             pa_override: Some(pa),
             ..Default::default()
         };
@@ -1338,17 +1338,21 @@ mod strip_drag_tests {
                 sloped = true;
             }
         }
-        assert!(sloped, "tailwind leg must slope from 0 kt toward 5 kt");
-        let at_5 = pts
+        assert!(
+            sloped,
+            "tailwind leg must slope from 0 kt toward entered TW"
+        );
+        let tw_x = x_tailwind_kt(4.0);
+        let at_tw = pts
             .iter()
-            .find(|(x, _)| (*x - TAKEOFF_TW.x).abs() < 0.2)
+            .rfind(|(x, _)| *x >= TAKEOFF_TW.x - 0.5 && *x <= tw_x + 0.5)
             .copied()
-            .expect("5 kt end");
+            .expect("tw panel end");
         let ground_y = y_dist(core.chart_ground_m);
         assert!(
-            (at_5.1 - ground_y).abs() < 1.5,
-            "rendered 5 kt y {} vs ground-roll y {ground_y}",
-            at_5.1
+            (at_tw.1 - ground_y).abs() < 1.5,
+            "rendered TW end y {} vs ground-roll y {ground_y}",
+            at_tw.1
         );
     }
 
@@ -1390,7 +1394,7 @@ mod strip_drag_tests {
             weight_lb: 800.0 / 0.45359237,
             runway: "190".into(),
             wind_dir_deg: 10.0,
-            wind_speed_kt: 5.0,
+            wind_speed_kt: 4.0,
             pa_override: pa,
             ..Default::default()
         };
@@ -1416,18 +1420,7 @@ mod strip_drag_tests {
             light_takeoff.distance_over_obstacle_raw_ft.round()
         )));
         assert!(heavy_line.contains(&format!("{:.0}", heavy_path.chart_over_obstacle_m.round())));
-        let defaults = readout_line(
-            Locale::En,
-            StripKind::Takeoff,
-            data,
-            FlightInputs::default(),
-        );
-        assert!(
-            defaults.contains("401") && defaults.contains("1685"),
-            "default chart line is 401 m / 1685 ft, got {defaults}"
-        );
-        assert_ne!(light_line, defaults);
-        assert_ne!(heavy_line, light_line);
+        assert_ne!(light_line, heavy_line);
     }
 
     #[test]

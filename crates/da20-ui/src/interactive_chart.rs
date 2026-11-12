@@ -2,7 +2,7 @@
 
 use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
 use da20_core::climb::compute_climb;
-use da20_core::cruise::cruise_cell_tag_for_column;
+use da20_core::cruise::{cruise_cell_tag_for_column, effective_cruise_highlight_rpm};
 use da20_core::landing::compute_landing;
 use da20_core::rev29::charts::{
     equivalent_altitude_curves, landing_table_curves, map_to_svg, sample_landing_ft,
@@ -68,7 +68,8 @@ pub fn InteractiveChart(
             }
             ChartKind::Climb => {
                 let fan_t = &inner.fan_t.value;
-                let (ea, _) = equivalent_altitude_ft(inner, pa, i.oat_c);
+                let (ea, _) =
+                    equivalent_altitude_ft(inner, pa, i.oat_c).unwrap_or((f64::NAN, vec![]));
                 (norm_axis(fan_t, i.oat_c), norm_axis_ea(ea))
             }
             ChartKind::Landing => {
@@ -415,7 +416,8 @@ fn readout_pair(
             sample_takeoff_base_m(inner, pa, inputs.oat_c)
         ),
         ChartKind::Climb => {
-            let (ea, _) = equivalent_altitude_ft(inner, pa, inputs.oat_c);
+            let (ea, _) =
+                equivalent_altitude_ft(inner, pa, inputs.oat_c).unwrap_or((f64::NAN, vec![]));
             let roc_u =
                 sample_roc_fpm_with_inputs(inner, inputs.climb_figure.roc_key(), pa, inputs);
             let (chart_line, _) = format_climb_readout_interactive_pair(
@@ -619,11 +621,12 @@ pub fn CruiseTableView(
                         let d = data.get();
                         let rows = &d.inner().cruise_table.value.rows;
                         let i = inputs.get();
+                        let hi_rpm = effective_cruise_highlight_rpm(&d, &i);
                         rows.iter().filter(|r| r.len() >= 11).map(|r| {
                             let pa = r[0];
                             let rpm = r[1];
                             let highlight = (pa - i.cruise_pressure_alt_ft).abs() < 500.0
-                                && (rpm - i.cruise_rpm).abs() < 0.5;
+                                && (rpm - hi_rpm).abs() < 0.5;
                             let tag_m20 = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, -20.0));
                             let tag_isa = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, 0.0));
                             let tag_p10 = afm_lookup_tag_label(loc, cruise_cell_tag_for_column(pa, rpm, 10.0));

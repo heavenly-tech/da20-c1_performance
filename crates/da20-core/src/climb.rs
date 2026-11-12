@@ -1,5 +1,6 @@
 use crate::afm_tag::climb_tag_from_warnings;
 use crate::altitude::effective_pressure_altitude_ft;
+use crate::chart_bounds::ChartOutOfRange;
 use crate::data::PerformanceData;
 use crate::equivalent_altitude::equivalent_altitude_ft;
 use crate::provenance::provenance_for;
@@ -13,6 +14,8 @@ pub const CLIMB_DERIVED_ESTIMATE_NOTE: &str =
 pub enum ClimbError {
     #[error("climb segment unavailable")]
     MissingSegment,
+    #[error(transparent)]
+    OutOfChart(ChartOutOfRange),
 }
 
 pub fn compute_climb(
@@ -21,10 +24,11 @@ pub fn compute_climb(
     target_pressure_alt_ft: f64,
 ) -> Result<ClimbResult, ClimbError> {
     let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Climb));
-    let (eq, mut warnings) = equivalent_altitude_ft(data, pa, inputs.oat_c);
+    let (eq, mut warnings) =
+        equivalent_altitude_ft(data, pa, inputs.oat_c).map_err(ClimbError::OutOfChart)?;
     let key = inputs.climb_figure.roc_key();
     let (roc_base, w) =
-        rate_of_climb_fpm(data.inner(), key, pa, inputs.oat_c).ok_or(ClimbError::MissingSegment)?;
+        rate_of_climb_fpm(data.inner(), key, pa, inputs.oat_c).map_err(ClimbError::OutOfChart)?;
     warnings.extend(w);
     let m = climb_roc_fairing_multiplier(inputs.wheel_fairings_installed);
     let roc = roc_base * m;
@@ -58,7 +62,9 @@ pub fn rate_of_climb_for_figure(
     pa_ft: f64,
     oat_c: f64,
 ) -> Option<f64> {
-    rate_of_climb_fpm(data.inner(), figure_key, pa_ft, oat_c).map(|(v, _)| v)
+    rate_of_climb_fpm(data.inner(), figure_key, pa_ft, oat_c)
+        .ok()
+        .map(|(v, _)| v)
 }
 
 #[cfg(test)]

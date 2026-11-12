@@ -1,9 +1,12 @@
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
+use da20_core::chart_bounds::limits;
 use da20_core::cruise::isa_temp_c_at_pa;
+use da20_core::types::CruiseSolveMode;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
 use da20_core::wind::{
-    runway_heading_deg, runway_heading_status, wind_chart_panel_needs_crosswind_note,
-    wind_components, RunwayHeadingStatus,
+    apply_signed_along_runway_wind, runway_heading_deg, runway_heading_status,
+    signed_along_runway_kt, wind_chart_panel_needs_crosswind_note, wind_components,
+    RunwayHeadingStatus,
 };
 use da20_core::wind_format::{format_wind, parse_wind};
 use da20_core::PerformanceData;
@@ -20,20 +23,53 @@ pub enum AirfieldInputsMode {
     Climb,
 }
 
+pub(crate) const CHART_CLAMP_UNSET: f64 = f64::NAN;
+
+/// Fig 5.4 panel: tailwind up to 5 kt (signed −5), headwind up to 20 kt.
+fn clamp_along_runway_wind(inputs: &mut da20_core::types::FlightInputs) {
+    if runway_heading_status(&inputs.runway) != RunwayHeadingStatus::Valid {
+        return;
+    }
+    let Some(signed) = signed_along_runway_kt(inputs) else {
+        return;
+    };
+    let lo = -limits::FIG54_TAILWIND_KT.1;
+    let hi = limits::FIG54_HEADWIND_KT.1;
+    let clamped = signed.clamp(lo, hi);
+    if (clamped - signed).abs() > 1e-9 {
+        apply_signed_along_runway_wind(inputs, clamped);
+    }
+}
+
+fn clamp_chart(v: f64, min: f64, max: f64) -> f64 {
+    let mut x = v;
+    if min.is_finite() {
+        x = x.max(min);
+    }
+    if max.is_finite() {
+        x = x.min(max);
+    }
+    x
+}
+
 #[component]
 pub fn NumField(
     label: impl Fn() -> String + Send + 'static,
     get: impl Fn() -> f64 + Send + 'static,
     set: impl Fn(f64) + Send + Copy + 'static,
+    #[prop(default = CHART_CLAMP_UNSET)] min: f64,
+    #[prop(default = CHART_CLAMP_UNSET)] max: f64,
 ) -> impl IntoView {
     view! {
         <div class="f">
             <label>{move || label()}</label>
             <input type="number" step="any" class="mono"
+                min=min.is_finite().then_some(min)
+                max=max.is_finite().then_some(max)
                 prop:value=move || format!("{}", get())
                 on:input=move |ev| {
                     if let Ok(v) = input_value(&ev).parse() {
-                        set(v);
+                        set(clamp_chart(v, min, max));
                     }
                 }
             />
@@ -56,8 +92,44 @@ pub fn SharedAirfieldInputs(
             let override_active = chart_phase.is_some_and(|p| {
                 i.pa_override.as_ref().is_some_and(|o| o.phase == p)
             });
+            let (pa_min, pa_max, oat_min, oat_max) = match chart_phase {
+                Some(ChartPhase::Takeoff) => (
+                    limits::FIG54_PA_FT.0,
+                    limits::FIG54_PA_FT.1,
+                    limits::FIG54_OAT_C.0,
+                    limits::FIG54_OAT_C.1,
+                ),
+                Some(ChartPhase::Landing) => (
+                    limits::TABLE4_PA_FT.0,
+                    limits::TABLE4_PA_FT.1,
+                    CHART_CLAMP_UNSET,
+                    CHART_CLAMP_UNSET,
+                ),
+                Some(ChartPhase::Climb) | None => match mode {
+                    AirfieldInputsMode::Takeoff => (
+                        limits::FIG54_PA_FT.0,
+                        limits::FIG54_PA_FT.1,
+                        limits::FIG54_OAT_C.0,
+                        limits::FIG54_OAT_C.1,
+                    ),
+                    AirfieldInputsMode::Climb => (
+                        limits::FIG52_PA_FT.0,
+                        limits::FIG52_PA_FT.1,
+                        limits::FIG52_OAT_C.0,
+                        limits::FIG52_OAT_C.1,
+                    ),
+                    AirfieldInputsMode::Full => (
+                        limits::FIG52_PA_FT.0,
+                        limits::FIG52_PA_FT.1,
+                        limits::FIG52_OAT_C.0,
+                        limits::FIG52_OAT_C.1,
+                    ),
+                },
+            };
             view! {
                 <NumField label=move || c.pressure_altitude_ft.to_string()
+                    min=pa_min
+                    max=pa_max
                     get=move || inputs.get().pressure_altitude_input_ft
                     set=move |v| {
                         inputs.update(|i| {
@@ -66,6 +138,8 @@ pub fn SharedAirfieldInputs(
                         });
                     }/>
                 <NumField label=move || c.oat.to_string()
+                    min=oat_min
+                    max=oat_max
                     get=move || inputs.get().oat_c
                     set=move |v| inputs.update(|i| i.oat_c = v)/>
                 {(mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full).then(|| {
@@ -157,17 +231,49 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
             let c = copy(locale.get());
             view! {
                 <NumField label=move || c.cruise_pa.to_string()
+                    min=limits::TABLE3_PA_FT.0
+                    max=limits::TABLE3_PA_FT.1
                     get=move || inputs.get().cruise_pressure_alt_ft
                     set=move |v| inputs.update(|i| {
                         i.cruise_pressure_alt_ft = v;
-                        i.cruise_oat_c = isa_temp_c_at_pa(v);
+                        let isa = isa_temp_c_at_pa(v);
+                        let (dmin, dmax) = limits::TABLE3_DISA_C;
+                        i.cruise_oat_c = i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
                     })/>
                 <NumField label=move || c.cruise_oat.to_string()
                     get=move || inputs.get().cruise_oat_c
-                    set=move |v| inputs.update(|i| i.cruise_oat_c = v)/>
-                <NumField label=move || c.cruise_rpm.to_string()
-                    get=move || inputs.get().cruise_rpm
-                    set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                    set=move |v| inputs.update(|i| {
+                        let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
+                        let (dmin, dmax) = limits::TABLE3_DISA_C;
+                        i.cruise_oat_c = v.clamp(isa + dmin, isa + dmax);
+                    })/>
+                <div class="toggle-row">
+                    <button type="button" class="btn g"
+                        class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm
+                        on:click=move |_| inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetRpm)>
+                        {c.cruise_mode_set_rpm}
+                    </button>
+                    <button type="button" class="btn g"
+                        class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetPercentBhp
+                        on:click=move |_| inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetPercentBhp)>
+                        {c.cruise_mode_set_bhp}
+                    </button>
+                </div>
+                {move || {
+                    if inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm {
+                        view! {
+                            <NumField label=move || c.cruise_rpm.to_string()
+                                get=move || inputs.get().cruise_rpm
+                                set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <NumField label=move || c.cruise_pct_bhp.to_string()
+                                get=move || inputs.get().cruise_percent_bhp
+                                set=move |v| inputs.update(|i| i.cruise_percent_bhp = v)/>
+                        }.into_any()
+                    }
+                }}
                 {move || {
                     let c = copy(locale.get());
                     let installed = inputs.get().wheel_fairings_installed;
@@ -211,6 +317,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                             i.wind_dir_deg = d;
                             i.wind_speed_kt = s;
                             i.wind_strip_crosswind_clamped = false;
+                            clamp_along_runway_wind(i);
                         });
                     }
                 }
@@ -221,6 +328,7 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                             i.wind_dir_deg = d;
                             i.wind_speed_kt = s;
                             i.wind_strip_crosswind_clamped = false;
+                            clamp_along_runway_wind(i);
                         });
                     }
                 }

@@ -8,8 +8,6 @@ pub enum AfmLookupTag {
     /// Between published points (interpolation within chart/table range).
     #[default]
     Interpolated,
-    /// Outside published range or RPM not tabulated in that region (extrapolation / off-chart).
-    Extrapolated,
 }
 
 /// Default flight-planning inputs for SCTB (Santa Clara County).
@@ -77,6 +75,14 @@ impl ClimbFigure {
     }
 }
 
+/// Table 3 cruise solve mode: hold RPM or hold %BHP and solve RPM inversely.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum CruiseSolveMode {
+    #[default]
+    SetRpm,
+    SetPercentBhp,
+}
+
 /// Performance penalty multipliers when optional wheel fairings are not installed (AFM note).
 pub fn climb_roc_fairing_multiplier(installed: bool) -> f64 {
     if installed {
@@ -108,6 +114,11 @@ pub struct FlightInputs {
     pub weight_lb: f64,
     pub cruise_pressure_alt_ft: f64,
     pub cruise_rpm: f64,
+    #[serde(default)]
+    pub cruise_solve_mode: CruiseSolveMode,
+    /// Target % BHP when `cruise_solve_mode` is `SetPercentBhp`.
+    #[serde(default = "default_cruise_percent_bhp")]
+    pub cruise_percent_bhp: f64,
     /// OAT (°C) at cruise pressure altitude for Table 3 (independent of aerodrome OAT).
     #[serde(default = "default_cruise_oat_c")]
     pub cruise_oat_c: f64,
@@ -151,6 +162,10 @@ fn default_cruise_oat_c() -> f64 {
     crate::cruise::isa_temp_c_at_pa(defaults::CRUISE_PRESSURE_ALT_FT)
 }
 
+fn default_cruise_percent_bhp() -> f64 {
+    56.25
+}
+
 fn default_wheel_fairings_installed() -> bool {
     true
 }
@@ -166,6 +181,8 @@ impl Default for FlightInputs {
             weight_lb: defaults::WEIGHT_LB,
             cruise_pressure_alt_ft: defaults::CRUISE_PRESSURE_ALT_FT,
             cruise_rpm: defaults::CRUISE_RPM,
+            cruise_solve_mode: CruiseSolveMode::default(),
+            cruise_percent_bhp: default_cruise_percent_bhp(),
             cruise_oat_c: default_cruise_oat_c(),
             obstacle_height_m: defaults::OBSTACLE_HEIGHT_DEFAULT_M,
             pa_override: None,
@@ -262,6 +279,9 @@ pub struct CruiseResult {
     pub provenance: ProvenanceBlock,
     #[serde(default)]
     pub afm_lookup_tag: AfmLookupTag,
+    /// Tabulated/solved RPM used for this Table 3 lookup.
+    #[serde(default)]
+    pub rpm: Option<f64>,
     /// % BHP from Table 3 (chart value; not scaled by wheel-fairing TAS note).
     #[serde(default)]
     pub percent_bhp: Option<f64>,

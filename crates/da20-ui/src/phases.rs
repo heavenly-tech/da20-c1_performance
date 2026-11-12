@@ -7,7 +7,7 @@ use leptos::prelude::*;
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
     afm_lookup_tag_label, copy, format_along_runway_component, format_crosswind_component,
-    format_obstacle_over, format_takeoff_conservative_estimate, Locale,
+    format_obstacle_over, format_out_of_chart, format_takeoff_conservative_estimate, Locale,
 };
 use crate::inputs::{
     AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, SharedAirfieldInputs,
@@ -20,7 +20,7 @@ use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
-use da20_core::types::ChartPhase;
+use da20_core::types::{ChartPhase, CruiseSolveMode};
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,7 +56,13 @@ pub fn PhaseShell(
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Climb>
                     <NumField label=move || copy(locale.get()).weight.to_string()
                         get=move || inputs.get().weight_lb
-                        set=move |v| inputs.update(|i| i.weight_lb = v)/>
+                        set=move |v| inputs.update(|i| {
+                            let kg_min = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.0;
+                            let kg_max = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.1;
+                            let lb_min = kg_min / 0.45359237;
+                            let lb_max = kg_max / 0.45359237;
+                            i.weight_lb = v.clamp(lb_min, lb_max);
+                        })/>
                     <ClimbFlapToggle locale=locale inputs=inputs data=data/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs/>
                     {move || {
@@ -299,7 +305,13 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if let Some(ooc) = &b.takeoff_ooc {
+                        view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }.into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }} else {
                 view! { <p class="lab results-muted">{c.results_runway_required}</p> }.into_any()
             }}
@@ -353,7 +365,13 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if let Some(ooc) = &b.climb_ooc {
+                        view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }.into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Cruise => view! {
@@ -367,11 +385,47 @@ fn phase_results(
                     let t_chart = tas_c.map(|x| x.round() as i64).unwrap_or(pen.round() as i64);
                     let t_pen = pen.round() as i64;
                     let bhp = cr.percent_bhp.unwrap_or(0.0);
+                    let rpm_out = cr.rpm.map(|x| x.round() as i64).unwrap_or(0);
+                    let bhp_mode = inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp;
+                    let off_chart = false;
+                    let off_suffix = if off_chart {
+                        format!(" · {}", c_loc.readout_off_chart)
+                    } else {
+                        String::new()
+                    };
+                    let requested_bhp = inputs.cruise_percent_bhp;
                     view! {
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=cr.provenance.clone()/>
                         <p class="chip">{afm_lookup_tag_label(locale, cr.afm_lookup_tag)}</p>
-                        {if fair_on {
+                        {if bhp_mode {
+                            if fair_on {
+                                view! {
+                                    <>
+                                        <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span>{off_suffix.clone()}</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
+                                    </>
+                                }.into_any()
+                            } else if tas_c.is_some() {
+                                view! {
+                                    <>
+                                        <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}{off_suffix.clone()}</p>
+                                        <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
+                                    </>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <>
+                                        <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
+                                        <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}{off_suffix.clone()}</p>
+                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"{off_suffix}</p>
+                                    </>
+                                }.into_any()
+                            }
+                        } else if fair_on {
                             view! {
                                 <>
                                     <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_chart}<span class="u">" kt TAS"</span></p>
@@ -398,7 +452,29 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    let c_loc = copy(locale);
+                    if let Some(ooc) = &b.cruise_ooc {
+                        view! {
+                            <div class="results-block">
+                                <p class="error warn">{format_out_of_chart(locale, ooc)}</p>
+                            </div>
+                        }
+                        .into_any()
+                    } else if b.cruise_bhp_not_achievable
+                        && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
+                    {
+                        view! {
+                            <div class="results-block">
+                                <p class="big mono">{format!("{:.2}", inputs.cruise_percent_bhp)}" % BHP"</p>
+                                <p class="error warn">{c_loc.cruise_bhp_not_achievable}</p>
+                            </div>
+                        }
+                        .into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Endurance => view! {
@@ -461,7 +537,13 @@ fn phase_results(
                         <WarningsList locale=locale warnings=l.warnings.clone()/>
                     </div>
                 }.into_any(),
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if let Some(ooc) = &b.landing_ooc {
+                        view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }.into_any()
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Manual => view! { <span></span> }.into_any(),

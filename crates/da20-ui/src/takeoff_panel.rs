@@ -192,6 +192,8 @@ fn TakeoffSignedHeadwindField(
         <div class="f">
             <label>{move || copy(locale.get()).takeoff_signed_headwind.to_string()}</label>
             <input type="number" step="any" class="mono"
+                min=-5.0
+                max=20.0
                 prop:value=move || {
                     if runway_heading_status(&inputs.get().runway) != RunwayHeadingStatus::Valid {
                         String::new()
@@ -204,6 +206,7 @@ fn TakeoffSignedHeadwindField(
                 on:input=move |ev| {
                     if let Ok(v) = input_value(&ev).parse::<f64>() {
                         inputs.update(|i| {
+                            let v = v.clamp(-5.0, 20.0);
                             da20_core::wind::apply_signed_along_runway_wind(i, v);
                         });
                     }
@@ -232,6 +235,11 @@ fn TakeoffObstacleUnitField(
                     <label>{label}</label>
                     <div class="unit-row">
                         <input type="number" step="any" class="mono"
+                            min=0.0
+                            max=move || match prefs.get().obstacle {
+                                ObstacleUnit::Meters => defaults::OBSTACLE_HEIGHT_MAX_M,
+                                ObstacleUnit::Feet => m_to_ft(defaults::OBSTACLE_HEIGHT_MAX_M),
+                            }
                             prop:value=move || {
                                 let unit = prefs.get().obstacle;
                                 let v = match unit {
@@ -416,8 +424,8 @@ pub fn TakeoffSweepPanel(
         <div class="card sweep-card">
             <h3>{move || copy(locale.get()).takeoff_sweep_title.to_string()}</h3>
             <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_oat.to_string() draft=oat/>
-            <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_hw.to_string() draft=hw/>
-            <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_obs.to_string() draft=obs/>
+            <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_hw.to_string() draft=hw range_min=-5.0 range_max=20.0/>
+            <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_obs.to_string() draft=obs range_min=0.0 range_max=defaults::OBSTACLE_HEIGHT_MAX_M/>
             <button type="button" class="btn g" on:click=run>
                 {move || copy(locale.get()).takeoff_sweep_run.to_string()}
             </button>
@@ -432,6 +440,8 @@ fn SweepVarRow(
     locale: RwSignal<Locale>,
     label: impl Fn() -> String + Send + 'static,
     draft: RwSignal<SweepVarDraft>,
+    #[prop(default = crate::inputs::CHART_CLAMP_UNSET)] range_min: f64,
+    #[prop(default = crate::inputs::CHART_CLAMP_UNSET)] range_max: f64,
 ) -> impl IntoView {
     view! {
         <div class="sweep-var">
@@ -447,9 +457,13 @@ fn SweepVarRow(
             </label>
             <div class="sweep-range">
                 <NumField label=move || copy(locale.get()).takeoff_sweep_start.to_string()
+                    min=range_min
+                    max=range_max
                     get=move || draft.get().start
                     set=move |v| draft.update(|d| d.start = v)/>
                 <NumField label=move || copy(locale.get()).takeoff_sweep_end.to_string()
+                    min=range_min
+                    max=range_max
                     get=move || draft.get().end
                     set=move |v| draft.update(|d| d.end = v)/>
                 <NumField label=move || copy(locale.get()).takeoff_sweep_step.to_string()
@@ -489,9 +503,26 @@ fn TakeoffSweepTable(
                         </thead>
                         <tbody>
                             {list.iter().map(|row| {
-                                let rounded = apply_takeoff_distance_rounding(&row.result, mode);
                                 let loc = locale.get();
-                                let tag = afm_lookup_tag_label(loc, row.result.afm_lookup_tag);
+                                let Some(ref result) = row.result else {
+                                    let obs_display = match prefs.get_untracked().obstacle {
+                                        ObstacleUnit::Meters => format!("{:.0} m", row.obstacle_height_m),
+                                        ObstacleUnit::Feet => format!("{:.0} ft", m_to_ft(row.obstacle_height_m)),
+                                    };
+                                    return view! {
+                                        <tr>
+                                            <td>{format!("{:.1}", row.oat_c)}</td>
+                                            <td>{format!("{:.1}", row.signed_headwind_kt)}</td>
+                                            <td>{obs_display}</td>
+                                            <td>"—"</td>
+                                            <td>"—"</td>
+                                            <td><span class="chip">"—"</span></td>
+                                        </tr>
+                                    }
+                                    .into_any();
+                                };
+                                let rounded = apply_takeoff_distance_rounding(result, mode);
+                                let tag = afm_lookup_tag_label(loc, result.afm_lookup_tag);
                                 let obs_display = match prefs.get_untracked().obstacle {
                                     ObstacleUnit::Meters => format!("{:.0} m", row.obstacle_height_m),
                                     ObstacleUnit::Feet => format!("{:.0} ft", m_to_ft(row.obstacle_height_m)),
@@ -506,9 +537,18 @@ fn TakeoffSweepTable(
                                         <td><span class="chip">{tag}</span></td>
                                     </tr>
                                 }
+                                .into_any()
                             }).collect_view()}
                         </tbody>
                     </table>
+                    {move || {
+                        let c = copy(locale.get());
+                        if rows.get().iter().any(|r| r.result.is_none()) {
+                            view! { <p class="lab results-muted">{c.takeoff_sweep_oob_footnote}</p> }.into_any()
+                        } else {
+                            ().into_any()
+                        }
+                    }}
                 </div>
             }
             .into_any()

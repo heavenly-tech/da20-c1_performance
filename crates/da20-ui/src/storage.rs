@@ -1,5 +1,10 @@
 use std::collections::BTreeMap;
 
+use da20_core::chart_bounds::ChartOutOfRange;
+use da20_core::climb::ClimbError;
+use da20_core::cruise::CruiseError;
+use da20_core::landing::LandingError;
+use da20_core::takeoff::TakeoffError;
 use da20_core::types::{climb_roc_fairing_multiplier, cruise_fairing_multiplier, FlightInputs};
 use da20_core::wind_format::format_wind;
 use da20_core::PerformanceData;
@@ -254,19 +259,80 @@ pub struct SavedBundle {
     pub takeoff: Option<da20_core::types::TakeoffResult>,
     pub climb: Option<da20_core::types::ClimbResult>,
     pub cruise: Option<da20_core::types::CruiseResult>,
+    pub cruise_bhp_not_achievable: bool,
+    pub cruise_out_of_chart: bool,
+    pub takeoff_out_of_chart: bool,
+    pub climb_out_of_chart: bool,
+    pub landing_out_of_chart: bool,
+    pub takeoff_ooc: Option<ChartOutOfRange>,
+    pub climb_ooc: Option<ChartOutOfRange>,
+    pub cruise_ooc: Option<ChartOutOfRange>,
+    pub landing_ooc: Option<ChartOutOfRange>,
     pub landing: Option<da20_core::types::LandingResult>,
     pub wind: Option<da20_core::types::WindResult>,
     pub endurance: Option<da20_core::types::EnduranceResult>,
 }
 
 pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle {
+    let takeoff_res = da20_core::takeoff::compute_takeoff(data, inputs);
+    let climb_res = da20_core::climb::compute_climb(data, inputs, inputs.cruise_pressure_alt_ft);
+    let cruise_res = da20_core::cruise::compute_cruise(data, inputs);
+    let landing_res = da20_core::landing::compute_landing(data, inputs);
+
+    let takeoff_ooc = takeoff_ooc_from_err(takeoff_res.as_ref().err());
+    let climb_ooc = climb_ooc_from_err(climb_res.as_ref().err());
+    let cruise_ooc = cruise_ooc_from_err(cruise_res.as_ref().err());
+    let landing_ooc = landing_ooc_from_err(landing_res.as_ref().err());
+    let cruise_bhp_not_achievable = matches!(&cruise_res, Err(CruiseError::BhpNotAchievable));
+
     SavedBundle {
-        takeoff: da20_core::takeoff::compute_takeoff(data, inputs).ok(),
-        climb: da20_core::climb::compute_climb(data, inputs, inputs.cruise_pressure_alt_ft).ok(),
-        cruise: da20_core::cruise::compute_cruise(data, inputs).ok(),
-        landing: da20_core::landing::compute_landing(data, inputs).ok(),
+        takeoff: takeoff_res.ok(),
+        takeoff_out_of_chart: takeoff_ooc.is_some(),
+        takeoff_ooc,
+        climb: climb_res.ok(),
+        climb_out_of_chart: climb_ooc.is_some(),
+        climb_ooc,
+        cruise: cruise_res.ok(),
+        cruise_bhp_not_achievable,
+        cruise_out_of_chart: cruise_ooc.is_some(),
+        cruise_ooc,
+        landing: landing_res.ok(),
+        landing_out_of_chart: landing_ooc.is_some(),
+        landing_ooc,
         wind: da20_core::wind::compute_wind(data, inputs).ok(),
         endurance: None,
+    }
+}
+
+fn takeoff_ooc_from_err(err: Option<&TakeoffError>) -> Option<ChartOutOfRange> {
+    match err {
+        Some(TakeoffError::OutOfChart(e)) => Some(*e),
+        _ => None,
+    }
+}
+
+fn climb_ooc_from_err(err: Option<&ClimbError>) -> Option<ChartOutOfRange> {
+    match err {
+        Some(ClimbError::OutOfChart(e)) => Some(*e),
+        _ => None,
+    }
+}
+
+fn cruise_ooc_from_err(err: Option<&CruiseError>) -> Option<ChartOutOfRange> {
+    match err {
+        Some(CruiseError::OutOfChart { axis, min, max }) => Some(ChartOutOfRange {
+            label: axis,
+            min: *min,
+            max: *max,
+        }),
+        _ => None,
+    }
+}
+
+fn landing_ooc_from_err(err: Option<&LandingError>) -> Option<ChartOutOfRange> {
+    match err {
+        Some(LandingError::OutOfChart(e)) => Some(*e),
+        _ => None,
     }
 }
 

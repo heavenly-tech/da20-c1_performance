@@ -96,6 +96,10 @@ pub struct Copy {
     pub weight: &'static str,
     pub cruise_pa: &'static str,
     pub cruise_rpm: &'static str,
+    pub cruise_mode_set_rpm: &'static str,
+    pub cruise_mode_set_bhp: &'static str,
+    pub cruise_pct_bhp: &'static str,
+    pub cruise_bhp_not_achievable: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
     pub climb_fig_55: &'static str,
@@ -206,6 +210,7 @@ pub struct Copy {
     pub takeoff_sweep_col_gr: &'static str,
     pub takeoff_sweep_col_to: &'static str,
     pub takeoff_sweep_col_tag: &'static str,
+    pub takeoff_sweep_oob_footnote: &'static str,
     pub manual_title: &'static str,
     pub manual_intro: &'static str,
     pub afm_link: &'static str,
@@ -226,7 +231,6 @@ pub fn afm_lookup_tag_label(locale: Locale, tag: AfmLookupTag) -> &'static str {
     match tag {
         AfmLookupTag::Table => c.afm_tag_table,
         AfmLookupTag::Interpolated => c.afm_tag_interpolated,
-        AfmLookupTag::Extrapolated => c.afm_tag_extrapolated,
     }
 }
 
@@ -276,6 +280,11 @@ const ES: Copy = Copy {
     weight: "Peso (lb)",
     cruise_pa: "PA crucero (ft)",
     cruise_rpm: "RPM crucero",
+    cruise_mode_set_rpm: "Fijar RPM",
+    cruise_mode_set_bhp: "Fijar %BHP",
+    cruise_pct_bhp: "% BHP crucero",
+    cruise_bhp_not_achievable:
+        "No alcanzable — %BHP sin raíz en [rmin(PA), 2800 RPM] (Tabla 3).",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
     climb_fig_55: "Fig 5.5 — flaps crucero",
@@ -385,6 +394,7 @@ const ES: Copy = Copy {
     takeoff_sweep_col_gr: "Rodaje",
     takeoff_sweep_col_to: "Despegue",
     takeoff_sweep_col_tag: "Etiqueta",
+    takeoff_sweep_oob_footnote: "— = combinación fuera de carta (solo interpolación, sin extrapolar).",
     manual_title: "Manual de métodos",
     manual_intro: "Cada cálculo, fuente AFM, interpolación y limitaciones.",
     afm_link: "AFM oficial Rev 29",
@@ -439,6 +449,11 @@ const EN: Copy = Copy {
     weight: "Weight (lb)",
     cruise_pa: "Cruise PA (ft)",
     cruise_rpm: "Cruise RPM",
+    cruise_mode_set_rpm: "Set RPM",
+    cruise_mode_set_bhp: "Set %BHP",
+    cruise_pct_bhp: "Cruise % BHP",
+    cruise_bhp_not_achievable:
+        "Not achievable — no RPM root on [rmin(PA), 2800] at this PA/ΔISA.",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
     climb_fig_55: "Fig 5.5 — cruise flaps",
@@ -548,6 +563,7 @@ const EN: Copy = Copy {
     takeoff_sweep_col_gr: "Ground roll",
     takeoff_sweep_col_to: "Takeoff",
     takeoff_sweep_col_tag: "Tag",
+    takeoff_sweep_oob_footnote: "— = combination off chart (interpolation only, no extrapolation).",
     manual_title: "Methods manual",
     manual_intro: "Each calculation path, AFM source, interpolation, and limitations.",
     afm_link: "Official AFM Rev 29",
@@ -588,8 +604,8 @@ const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
-        summary: "ΔISA = OAT − ISA en esa PA. Interpolación de %Potencia, TAS y GPH en altitud entre filas publicadas y en ΔISA entre columnas −20 / 0 / +10. Si el RPM cae entre niveles tabulados, interpolación entre esas superficies. Carenados: aplicar ~−5% TAS después de la consulta Tabla 3; sin escalar GPH.",
-        interpolation: "Trilineal: bilineal PA × ΔISA en cada banda de RPM y luego lineal en RPM entre niveles tabulados vecinos. La etiqueta refleja la tabla antes del factor de carenados.",
+        summary: "ΔISA = OAT − ISA en PA. rmin(PA) lineal; RPM válido [rmin(PA), 2800]. Parámetro s normalizado, RPM_row por fila, mezcla en PA. %BHP: inversión en [rmin(PA), 2800]. Carenados: ~−5% TAS; GPH sin escalar.",
+        interpolation: "Tabla o Interpolado. Fuera de carta si PA, ΔISA o RPM salen del casco (p. ej. 6500 ft: RPM < 2512,5).",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
@@ -610,7 +626,7 @@ const ES_METHODS: [MethodCopy; 8] = [
         title: "Autonomía y alcance (derivado)",
         afm: "AFM §1.8, §5.3.10 (duración máxima) + Tabla 3 GPH",
         summary: "(Combustible utilizable − reserva) / caudal Tabla 3; alcance = autonomía × TAS.",
-        interpolation: "Usa crucero (Tabla 3) con las mismas etiquetas Tabla / Interpolado / Extrapolado.",
+        interpolation: "Hereda el casco Tabla 3; fuera de carta si falla el crucero.",
         limitations: "Derivado, no carta AFM. Combustible utilizable 24,0 US gal (total 24,5; AFM §1.8). Placas: 21,3 / 19,8 gal. Ver AFM §5.3.10 duración máxima.",
     },
 ];
@@ -648,8 +664,8 @@ const EN_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
-        summary: "ΔISA = OAT − ISA at that PA. Interpolate %BHP, KTAS, and GPH in altitude between published rows and in ΔISA between the −20 / 0 / +10 columns. If RPM lies between tabulated levels, interpolate between those RPM surfaces. Wheel fairings: apply ~−5% TAS after the Table 3 lookup; do not scale GPH.",
-        interpolation: "Trilinear-style: bilinear PA × ΔISA within each RPM band, then linear in RPM between neighboring tabulated RPM levels. Tag reflects table lookup before the fairing factor.",
+        summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled.",
+        interpolation: "Table or Interpolated tags only. Off chart when PA, ΔISA, or RPM leave the hull (e.g. 6500 ft: RPM < 2512.5).",
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
@@ -671,7 +687,7 @@ const EN_METHODS: [MethodCopy; 8] = [
         title: "Endurance & range (derived)",
         afm: "AFM §1.8, §5.3.10 (Maximum Flight Duration) + Table 3 GPH",
         summary: "(Usable fuel − reserve) / Table 3 flow; range = endurance × TAS.",
-        interpolation: "Uses Table 3 cruise with the same Table / Interpolated / Extrapolated tag.",
+        interpolation: "Inherits Table 3 cruise hull; out of chart if cruise fails.",
         limitations: "Derived, not an AFM chart. Usable fuel 24.0 US gal (24.5 total per AFM §1.8). Placards: 21.3 / 19.8 gal. See AFM §5.3.10.",
     },
 ];
@@ -916,6 +932,13 @@ fn chart_range_warn(locale: Locale, below: bool, actual_m: &str, bound_m: &str) 
     }
 }
 
+pub fn format_out_of_chart(
+    locale: Locale,
+    ooc: &da20_core::chart_bounds::ChartOutOfRange,
+) -> String {
+    warn_text(locale, &ooc.warning())
+}
+
 pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> String {
     if !w.message.is_empty() {
         return w.message.clone();
@@ -957,6 +980,37 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             Locale::Es => "GPH Tabla 3 transcritos del AFM Rev 29.".into(),
             Locale::En => "Table 3 GPH transcribed from AFM Rev 29.".into(),
         },
+        "CRUISE_BHP_OUT_OF_RANGE" => {
+            let pct = w.args.first().map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!(
+                    "%BHP solicitado {pct}%: RPM resuelto fuera de carta (fuera de la banda ±100 RPM de la Tabla 3 en esta PA/ΔISA)."
+                ),
+                Locale::En => format!(
+                    "Requested %BHP {pct}%: solved RPM is off chart (outside ±100 RPM of Table 3 rows at this PA/ΔISA)."
+                ),
+            }
+        }
+        "CHART_OUT_OF_RANGE" => {
+            let axis = w.args.first().map(String::as_str).unwrap_or("");
+            let min = w.args.get(1).map(String::as_str).unwrap_or("");
+            let max = w.args.get(2).map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!("Fuera de carta — {axis} ({min}..{max})."),
+                Locale::En => format!("Out of chart — {axis} ({min}..{max})."),
+            }
+        }
+        "CRUISE_BHP_NOT_ACHIEVABLE" => {
+            let pct = w.args.first().map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => format!(
+                    "%BHP solicitado {pct}% no alcanzable en esta PA/ΔISA (±100 RPM sobre carta)."
+                ),
+                Locale::En => format!(
+                    "Requested %BHP {pct}% not achievable at this PA/ΔISA (±100 RPM beyond table rows)."
+                ),
+            }
+        }
         "RUNWAY_HEADING" => match locale {
             Locale::Es => format!(
                 "Rumbo de pista «{ctx}» inválido — use 001–360 (3 dígitos); cálculo con 0°."
@@ -1092,6 +1146,16 @@ mod i18n_display_tests {
             ..Default::default()
         };
         assert!(wind_chart_panel_needs_crosswind_note(&inputs));
+    }
+
+    #[test]
+    fn cruise_mode_toggle_i18n_both_locales() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.cruise_mode_set_rpm, "Fijar RPM");
+        assert_eq!(es.cruise_mode_set_bhp, "Fijar %BHP");
+        assert_eq!(en.cruise_mode_set_rpm, "Set RPM");
+        assert_eq!(en.cruise_mode_set_bhp, "Set %BHP");
     }
 
     #[test]

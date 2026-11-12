@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use da20_core::altitude::effective_pressure_altitude_ft;
-use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
+use da20_core::types::{ChartPhase, ClimbFigure, CruiseSolveMode, FlightInputs};
 use da20_core::wind_format::format_wind;
 use leptos::prelude::*;
 
@@ -189,11 +189,14 @@ pub fn readout_inputs_summary_for_phase(
             )
         }
         Phase::Cruise | Phase::Endurance => {
+            let thrust = match inputs.cruise_solve_mode {
+                CruiseSolveMode::SetRpm => format!("{:.0} RPM", inputs.cruise_rpm),
+                CruiseSolveMode::SetPercentBhp => format!("{:.2} % BHP", inputs.cruise_percent_bhp),
+            };
             format!(
-                "Cr OAT {:.0} °C · PA {:.0} ft · {:.0} RPM · {:.0} lb · {} ({})",
+                "Cr OAT {:.0} °C · PA {:.0} ft · {thrust} · {:.0} lb · {} ({})",
                 inputs.cruise_oat_c,
                 inputs.cruise_pressure_alt_ft,
-                inputs.cruise_rpm,
                 inputs.weight_lb,
                 fair_lbl,
                 c.wheel_fairings_label_short,

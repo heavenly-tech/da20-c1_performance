@@ -19,7 +19,7 @@ pub fn run_rev29_reference_checks(data: &PerformanceData) -> Vec<HarnessResult> 
     let mut out = Vec::new();
     let inner = data.inner();
 
-    let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0);
+    let d = takeoff_distances_m(inner, 1000.0, 21.0, 725.0, 4.0, 0.0, 5.0).unwrap();
     let raw_ft = m_to_ft(d.over_obstacle_m);
     let cons_ft = afm_conservative_distance_ft(raw_ft);
     out.push(HarnessResult {

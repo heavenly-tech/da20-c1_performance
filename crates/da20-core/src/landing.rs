@@ -1,5 +1,6 @@
 use crate::afm_tag::landing_tag_from_pa;
 use crate::altitude::effective_pressure_altitude_ft;
+use crate::chart_bounds::ChartOutOfRange;
 use crate::data::PerformanceData;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::landing_lookup_ft;
@@ -13,8 +14,8 @@ pub const LANDING_NO_CORRECTIONS_NOTE: &str =
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum LandingError {
-    #[error("landing lookup failed")]
-    Failed,
+    #[error(transparent)]
+    OutOfChart(ChartOutOfRange),
 }
 
 pub fn compute_landing(
@@ -22,11 +23,12 @@ pub fn compute_landing(
     inputs: &FlightInputs,
 ) -> Result<LandingResult, LandingError> {
     let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Landing));
-    let (roll_ft, over_50_ft, mut warnings) = landing_lookup_ft(data.inner(), pa);
+    let (roll_ft, over_50_ft, mut warnings) =
+        landing_lookup_ft(data.inner(), pa).map_err(LandingError::OutOfChart)?;
 
     warnings.push(CalculationWarning::code_only("LANDING_TABLE_50FT"));
     warnings.push(CalculationWarning::code_only("LANDING_NO_WIND"));
-    let afm_lookup_tag = landing_tag_from_pa(&warnings, pa, &data.inner().land_alt.value);
+    let afm_lookup_tag = landing_tag_from_pa(pa, &data.inner().land_alt.value);
 
     Ok(LandingResult {
         provenance: provenance_for(data.inner(), data.landing_source()),
@@ -39,7 +41,9 @@ pub fn compute_landing(
 }
 
 pub fn table_landing_50ft_ft(data: &PerformanceData, pa_ft: f64) -> f64 {
-    landing_lookup_ft(data.inner(), pa_ft).1
+    landing_lookup_ft(data.inner(), pa_ft)
+        .map(|t| t.1)
+        .unwrap_or(f64::NAN)
 }
 
 #[cfg(test)]
