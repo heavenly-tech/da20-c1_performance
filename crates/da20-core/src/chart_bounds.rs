@@ -9,6 +9,8 @@ pub const CHART_EDGE_TOL: f64 = 1e-6;
 pub mod limits {
     pub const TABLE3_PA_FT: (f64, f64) = (2000.0, 12000.0);
     pub const TABLE3_DISA_C: (f64, f64) = (-20.0, 10.0);
+    /// MT supplement Fig 4 (density altitude nodes, ft).
+    pub const FIG4_DA_FT: (f64, f64) = (2000.0, 12000.0);
     pub const FIG52_PA_FT: (f64, f64) = (0.0, 16000.0);
     pub const FIG52_OAT_C: (f64, f64) = (-20.0, 60.0);
     pub const FIG54_PA_FT: (f64, f64) = (0.0, 10000.0);

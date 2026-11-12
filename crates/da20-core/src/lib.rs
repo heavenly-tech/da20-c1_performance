@@ -15,6 +15,7 @@ pub mod equivalent_altitude;
 pub mod interpolation;
 pub mod landing;
 pub mod methods;
+pub mod mt175r;
 pub mod poh_harness;
 pub mod pressure;
 pub mod provenance;

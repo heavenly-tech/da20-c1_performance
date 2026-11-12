@@ -4,7 +4,8 @@ use crate::interpolation::lerp;
 use crate::provenance::provenance_for;
 use crate::types::{
     cruise_fairing_multiplier, AfmLookupTag, CalculationWarning, CruiseResult, CruiseSolveMode,
-    FlightInputs, Table3PaBracketRow, Table3PublishedCell, Table3RpmBracketRow, Table3SourceTrace,
+    FlightInputs, PropellerKind, Table3PaBracketRow, Table3PublishedCell, Table3RpmBracketRow,
+    Table3SourceTrace,
 };
 
 pub const CRUISE_TABLE3_GPH_NOTE: &str = "Table 3 GPH values are transcribed as printed in AFM Rev 29 (includes known oddities, e.g. 2000 ft / 2700 RPM ISA 6.8 GPH vs −20 °C 7.7 GPH; 4000 ft / 2800 RPM +10 °C 6.8 GPH).";
@@ -666,11 +667,13 @@ fn build_cruise_result(
         fuel_flow_chart_us_gal_h: Some(tri.gph),
         fuel_flow_us_gal_h: tri.gph,
         table3_source: Some(table3_source),
+        mt_fig4_source: None,
+        density_altitude_ft: None,
         warnings,
     })
 }
 
-pub fn compute_cruise(
+fn compute_cruise_sensenich(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<CruiseResult, CruiseError> {
@@ -712,14 +715,27 @@ pub fn compute_cruise(
     )
 }
 
+pub fn compute_cruise(
+    data: &PerformanceData,
+    inputs: &FlightInputs,
+) -> Result<CruiseResult, CruiseError> {
+    match inputs.propeller {
+        PropellerKind::Mt175R => crate::mt175r::cruise::compute_cruise(data, inputs),
+        PropellerKind::Sensenich => compute_cruise_sensenich(data, inputs),
+    }
+}
+
 /// RPM row to highlight in the full Table 3 view (solved RPM in %BHP mode).
 pub fn effective_cruise_highlight_rpm(data: &PerformanceData, inputs: &FlightInputs) -> f64 {
-    match inputs.cruise_solve_mode {
-        CruiseSolveMode::SetRpm => inputs.cruise_rpm,
-        CruiseSolveMode::SetPercentBhp => compute_cruise(data, inputs)
-            .ok()
-            .and_then(|r| r.rpm)
-            .unwrap_or(inputs.cruise_rpm),
+    match inputs.propeller {
+        PropellerKind::Mt175R => crate::mt175r::cruise::effective_cruise_highlight_rpm(inputs),
+        PropellerKind::Sensenich => match inputs.cruise_solve_mode {
+            CruiseSolveMode::SetRpm => inputs.cruise_rpm,
+            CruiseSolveMode::SetPercentBhp => compute_cruise_sensenich(data, inputs)
+                .ok()
+                .and_then(|r| r.rpm)
+                .unwrap_or(inputs.cruise_rpm),
+        },
     }
 }
 
