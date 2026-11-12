@@ -236,7 +236,7 @@ pub fn afm_lookup_tag_label(locale: Locale, tag: AfmLookupTag) -> &'static str {
 
 const ES: Copy = Copy {
     disclaimer: "No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. Valores digitalizados y aproximados. El AFM aprobado rige toda la planificación de vuelo.",
-    logo_suffix: "Rendimiento",
+    logo_suffix: "Performance",
     tab_takeoff: "Despegue",
     tab_climb: "Ascenso",
     tab_cruise: "Crucero y potencia",
@@ -294,7 +294,7 @@ const ES: Copy = Copy {
     climb_flaps_up: "Flaps UP/CRUISE",
     climb_flaps_ldg: "Flaps LDG - Balked Landing",
     climb_flaps_balked_unavailable:
-        "Datos Fig 5.8 (aterrizaje abortado) no disponibles en el archivo de rendimiento.",
+        "Datos Fig 5.8 (aterrizaje abortado) no disponibles en el archivo de performance.",
     wheel_fairings_installed_yes: "Cubiertas de rueda instaladas",
     wheel_fairings_installed_no: "Sin cubiertas de rueda",
     wheel_fairings_toggle_label: "Carenados de rueda / Wheel fairings",
@@ -575,7 +575,7 @@ const EN: Copy = Copy {
 const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
-        afm: "AFM DA202-C1 Rev 29 — entradas de rendimiento",
+        afm: "AFM DA202-C1 Rev 29 — entradas de performance",
         summary: "Se ingresa altitud de presión (ft) como si el día fuera estándar (1013,25 hPa); sin corrección por QNH. La PA de carta directa (cursor) anula el valor escrito.",
         interpolation: "Fórmula directa; cartas usan interpolación lineal.",
         limitations: "Conversión hPa→ft aproximada; verifique con ejemplos del AFM.",

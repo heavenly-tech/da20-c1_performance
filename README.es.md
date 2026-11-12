@@ -1,4 +1,4 @@
-# Planificador de rendimiento DA20-C1 Eclipse
+# Planificador de performance DA20-C1 Eclipse
 
 Versión en español del README principal. La interfaz usa **español por defecto** (conmutador EN).
 
