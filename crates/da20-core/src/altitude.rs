@@ -20,6 +20,14 @@ pub fn density_altitude_ft(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
     pressure_altitude_ft + (120.0 * (oat_c - isa_temp_c))
 }
 
+/// NOAA/NWS density altitude (ft); matches AFMS E-1487 worked example to ~1 ft.
+pub fn nws_density_altitude_ft(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
+    let p_inhg = 29.92126 * (1.0 - 6.8755856e-6 * pressure_altitude_ft).powf(5.2558797);
+    let t_f = oat_c * 9.0 / 5.0 + 32.0;
+    let inner = (17.326 * p_inhg) / (459.67 + t_f);
+    145442.16 * (1.0 - inner.powf(0.235))
+}
+
 fn resolved_override(inputs: &FlightInputs) -> Option<PaOverride> {
     inputs.pa_override.or_else(|| {
         inputs.direct_pressure_altitude_ft.map(|pa_ft| PaOverride {
@@ -60,6 +68,12 @@ mod tests {
     fn sctb_pressure_altitude_at_standard_qnh() {
         let pa = pressure_altitude_ft_from_qnh(2130.0, 1013.0);
         assert!((pa - (2130.0 + 7.5)).abs() < 1.0);
+    }
+
+    #[test]
+    fn nws_da_worked_example() {
+        let da = nws_density_altitude_ft(6000.0, 15.0);
+        assert!((da - 7390.37).abs() < 0.5, "da={da}");
     }
 
     #[test]

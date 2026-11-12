@@ -83,6 +83,14 @@ pub enum CruiseSolveMode {
     SetPercentBhp,
 }
 
+/// Installed propeller / cruise data source (AFM Table 3 vs MT AFMS Fig 4).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum PropellerKind {
+    #[default]
+    Sensenich,
+    Mt175R,
+}
+
 /// Performance penalty multipliers when optional wheel fairings are not installed (AFM note).
 pub fn climb_roc_fairing_multiplier(installed: bool) -> f64 {
     if installed {
@@ -144,6 +152,8 @@ pub struct FlightInputs {
     /// UI-only: set when strip wind drag hits pure-crosswind clamp (not persisted).
     #[serde(default, skip_serializing)]
     pub wind_strip_crosswind_clamped: bool,
+    #[serde(default)]
+    pub propeller: PropellerKind,
 }
 
 fn default_fuel_usable() -> f64 {
@@ -192,6 +202,7 @@ impl Default for FlightInputs {
             fuel_usable_us_gal: defaults::FUEL_USABLE_US_GAL,
             fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
             wind_strip_crosswind_clamped: false,
+            propeller: PropellerKind::default(),
         }
     }
 }
@@ -310,6 +321,42 @@ pub struct Table3SourceTrace {
     pub pa_rows: Vec<Table3PaBracketRow>,
 }
 
+/// One Fig 4 cell with blend weight in an MT lookup trace.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MtFig4PublishedCell {
+    pub percent_bhp: f64,
+    pub tas_kt: f64,
+    pub gph: f64,
+    #[serde(default)]
+    pub weight: f64,
+    #[serde(default)]
+    pub used: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MtFig4RpmBracketRow {
+    pub da_ft: f64,
+    pub rpm: f64,
+    pub rpm_weight: f64,
+    pub cells: Vec<MtFig4PublishedCell>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MtFig4DaBracketRow {
+    pub da_ft: f64,
+    pub rpm_sample: f64,
+    pub da_weight: f64,
+    pub rpm_rows: Vec<MtFig4RpmBracketRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct MtFig4SourceTrace {
+    pub query_pa_ft: f64,
+    pub query_da_ft: f64,
+    pub query_rpm: f64,
+    pub da_rows: Vec<MtFig4DaBracketRow>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Table4PaBracketRow {
     pub pa_ft: f64,
@@ -345,6 +392,11 @@ pub struct CruiseResult {
     pub fuel_flow_us_gal_h: f64,
     #[serde(default)]
     pub table3_source: Option<Table3SourceTrace>,
+    #[serde(default)]
+    pub mt_fig4_source: Option<MtFig4SourceTrace>,
+    /// NWS density altitude used for MT Fig 4 (Sensenich cruise leaves this unset).
+    #[serde(default)]
+    pub density_altitude_ft: Option<f64>,
     pub warnings: Vec<CalculationWarning>,
 }
 
