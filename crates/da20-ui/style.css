@@ -496,6 +496,7 @@ body {
   font-weight: 600;
 }
 
+/* Table trace: light row band + stronger cell border (not color-only). */
 .data-table tr.row-source-band td {
   background: color-mix(in srgb, var(--amb) 10%, var(--bg));
   box-shadow: inset 4px 0 0 var(--amb);
