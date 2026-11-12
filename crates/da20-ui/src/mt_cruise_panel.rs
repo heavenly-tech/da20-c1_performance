@@ -1,9 +1,7 @@
 //! MT AFMS Fig 2/3 reference charts and Fig 4 table for cruise phase.
 
-use da20_core::altitude::nws_density_altitude_ft;
 use da20_core::mt175r::charts::{
-    fig2_curve_chart_points, fig2_rpm_at_da, fig3_curve_chart_points,
-    fig3_full_throttle_chart_points,
+    fig2_curve_chart_points, fig3_curve_chart_points, fig3_full_throttle_chart_points,
 };
 use da20_core::mt175r::Mt175rData;
 use da20_core::rev29::charts::map_to_svg;
@@ -61,6 +59,25 @@ fn polyline_svg(points: &[(f64, f64)], da_min: f64, da_max: f64, y_min: f64, y_m
     format_svg_polyline(&svg_pts)
 }
 
+fn mt_chart_cursor_readout(
+    _locale: Locale,
+    chart_ok: bool,
+    da: Option<f64>,
+    rpm: Option<f64>,
+    tas: Option<f64>,
+) -> String {
+    if !chart_ok {
+        return "—".into();
+    }
+    let da = da.unwrap_or(f64::NAN);
+    let rpm = rpm.unwrap_or(f64::NAN);
+    let tas = tas.unwrap_or(f64::NAN);
+    if !da.is_finite() || !rpm.is_finite() || !tas.is_finite() {
+        return "—".into();
+    }
+    format!("DA {:.0} ft · {:.0} RPM · {:.0} kt", da, rpm, tas)
+}
+
 #[component]
 pub fn MtCruisePanel(
     locale: RwSignal<Locale>,
@@ -71,15 +88,15 @@ pub fn MtCruisePanel(
         <p class="lab plot-hint">{move || copy(locale.get()).plot_hint}</p>
         {move || {
             let mt = Mt175rData::production();
+            let loc = locale.get();
             let i = inputs.get();
             let b = compute_all(&data.get(), &i);
+            let chart_ok = b.cruise.is_some();
             let cr = b.cruise.as_ref();
-            let da = nws_density_altitude_ft(i.cruise_pressure_alt_ft, i.cruise_oat_c);
             let pct = chart_pct_bhp(&i, cr.and_then(|c| c.percent_bhp));
-            let cursor_rpm = cr.and_then(|c| c.rpm).unwrap_or(i.cruise_rpm);
-            let cursor_tas = cr
-                .and_then(|c| c.tas_chart_kt)
-                .unwrap_or_else(|| cr.map(|c| c.tas_kt).unwrap_or(0.0));
+            let da = cr.and_then(|c| c.density_altitude_ft);
+            let cursor_rpm = cr.and_then(|c| c.rpm);
+            let cursor_tas = cr.and_then(|c| c.tas_chart_kt);
 
             let da_min = 0.0;
             let da_max = 12_000.0;
@@ -110,43 +127,46 @@ pub fn MtCruisePanel(
                 tas_max,
             );
 
-            let (cx, cy_rpm) = map_da_y(
-                da,
-                cursor_rpm,
-                da_min,
-                da_max,
-                rpm_min,
-                rpm_max,
-            );
-            let (cx2, cy_tas) = map_da_y(
-                da,
-                cursor_tas,
-                da_min,
-                da_max,
-                tas_min,
-                tas_max,
-            );
-            let rpm_curve = fig2_rpm_at_da(&mt, pct, da).unwrap_or(cursor_rpm);
-            let (_, cy_rpm_curve) = map_da_y(da, rpm_curve, da_min, da_max, rpm_min, rpm_max);
+            let cursor_readout =
+                mt_chart_cursor_readout(loc, chart_ok, da, cursor_rpm, cursor_tas);
+
+            let fig2_cursor = if chart_ok {
+                let da = da.expect("chart_ok");
+                let rpm = cursor_rpm.expect("chart_ok");
+                let (cx, cy_rpm) =
+                    map_da_y(da, rpm, da_min, da_max, rpm_min, rpm_max);
+                view! { <circle class="chart-marker" cx=cx cy=cy_rpm r="4"/> }.into_any()
+            } else {
+                view! { <span></span> }.into_any()
+            };
+
             let vb_w = MT_W + MT_MARGIN_L + MT_MARGIN_R;
             let vb_h = MT_H + MT_MARGIN_B + MT_MARGIN_T;
-            let c = copy(locale.get());
+            let c = copy(loc);
 
             view! {
                 <p class="lab mono">{format!("{} · {pct}% BHP", c.mt_fig2_title)}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
                     <polyline class="chart-stroke-line" points=fig2_line fill="none"/>
-                    <circle class="chart-marker" cx=cx cy=cy_rpm r="4"/>
-                    <circle class="chart-handle" cx=cx cy=cy_rpm_curve r="3"/>
+                    {fig2_cursor}
                 </svg>
                 <p class="lab mono">{format!("{} · {pct}% BHP", c.mt_fig3_title)}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
                     <polyline class="chart-stroke-line" points=fig3_ft_line fill="none"/>
                     <polyline class="chart-stroke-line-hi" points=fig3_line fill="none"/>
-                    <circle class="chart-marker" cx=cx2 cy=cy_tas r="4"/>
+                    {if chart_ok {
+                        let da = da.expect("chart_ok");
+                        let tas = cursor_tas.expect("chart_ok");
+                        let (cx2, cy_tas) =
+                            map_da_y(da, tas, da_min, da_max, tas_min, tas_max);
+                        view! { <circle class="chart-marker" cx=cx2 cy=cy_tas r="4"/> }.into_any()
+                    } else {
+                        view! { <span></span> }.into_any()
+                    }}
                 </svg>
+                <p class="cursor-readout mono">{cursor_readout}</p>
                 <MtFig4TableView locale=locale data=data inputs=inputs/>
             }
         }}

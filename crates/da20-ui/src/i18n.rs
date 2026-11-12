@@ -112,6 +112,8 @@ pub struct Copy {
     pub mt_fig3_title: &'static str,
     pub mt_fig4_col_da: &'static str,
     pub mt_fig4_col_rpm: &'static str,
+    pub landing_tbl_roll_ft: &'static str,
+    pub landing_tbl_50ft_ft: &'static str,
     pub mt_fig4_da_weight_lbl: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
@@ -324,13 +326,15 @@ const ES: Copy = Copy {
     propeller_no_change_note:
         "Sin cambio según AFMS E-1487 / No change per AFMS E-1487",
     density_altitude_readout: "Alt. densidad (DA)",
-    mt_tcca_badge: "Los datos de rendimiento no están aprobados por TCCA.",
+    mt_tcca_badge: "Datos no aprobados por TCCA (AFMS E-1487)",
     cruise_subtitle_table3: "Tabla 3",
     cruise_subtitle_mt: "AFMS Fig 4 — MT 175 R",
     mt_fig2_title: "Fig 2 — RPM vs DA",
     mt_fig3_title: "Fig 3 — TAS vs DA",
     mt_fig4_col_da: "DA",
     mt_fig4_col_rpm: "RPM",
+    landing_tbl_roll_ft: "Rodaje ft",
+    landing_tbl_50ft_ft: "50 ft ft",
     mt_fig4_da_weight_lbl: "Peso DA",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
@@ -341,7 +345,7 @@ const ES: Copy = Copy {
     climb_flaps_up: "Flaps UP/CRUISE",
     climb_flaps_ldg: "Flaps LDG - Balked Landing",
     climb_flaps_balked_unavailable:
-        "Datos Fig 5.8 (aterrizaje abortado) no disponibles en el archivo de rendimiento.",
+        "Datos Fig 5.8 (aterrizaje abortado) no disponibles en el archivo de performance.",
     wheel_fairings_installed_yes: "Cubiertas de rueda instaladas",
     wheel_fairings_installed_no: "Sin cubiertas de rueda",
     wheel_fairings_toggle_label: "Carenados de rueda / Wheel fairings",
@@ -511,13 +515,15 @@ const EN: Copy = Copy {
     propeller_no_change_note:
         "No change per AFMS E-1487 / Sin cambio según AFMS E-1487",
     density_altitude_readout: "Density altitude (DA)",
-    mt_tcca_badge: "Performance data is not TCCA approved.",
+    mt_tcca_badge: "Not TCCA-approved data (AFMS E-1487)",
     cruise_subtitle_table3: "Table 3",
     cruise_subtitle_mt: "AFMS Fig 4 — MT 175 R",
     mt_fig2_title: "Fig 2 — RPM vs DA",
     mt_fig3_title: "Fig 3 — TAS vs DA",
     mt_fig4_col_da: "DA",
     mt_fig4_col_rpm: "RPM",
+    landing_tbl_roll_ft: "Roll ft",
+    landing_tbl_50ft_ft: "50 ft ft",
     mt_fig4_da_weight_lbl: "DA weight",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
@@ -644,7 +650,7 @@ const EN: Copy = Copy {
 const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
-        afm: "AFM DA202-C1 Rev 29 — entradas de rendimiento",
+        afm: "AFM DA202-C1 Rev 29 — entradas de performance",
         summary: "Se ingresa altitud de presión (ft) como si el día fuera estándar (1013,25 hPa); sin corrección por QNH. La PA de carta directa (cursor) anula el valor escrito.",
         interpolation: "Fórmula directa; cartas usan interpolación lineal.",
         limitations: "Conversión hPa→ft aproximada; verifique con ejemplos del AFM.",
@@ -1036,10 +1042,10 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             let rpm = w.args.get(1).map(String::as_str).unwrap_or("");
             match locale {
                 Locale::Es => {
-                    format!("GPH dudoso en la celda impresa AD {da} ft / RPM {rpm} (Fig 4).")
+                    format!("Valor de consumo impreso dudoso en el AFMS (AD {da} ft / RPM {rpm}).")
                 }
                 Locale::En => {
-                    format!("Doubtful GPH at printed cell DA {da} ft / RPM {rpm} (Fig 4).")
+                    format!("Doubtful printed fuel value in AFMS (DA {da} ft / RPM {rpm}).")
                 }
             }
         }

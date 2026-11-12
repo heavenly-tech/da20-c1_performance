@@ -1,6 +1,6 @@
 use da20_core::altitude::nws_density_altitude_ft;
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
-use da20_core::chart_bounds::limits;
+use da20_core::chart_bounds::{limits, CHART_EDGE_TOL};
 use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::types::CruiseSolveMode;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs, PropellerKind};
@@ -304,8 +304,14 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                         inputs.get().cruise_pressure_alt_ft,
                         inputs.get().cruise_oat_c,
                     );
+                    let (lo, hi) = limits::FIG4_DA_FT;
+                    let da_txt = if da >= lo - CHART_EDGE_TOL && da <= hi + CHART_EDGE_TOL {
+                        format!("{}", da.round() as i64)
+                    } else {
+                        "—".into()
+                    };
                     view! {
-                        <p class="lab mono">{c.density_altitude_readout}": "{da.round() as i64}" ft"</p>
+                        <p class="lab mono">{c.density_altitude_readout}": "{da_txt}" ft"</p>
                     }
                 })}
                 <div class="toggle-row">
