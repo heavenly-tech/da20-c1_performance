@@ -13,9 +13,7 @@ use da20_core::rev29::ea_inverse::pressure_altitude_for_equivalent_altitude;
 use da20_core::rev29::engine::{equivalent_altitude_ft, lb_to_kg};
 use da20_core::rev29::hand_plot::climb_fan_pa_curve_chart_points;
 use da20_core::takeoff::compute_takeoff;
-use da20_core::types::{
-    AfmLookupTag, ChartPhase, FlightInputs,
-};
+use da20_core::types::{AfmLookupTag, ChartPhase, FlightInputs};
 
 use crate::table_source_panel::{
     cruise_table_cell_highlight, cruise_table_row_highlight, landing_table_row_highlight,

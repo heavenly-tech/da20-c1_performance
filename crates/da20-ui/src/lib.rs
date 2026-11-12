@@ -8,6 +8,7 @@ mod components;
 mod i18n;
 mod inputs;
 mod interactive_chart;
+mod mt_cruise_panel;
 mod palette;
 mod phase_readouts;
 mod phases;

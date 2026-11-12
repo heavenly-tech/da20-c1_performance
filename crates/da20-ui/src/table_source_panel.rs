@@ -1,5 +1,6 @@
 use da20_core::cruise::table3_trace_uses_cell;
-use da20_core::types::{Table3SourceTrace, Table4SourceTrace};
+use da20_core::mt175r::cruise::mt_fig4_trace_uses_cell;
+use da20_core::types::{MtFig4SourceTrace, Table3SourceTrace, Table4SourceTrace};
 use leptos::prelude::*;
 
 use crate::i18n::{copy, Locale};
@@ -171,6 +172,117 @@ pub fn cruise_table_cell_highlight(
 ) -> bool {
     trace
         .map(|t| table3_trace_uses_cell(t, pa, rpm, disa_c))
+        .unwrap_or(false)
+}
+
+#[component]
+pub fn MtFig4SourcePanel(locale: Locale, #[prop(into)] trace: MtFig4SourceTrace) -> impl IntoView {
+    let c = copy(locale);
+    view! {
+        <div class="table-source-block">
+            <h4 class="table-source-title">{c.table_rows_used_title}</h4>
+            <div class="table-scroll">
+                {trace
+                    .da_rows
+                    .iter()
+                    .map(|da_row| {
+                        view! {
+                            <div class="table-source-pa-group">
+                                <p class="mono table-source-meta">{format!(
+                                    "{} {} ft · {} {:.1} · {} {:.4}",
+                                    c.mt_fig4_col_da,
+                                    da_row.da_ft as i64,
+                                    c.table_source_rpm_sample_lbl,
+                                    da_row.rpm_sample,
+                                    c.mt_fig4_da_weight_lbl,
+                                    da_row.da_weight,
+                                )}</p>
+                                {da_row
+                                    .rpm_rows
+                                    .iter()
+                                    .map(|rpm_row| {
+                                        view! {
+                                            <table class="data-table table-source-rpm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>{c.mt_fig4_col_rpm}</th>
+                                                        <th>{c.table_source_rpm_weight_lbl}</th>
+                                                        <th>{c.cruise_tbl_pct_bhp}</th>
+                                                        <th>{c.cruise_tbl_ktas}</th>
+                                                        <th>{c.cruise_tbl_gph}</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr class="row-source-band">
+                                                        <td class="mono">{rpm_row.rpm as i64}</td>
+                                                        <td class="mono">{format!("{:.4}", rpm_row.rpm_weight)}</td>
+                                                        {rpm_row.cells.first().map(|cell| {
+                                                            let used_cls = if cell.used {
+                                                                "cell-used-emphasis"
+                                                            } else {
+                                                                ""
+                                                            };
+                                                            view! {
+                                                                <>
+                                                                    <td class=format!("mono {used_cls}")>
+                                                                        {if cell.used {
+                                                                            format!("{:.2}", cell.percent_bhp)
+                                                                        } else {
+                                                                            "—".into()
+                                                                        }}
+                                                                    </td>
+                                                                    <td class=format!("mono {used_cls}")>
+                                                                        {if cell.used {
+                                                                            format!("{:.0}", cell.tas_kt)
+                                                                        } else {
+                                                                            "—".into()
+                                                                        }}
+                                                                    </td>
+                                                                    <td class=format!("mono {used_cls}")>
+                                                                        {if cell.used {
+                                                                            format!("{:.1}", cell.gph)
+                                                                        } else {
+                                                                            "—".into()
+                                                                        }}
+                                                                    </td>
+                                                                </>
+                                                            }
+                                                        })}
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        }
+                                    })
+                                    .collect_view()}
+                            </div>
+                        }
+                    })
+                    .collect_view()}
+            </div>
+        </div>
+    }
+}
+
+pub fn mt_fig4_table_row_highlight(
+    trace: Option<&MtFig4SourceTrace>,
+    da_ft: f64,
+    rpm: f64,
+) -> bool {
+    let Some(t) = trace else {
+        return false;
+    };
+    t.da_rows.iter().any(|dr| {
+        (dr.da_ft - da_ft).abs() < 0.5 && dr.rpm_rows.iter().any(|rr| (rr.rpm - rpm).abs() < 0.5)
+    })
+}
+
+pub fn mt_fig4_table_cell_highlight(
+    trace: Option<&MtFig4SourceTrace>,
+    da_ft: f64,
+    rpm: f64,
+) -> bool {
+    trace
+        .map(|t| mt_fig4_trace_uses_cell(t, da_ft, rpm))
         .unwrap_or(false)
 }
 

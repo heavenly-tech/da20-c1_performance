@@ -1245,4 +1245,26 @@ mod tests {
         assert!((on.tas_kt - chart_tas).abs() < 1e-6);
         assert!((on.fuel_flow_us_gal_h - chart_ff).abs() < 1e-6);
     }
+
+    #[test]
+    fn propeller_does_not_change_takeoff_climb_landing() {
+        use crate::climb::compute_climb;
+        use crate::landing::compute_landing;
+        use crate::takeoff::compute_takeoff;
+
+        let data = PerformanceData::production();
+        let mut base = FlightInputs::default();
+        base.weight_lb = 1600.0;
+        let mut mt = base.clone();
+        mt.propeller = PropellerKind::Mt175R;
+        let to0 = compute_takeoff(&data, &base).unwrap();
+        let to1 = compute_takeoff(&data, &mt).unwrap();
+        assert_eq!(to0.ground_roll_ft, to1.ground_roll_ft);
+        let cl0 = compute_climb(&data, &base, base.cruise_pressure_alt_ft).unwrap();
+        let cl1 = compute_climb(&data, &mt, mt.cruise_pressure_alt_ft).unwrap();
+        assert_eq!(cl0.rate_of_climb_fpm, cl1.rate_of_climb_fpm);
+        let ld0 = compute_landing(&data, &base).unwrap();
+        let ld1 = compute_landing(&data, &mt).unwrap();
+        assert_eq!(ld0.ground_roll_ft, ld1.ground_roll_ft);
+    }
 }

@@ -100,6 +100,19 @@ pub struct Copy {
     pub cruise_mode_set_bhp: &'static str,
     pub cruise_pct_bhp: &'static str,
     pub cruise_bhp_not_achievable: &'static str,
+    pub propeller_toggle_label: &'static str,
+    pub propeller_sensenich: &'static str,
+    pub propeller_mt175r: &'static str,
+    pub propeller_no_change_note: &'static str,
+    pub density_altitude_readout: &'static str,
+    pub mt_tcca_badge: &'static str,
+    pub cruise_subtitle_table3: &'static str,
+    pub cruise_subtitle_mt: &'static str,
+    pub mt_fig2_title: &'static str,
+    pub mt_fig3_title: &'static str,
+    pub mt_fig4_col_da: &'static str,
+    pub mt_fig4_col_rpm: &'static str,
+    pub mt_fig4_da_weight_lbl: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
     pub climb_fig_55: &'static str,
@@ -230,6 +243,22 @@ pub fn copy(locale: Locale) -> &'static Copy {
     }
 }
 
+pub fn format_mt_cruise_bhp_not_achievable(
+    locale: Locale,
+    pct_bhp: f64,
+    rmin: f64,
+    rmax: f64,
+) -> String {
+    match locale {
+        Locale::Es => format!(
+            "No alcanzable — %BHP {pct_bhp:.2}% fuera de [{rmin:.0}, {rmax:.0}] RPM a esta AD (Fig 4)."
+        ),
+        Locale::En => format!(
+            "Not achievable — %BHP {pct_bhp:.2}% outside [{rmin:.0}, {rmax:.0}] RPM at this DA (Fig 4)."
+        ),
+    }
+}
+
 pub fn afm_lookup_tag_label(locale: Locale, tag: AfmLookupTag) -> &'static str {
     let c = copy(locale);
     match tag {
@@ -289,6 +318,20 @@ const ES: Copy = Copy {
     cruise_pct_bhp: "% BHP crucero",
     cruise_bhp_not_achievable:
         "No alcanzable — %BHP sin raíz en [rmin(PA), 2800 RPM] (Tabla 3).",
+    propeller_toggle_label: "Hélice / Propeller",
+    propeller_sensenich: "Sensenich W69EK7-63",
+    propeller_mt175r: "MT 175 R 150-2Ca",
+    propeller_no_change_note:
+        "Sin cambio según AFMS E-1487 / No change per AFMS E-1487",
+    density_altitude_readout: "Alt. densidad (DA)",
+    mt_tcca_badge: "Los datos de rendimiento no están aprobados por TCCA.",
+    cruise_subtitle_table3: "Tabla 3",
+    cruise_subtitle_mt: "AFMS Fig 4 — MT 175 R",
+    mt_fig2_title: "Fig 2 — RPM vs DA",
+    mt_fig3_title: "Fig 3 — TAS vs DA",
+    mt_fig4_col_da: "DA",
+    mt_fig4_col_rpm: "RPM",
+    mt_fig4_da_weight_lbl: "Peso DA",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
     climb_fig_55: "Fig 5.5 — flaps crucero",
@@ -318,7 +361,7 @@ const ES: Copy = Copy {
     landing_no_corr: "Sin corrección por viento, temperatura ni peso (Tabla 4).",
     takeoff: "Despegue (Fig 5.4)",
     climb: "Trepada (via Fig 5.2)",
-    cruise: "Crucero (Tabla 3)",
+    cruise: "Crucero",
     landing: "Aterrizaje (Tabla 4)",
     wind_card: "Viento (Fig 5.3)",
     unavailable: "No disponible",
@@ -462,6 +505,20 @@ const EN: Copy = Copy {
     cruise_pct_bhp: "Cruise % BHP",
     cruise_bhp_not_achievable:
         "Not achievable — no RPM root on [rmin(PA), 2800] at this PA/ΔISA.",
+    propeller_toggle_label: "Propeller / Hélice",
+    propeller_sensenich: "Sensenich W69EK7-63",
+    propeller_mt175r: "MT 175 R 150-2Ca",
+    propeller_no_change_note:
+        "No change per AFMS E-1487 / Sin cambio según AFMS E-1487",
+    density_altitude_readout: "Density altitude (DA)",
+    mt_tcca_badge: "Performance data is not TCCA approved.",
+    cruise_subtitle_table3: "Table 3",
+    cruise_subtitle_mt: "AFMS Fig 4 — MT 175 R",
+    mt_fig2_title: "Fig 2 — RPM vs DA",
+    mt_fig3_title: "Fig 3 — TAS vs DA",
+    mt_fig4_col_da: "DA",
+    mt_fig4_col_rpm: "RPM",
+    mt_fig4_da_weight_lbl: "DA weight",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
     climb_fig_55: "Fig 5.5 — cruise flaps",
@@ -491,7 +548,7 @@ const EN: Copy = Copy {
     landing_no_corr: "No wind, temperature, or weight correction (Table 4).",
     takeoff: "Takeoff (Fig 5.4)",
     climb: "Climb (via Fig 5.2)",
-    cruise: "Cruise (Table 3)",
+    cruise: "Cruise",
     landing: "Landing (Table 4)",
     wind_card: "Wind (Fig 5.3)",
     unavailable: "Unavailable",
@@ -970,6 +1027,22 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             Locale::Es => "GPH Tabla 3 transcritos del AFM Rev 29.".into(),
             Locale::En => "Table 3 GPH transcribed from AFM Rev 29.".into(),
         },
+        "FIG4_GPH" => match locale {
+            Locale::Es => "GPH Fig 4 transcritos del AFMS E-1487.".into(),
+            Locale::En => "Fig 4 GPH transcribed from AFMS E-1487.".into(),
+        },
+        "MT_DOUBTFUL_GPH" => {
+            let da = w.args.first().map(String::as_str).unwrap_or("");
+            let rpm = w.args.get(1).map(String::as_str).unwrap_or("");
+            match locale {
+                Locale::Es => {
+                    format!("GPH dudoso en la celda impresa AD {da} ft / RPM {rpm} (Fig 4).")
+                }
+                Locale::En => {
+                    format!("Doubtful GPH at printed cell DA {da} ft / RPM {rpm} (Fig 4).")
+                }
+            }
+        }
         "CRUISE_BHP_OUT_OF_RANGE" => {
             let pct = w.args.first().map(String::as_str).unwrap_or("");
             match locale {

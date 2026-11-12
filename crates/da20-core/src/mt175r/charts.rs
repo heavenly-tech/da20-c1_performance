@@ -2,12 +2,20 @@ use crate::interpolation::lerp;
 use crate::mt175r::data::{CurveSample, Mt175rData};
 
 /// Linear interpolation of a digitized chart curve sample set in density altitude.
-pub fn sample_curve_f64(samples: &[CurveSample], da_ft: f64, value: impl Fn(&CurveSample) -> f64) -> Option<f64> {
+pub fn sample_curve_f64(
+    samples: &[CurveSample],
+    da_ft: f64,
+    value: impl Fn(&CurveSample) -> f64,
+) -> Option<f64> {
     if samples.is_empty() {
         return None;
     }
     let mut sorted: Vec<_> = samples.iter().collect();
-    sorted.sort_by(|a, b| a.da_ft.partial_cmp(&b.da_ft).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(|a, b| {
+        a.da_ft
+            .partial_cmp(&b.da_ft)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     if da_ft < sorted[0].da_ft - 1e-6 || da_ft > sorted[sorted.len() - 1].da_ft + 1e-6 {
         return None;
     }
@@ -25,11 +33,11 @@ pub fn sample_curve_f64(samples: &[CurveSample], da_ft: f64, value: impl Fn(&Cur
     None
 }
 
-fn fig2_curve<'a>(data: &'a Mt175rData, pct_bhp: i32) -> Option<&'a crate::mt175r::data::PowerCurve> {
+fn fig2_curve(data: &Mt175rData, pct_bhp: i32) -> Option<&crate::mt175r::data::PowerCurve> {
     data.fig2_curves().get(&format!("{pct_bhp}%"))
 }
 
-fn fig3_curve<'a>(data: &'a Mt175rData, pct_bhp: i32) -> Option<&'a crate::mt175r::data::SpeedCurve> {
+fn fig3_curve(data: &Mt175rData, pct_bhp: i32) -> Option<&crate::mt175r::data::SpeedCurve> {
     data.fig3_curves().get(&format!("{pct_bhp}%"))
 }
 
@@ -57,6 +65,16 @@ pub fn fig3_tas_at_da(data: &Mt175rData, pct_bhp: i32, da_ft: f64) -> Option<f64
     sample_curve_f64(&samples, da_ft, |s| s.tas_kt.unwrap())
 }
 
+/// Printed endpoints beyond digitized polylines (AFMS fig. 2, read from originals).
+fn fig2_printed_endpoint(pct_bhp: i32) -> Option<(f64, f64)> {
+    match pct_bhp {
+        45 => Some((12_000.0, 2235.0)),
+        55 => Some((12_000.0, 2391.0)),
+        75 => Some((8270.0, 2650.0)),
+        _ => None,
+    }
+}
+
 /// Points along a Fig 2 curve for plotting (sorted by DA ascending).
 pub fn fig2_curve_chart_points(data: &Mt175rData, pct_bhp: i32) -> Vec<(f64, f64)> {
     let Some(curve) = fig2_curve(data, pct_bhp) else {
@@ -68,6 +86,33 @@ pub fn fig2_curve_chart_points(data: &Mt175rData, pct_bhp: i32) -> Vec<(f64, f64
         .filter_map(|s| Some((s.da_ft, s.rpm?)))
         .collect();
     pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    if pct_bhp == 75 {
+        pts.retain(|p| p.0 <= 8270.0 + 1.0);
+    }
+    if let Some(end) = fig2_printed_endpoint(pct_bhp) {
+        let needs = pts.last().map(|p| p.0 < end.0 - 1.0).unwrap_or(true);
+        if needs && (pct_bhp == 75 || pts.is_empty() || (pts.last().unwrap().0 - end.0).abs() > 1.0)
+        {
+            pts.push(end);
+        }
+    }
+    pts
+}
+
+/// Full-throttle TAS envelope (Fig 3) for display.
+pub fn fig3_full_throttle_chart_points(data: &Mt175rData) -> Vec<(f64, f64)> {
+    let Some(curve) = data.fig3_curves().get("Full Throttle") else {
+        return vec![];
+    };
+    let mut pts: Vec<(f64, f64)> = curve
+        .samples
+        .iter()
+        .filter_map(|s| Some((s.da_ft, s.tas_kt?)))
+        .collect();
+    pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    if !pts.iter().any(|p| (p.0 - 8500.0).abs() < 1.0) {
+        pts.push((8500.0, 134.2));
+    }
     pts
 }
 
