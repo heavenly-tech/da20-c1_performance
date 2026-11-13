@@ -114,6 +114,7 @@ pub struct Copy {
     pub cruise_subtitle_mt: &'static str,
     pub mt_fig2_title: &'static str,
     pub mt_fig3_title: &'static str,
+    pub mt_da_axis_title: &'static str,
     pub mt_fig4_col_da: &'static str,
     pub mt_fig4_col_rpm: &'static str,
     pub landing_tbl_roll_ft: &'static str,
@@ -262,6 +263,25 @@ pub fn copy(locale: Locale) -> &'static Copy {
     }
 }
 
+pub fn format_mt_cruise_chart_ooc_notice(locale: Locale, da_ft: f64) -> String {
+    match locale {
+        Locale::Es => format!("Fuera de carta (DA {:.0} ft)", da_ft),
+        Locale::En => format!("Off chart (DA {:.0} ft)", da_ft),
+    }
+}
+
+pub fn format_mt_cruise_interp_caption(locale: Locale, brackets: &[(i32, f64)]) -> String {
+    if brackets.len() <= 1 {
+        return String::new();
+    }
+    let lo = brackets.iter().map(|(p, _)| *p).min().unwrap_or(0);
+    let hi = brackets.iter().map(|(p, _)| *p).max().unwrap_or(0);
+    match locale {
+        Locale::Es => format!(" · Interpolado entre {lo}% y {hi}%"),
+        Locale::En => format!(" · Interpolated between {lo}% and {hi}%"),
+    }
+}
+
 pub fn format_mt_cruise_bhp_not_achievable(
     locale: Locale,
     pct_bhp: f64,
@@ -353,6 +373,7 @@ const ES: Copy = Copy {
     cruise_subtitle_mt: "AFMS Fig 4 — MT 175 R",
     mt_fig2_title: "Fig 2 — RPM vs DA",
     mt_fig3_title: "Fig 3 — TAS vs DA",
+    mt_da_axis_title: "Altitud densidad (ft)",
     mt_fig4_col_da: "DA",
     mt_fig4_col_rpm: "RPM",
     landing_tbl_roll_ft: "Rodaje ft",
@@ -559,6 +580,7 @@ const EN: Copy = Copy {
     cruise_subtitle_mt: "AFMS Fig 4 — MT 175 R",
     mt_fig2_title: "Fig 2 — RPM vs DA",
     mt_fig3_title: "Fig 3 — TAS vs DA",
+    mt_da_axis_title: "DA (ft)",
     mt_fig4_col_da: "DA",
     mt_fig4_col_rpm: "RPM",
     landing_tbl_roll_ft: "Roll ft",

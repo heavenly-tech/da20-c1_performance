@@ -8,7 +8,7 @@ use da20_core::types::FlightInputs;
 use leptos::prelude::*;
 
 use crate::chart_guides::{guide_line_label, LabelAnchor};
-use crate::i18n::{copy, Locale};
+use crate::i18n::{copy, format_mt_cruise_interp_caption, Locale};
 use crate::mt_cruise_axes::{
     mt_chart_axes, mt_fig2_axis_spec, mt_fig3_axis_spec, viewbox_h, viewbox_w, MtAxisSpec,
     RPM_TICKS, TAS_TICKS_KT,
@@ -16,7 +16,8 @@ use crate::mt_cruise_axes::{
 use crate::mt_cruise_chart::{
     apply_mt_fig2_pct_drag, fig2_family_polylines, fig2_marker_guides, fig2_selected_polyline,
     fig3_family_polylines, fig3_marker_guides, filter_plot_points, format_pct_bhp_label,
-    map_mt_chart_xy, mt_cruise_density_altitude_ft, plot_right_x, plot_top_y, selected_pct_bhp,
+    map_mt_chart_xy, mt_chart_da_on_fig2_axes, mt_cruise_density_altitude_ft, plot_right_x,
+    plot_top_y, selected_pct_bhp,
 };
 use crate::phase_state::persist_tab_inputs;
 use crate::phases::Phase;
@@ -26,20 +27,6 @@ use crate::strip_plot::{
     capture_pointer, format_svg_polyline, release_pointer, svg_pointer_coords,
 };
 use crate::table_source_panel::{mt_fig4_table_cell_highlight, mt_fig4_table_row_highlight};
-
-fn bracket_caption(locale: Locale, brackets: &[(i32, f64)], pct_bhp_lbl: &str) -> String {
-    if brackets.len() <= 1 {
-        return String::new();
-    }
-    let parts: Vec<String> = brackets
-        .iter()
-        .map(|(p, w)| format!("{p}%={w:.3}"))
-        .collect();
-    match locale {
-        Locale::Es => format!(" · {pct_bhp_lbl}: {}", parts.join(", ")),
-        Locale::En => format!(" · {pct_bhp_lbl}: {}", parts.join(", ")),
-    }
-}
 
 fn polyline_svg(points: &[(f64, f64)], spec: MtAxisSpec) -> String {
     let plot_pts = filter_plot_points(points, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
@@ -60,9 +47,8 @@ fn family_curve_label(
     let Some((da, y)) = plot_pts.last().copied() else {
         return view! { <span></span> }.into_any();
     };
-    let (mut x, sy) = map_mt_chart_xy(da, y, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let max_x = plot_right_x() - 4.0;
-    x = x.min(max_x);
+    let (sx, sy) = map_mt_chart_xy(da, y, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
+    let x = (sx + 10.0).min(plot_right_x() + 8.0);
     if highlight {
         view! {
             <text
@@ -70,7 +56,7 @@ fn family_curve_label(
                 y=sy
                 class="chart-guide-label-hi"
                 font-size="9"
-                text-anchor="end"
+                text-anchor="start"
                 dominant-baseline="middle"
             >
                 {label}
@@ -79,7 +65,7 @@ fn family_curve_label(
         .into_any()
     } else {
         view! {
-            {guide_line_label(x, sy, label, LabelAnchor::End)}
+            {guide_line_label(x, sy, label, LabelAnchor::Start)}
         }
         .into_any()
     }
@@ -87,13 +73,12 @@ fn family_curve_label(
 
 fn selected_curve_label(points: &[(f64, f64)], label: String, spec: MtAxisSpec) -> AnyView {
     let plot_pts = filter_plot_points(points, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let idx = plot_pts.len().saturating_mul(2) / 3;
-    let Some((da, y)) = plot_pts.get(idx).copied() else {
+    let Some((da, y)) = plot_pts.last().copied() else {
         return family_curve_label(points, label, spec, true);
     };
-    let (x, sy) = map_mt_chart_xy(da, y, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let x = (x + 8.0).min(plot_right_x() - 4.0);
-    let y = (sy - 10.0).max(plot_top_y() + 8.0);
+    let (sx, sy) = map_mt_chart_xy(da, y, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
+    let x = (sx + 10.0).min(plot_right_x() + 8.0);
+    let y = (sy - 12.0).max(plot_top_y() + 8.0);
     view! {
         <text
             x=x
@@ -111,36 +96,52 @@ fn selected_curve_label(points: &[(f64, f64)], label: String, spec: MtAxisSpec) 
 
 fn render_marker_guides(g: &crate::mt_cruise_chart::MtChartMarkerGuides) -> impl IntoView {
     view! {
-        <line
-            x1=g.cx
-            y1=g.cy
-            x2=g.cx
-            y2=g.x_axis_y
-            class="chart-stroke-guide-active"
-            stroke-dasharray="4 4"
-        />
-        <line
-            x1=g.cx
-            y1=g.cy
-            x2=g.y_axis_x
-            y2=g.cy
-            class="chart-stroke-guide-active"
-            stroke-dasharray="4 4"
-        />
-        {guide_line_label(
-            g.x_label_x,
-            g.x_label_y,
-            g.x_label.clone(),
-            LabelAnchor::Middle,
-        )}
-        {guide_line_label(
-            g.y_label_x,
-            g.y_label_y,
-            g.y_label.clone(),
-            LabelAnchor::Start,
-        )}
-        {g.on_chart.then(|| view! {
-            <circle class="chart-marker" cx=g.cx cy=g.cy r="5"/>
+        {g.draw_guides.then(|| view! {
+            <>
+                <line
+                    x1=g.cx
+                    y1=g.cy
+                    x2=g.cx
+                    y2=g.x_axis_y
+                    class="chart-stroke-guide-active"
+                    stroke-dasharray="4 4"
+                />
+                <line
+                    x1=g.cx
+                    y1=g.cy
+                    x2=g.y_axis_x
+                    y2=g.cy
+                    class="chart-stroke-guide-active"
+                    stroke-dasharray="4 4"
+                />
+                {guide_line_label(
+                    g.x_label_x,
+                    g.x_label_y,
+                    g.x_label.clone(),
+                    LabelAnchor::Middle,
+                )}
+                {guide_line_label(
+                    g.y_label_x,
+                    g.y_label_y,
+                    g.y_label.clone(),
+                    LabelAnchor::Start,
+                )}
+                {g.on_chart.then(|| view! {
+                    <circle class="chart-marker" cx=g.cx cy=g.cy r="5"/>
+                })}
+            </>
+        })}
+        {g.notice.as_ref().map(|notice| view! {
+            <text
+                x=g.cx
+                y=g.cy
+                class="chart-guide-label-hi"
+                font-size="11"
+                text-anchor="middle"
+                dominant-baseline="middle"
+            >
+                {notice.clone()}
+            </text>
         })}
     }
 }
@@ -195,14 +196,16 @@ pub fn MtCruisePanel(
             } else {
                 lookup_fig2_rpm_at_pct(&mt, da, selected_pct).map(|h| h.rpm)
             };
-            let fig2_ooc = fig2_rpm_marker.is_none();
-            let fig2_guides = fig2_marker_guides(da, fig2_rpm_marker, fig2_ooc);
+            let fig2_ooc = !mt_chart_da_on_fig2_axes(da) || fig2_rpm_marker.is_none();
+            let fig2_guides = fig2_marker_guides(loc, da, fig2_rpm_marker, fig2_ooc);
 
             let fig3_tas_marker = cr.and_then(|c| c.tas_chart_kt).or_else(|| {
                 lookup_fig3_tas_at_pct(&mt, da, selected_pct).map(|h| h.tas_kt)
             });
-            let fig3_ooc = cr.is_none() && fig3_tas_marker.is_none();
-            let fig3_guides = fig3_marker_guides(da, fig3_tas_marker, selected_pct, fig3_ooc);
+            let fig3_ooc =
+                !mt_chart_da_on_fig2_axes(da) || fig3_tas_marker.is_none();
+            let fig3_guides =
+                fig3_marker_guides(loc, da, fig3_tas_marker, selected_pct, fig3_ooc);
 
             let family = fig2_family_polylines(&mt);
             let selected_pts = fig2_selected_polyline(&mt, selected_pct);
@@ -212,6 +215,7 @@ pub fn MtCruisePanel(
             let fig3_ft_line = polyline_svg(&fig3_full_throttle_chart_points(&mt), fig3_spec);
 
             let c = copy(loc);
+            let da_axis_title = c.mt_da_axis_title.to_string();
 
             let on_fig2_down = move |ev: web_sys::PointerEvent| {
                 fig2_dragging.set(true);
@@ -251,7 +255,7 @@ pub fn MtCruisePanel(
                 <p class="lab mono">{format!(
                     "{} · {selected_label}{}",
                     c.mt_fig2_title,
-                    bracket_caption(loc, &fig2_brackets, c.mt_pct_bhp_weight_lbl),
+                    format_mt_cruise_interp_caption(loc, &fig2_brackets),
                 )}</p>
                 <svg
                     class="plot-svg strip-svg mt-fig-svg"
@@ -272,13 +276,15 @@ pub fn MtCruisePanel(
                     on:pointermove=on_fig2_move
                 >
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
-                    {mt_chart_axes(fig2_spec, &RPM_TICKS)}
+                    {mt_chart_axes(fig2_spec, &RPM_TICKS, da_axis_title.clone())}
                     {family.iter().map(|(pct, pts)| {
                         let lbl = format!("{pct}%");
                         let line = polyline_svg(pts, fig2_spec);
+                        let skip_end_label = fig2_brackets.len() <= 1
+                            && (selected_pct - *pct as f64).abs() < 0.01;
                         view! {
                             <polyline class="chart-stroke-line" points=line fill="none"/>
-                            {family_curve_label(pts, lbl, fig2_spec, false)}
+                            {(!skip_end_label).then(|| family_curve_label(pts, lbl, fig2_spec, false))}
                         }
                     }).collect_view()}
                     {(!selected_pts.is_empty()).then(|| {
@@ -294,11 +300,11 @@ pub fn MtCruisePanel(
                 <p class="lab mono">{format!(
                     "{} · {selected_label}{}",
                     c.mt_fig3_title,
-                    bracket_caption(loc, &fig3_brackets, c.mt_pct_bhp_weight_lbl),
+                    format_mt_cruise_interp_caption(loc, &fig3_brackets),
                 )}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
-                    {mt_chart_axes(fig3_spec, &TAS_TICKS_KT)}
+                    {mt_chart_axes(fig3_spec, &TAS_TICKS_KT, da_axis_title)}
                     <polyline class="chart-stroke-line" points=fig3_ft_line fill="none"/>
                     {fig3_family.iter().map(|(pct, pts)| {
                         let highlight = fig3_brackets.iter().any(|(p, w)| *p == *pct && *w > 0.99);
@@ -379,7 +385,7 @@ mod panel_tests {
 
     #[test]
     fn fig2_guide_snippet_has_no_nan_for_valid_point() {
-        let g = fig2_marker_guides(6600.0, Some(2451.0), false);
+        let g = fig2_marker_guides(Locale::Es, 6600.0, Some(2451.0), false);
         let s = marker_guides_svg_snippet(&g);
         assert!(s.contains("DA 6600 ft"));
         assert!(s.contains("2451 RPM"));

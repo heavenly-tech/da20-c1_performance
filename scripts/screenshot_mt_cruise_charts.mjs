@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:18083";
+const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:18084";
 const outDir = process.env.OUT_DIR ?? "/opt/cursor/artifacts";
 
 const themeStorage = {
@@ -60,24 +60,29 @@ async function setPa(page, pa) {
 }
 
 async function shotCharts(page, file) {
+  const titles = page.locator("p.lab.mono").filter({ hasText: "Fig 2" });
+  const fig3Titles = page.locator("p.lab.mono").filter({ hasText: "Fig 3" });
   const box = page.locator(".mt-fig-svg").first();
-  await box.scrollIntoViewIfNeeded();
+  await page.locator(".mt-fig-svg").nth(1).scrollIntoViewIfNeeded();
+  const titleBb = (await titles.count()) > 0 ? await titles.first().boundingBox() : null;
   const bb = await box.boundingBox();
   const second = page.locator(".mt-fig-svg").nth(1);
   const bb2 = await second.boundingBox();
   if (!bb || !bb2) throw new Error("chart bbox missing");
-  const y = Math.max(0, bb.y - 40);
-  const h = bb2.y + bb2.height - y + 20;
+  const y = Math.max(0, (titleBb?.y ?? bb.y) - 8);
+  const fig3TitleY = (await fig3Titles.count()) > 0 ? (await fig3Titles.first().boundingBox())?.y : null;
+  const bottom = Math.max(bb2.y + bb2.height, fig3TitleY ?? 0);
+  const h = bottom - y + 36;
   await page.screenshot({
     path: file,
-    clip: { x: 0, y, width: 1400, height: Math.min(h, 900) },
+    clip: { x: 0, y, width: 1400, height: Math.min(h, 1500) },
   });
   console.log(file);
 }
 
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
+const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
 
 for (const theme of ["light", "dark", "night"]) {
   await page.goto(`${baseUrl}/#/cruise`, { waitUntil: "networkidle", timeout: 120_000 });
@@ -92,7 +97,7 @@ await setPctBhp(page, 60);
 await shotCharts(page, path.join(outDir, "mt175_cruise_pct60_light.png"));
 
 await openMtCruise(page);
-await setPa(page, 12500);
+await setPa(page, 12000);
 await setPctBhp(page, 75);
 await shotCharts(page, path.join(outDir, "mt175_cruise_fuera_carta_light.png"));
 

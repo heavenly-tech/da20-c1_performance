@@ -631,6 +631,9 @@ fn phase_results(
                 None => {
                     let c_loc = copy(locale);
                     let mt_prop = inputs.propeller == PropellerKind::Mt175R;
+                    let mt_da = mt_prop.then(|| {
+                        crate::mt_cruise_chart::mt_cruise_density_altitude_ft(&inputs)
+                    });
                     if let Some(ooc) = &b.cruise_ooc {
                         let msg = if mt_prop
                             && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
@@ -653,6 +656,9 @@ fn phase_results(
                             });
                         view! {
                             <div class="results-block">
+                                {mt_da.map(|da| view! {
+                                    <p class="readout-text">{c_loc.density_altitude_readout}": "{da.round() as i64}" ft"</p>
+                                })}
                                 {bhp_line}
                                 <p class="error warn">{msg}</p>
                             </div>

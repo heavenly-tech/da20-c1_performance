@@ -321,22 +321,42 @@ pub fn fig2_family_chart_points(data: &Mt175rData, pct_bhp: i32) -> Vec<(f64, f6
     pts
 }
 
+/// Inclusive DA span where both bracketing printed Fig 2 curves have digitized samples.
+pub fn fig2_pct_bhp_da_bounds(data: &Mt175rData, target_pct_bhp: f64) -> Option<(f64, f64)> {
+    let (lo, hi, _) = pct_brackets(target_pct_bhp)?;
+    if lo == hi {
+        let pts = fig2_family_chart_points(data, lo);
+        let da_min = pts.first().map(|p| p.0)?;
+        let da_max = pts.last().map(|p| p.0)?;
+        return Some((da_min, da_max));
+    }
+    let lo_pts = fig2_family_chart_points(data, lo);
+    let hi_pts = fig2_family_chart_points(data, hi);
+    if lo_pts.is_empty() || hi_pts.is_empty() {
+        return None;
+    }
+    let da_min = lo_pts[0].0.max(hi_pts[0].0);
+    let da_max = lo_pts.last()?.0.min(hi_pts.last()?.0);
+    if da_max < da_min - 1e-6 {
+        return None;
+    }
+    Some((da_min, da_max))
+}
+
 /// Points along the selected %BHP trace (interpolated between printed curves when needed).
 pub fn fig2_pct_bhp_chart_points(data: &Mt175rData, target_pct_bhp: f64) -> Vec<(f64, f64)> {
-    if pct_brackets(target_pct_bhp).is_none() {
+    let Some((da_min, da_max)) = fig2_pct_bhp_da_bounds(data, target_pct_bhp) else {
         return vec![];
-    }
-    let mut das: Vec<f64> = Vec::new();
-    for &p in &PRINTED_PCT_CURVES {
-        for (da, _) in fig2_family_chart_points(data, p) {
-            das.push(da);
+    };
+    let mut out = Vec::new();
+    let mut da = da_min;
+    while da <= da_max + 0.5 {
+        if let Some(hit) = lookup_fig2_rpm_at_pct(data, da, target_pct_bhp) {
+            out.push((da, hit.rpm));
         }
+        da += 250.0;
     }
-    das.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    das.dedup_by(|a, b| (*a - *b).abs() < 0.5);
-    das.into_iter()
-        .filter_map(|da| lookup_fig2_rpm_at_pct(data, da, target_pct_bhp).map(|hit| (da, hit.rpm)))
-        .collect()
+    out
 }
 
 /// Map vertical chart drag (RPM at fixed DA) to %BHP, clamped to the printed 45–75 % band.
@@ -426,6 +446,35 @@ mod tests {
         let tas = fig3_tas_at_da(&data, 65, 6000.0).unwrap();
         assert!((rpm - 2438.7).abs() < 2.0, "rpm={rpm}");
         assert!((tas - 122.12).abs() < 0.5, "tas={tas}");
+    }
+
+    #[test]
+    fn fig2_pct_bhp_chart_points_stays_within_bracket_da_intersection() {
+        let data = Mt175rData::production();
+        for pct in [60.0, 62.5, 72.0] {
+            let (d0, d1) = fig2_pct_bhp_da_bounds(&data, pct).expect("bounds");
+            let pts = fig2_pct_bhp_chart_points(&data, pct);
+            assert!(!pts.is_empty(), "pct={pct}");
+            assert!(
+                pts.first().unwrap().0 >= d0 - 1.0 && pts.last().unwrap().0 <= d1 + 1.0,
+                "pct={pct} pts={pts:?} bounds=({d0},{d1})"
+            );
+        }
+        let (lo55, hi55) = {
+            let p = fig2_family_chart_points(&data, 55);
+            (p.first().unwrap().0, p.last().unwrap().0)
+        };
+        let (lo65, hi65) = {
+            let p = fig2_family_chart_points(&data, 65);
+            (p.first().unwrap().0, p.last().unwrap().0)
+        };
+        let (d0, d1) = fig2_pct_bhp_da_bounds(&data, 60.0).unwrap();
+        assert!((d0 - lo55.max(lo65)).abs() < 1.0);
+        assert!((d1 - hi55.min(hi65)).abs() < 1.0);
+        assert!(
+            (d1 - 12_000.0).abs() < 1.0,
+            "55%/65% both reach 12000 in JSON"
+        );
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::chart_guides::LabelAnchor;
 
 /// Left gutter: Y tick labels + marker readout.
 pub const MT_MARGIN_L: f64 = 56.0;
-pub const MT_MARGIN_B: f64 = 52.0;
+pub const MT_MARGIN_B: f64 = 64.0;
 pub const MT_MARGIN_T: f64 = 14.0;
 /// Right gutter: %BHP family labels.
 pub const MT_MARGIN_R: f64 = 52.0;
@@ -84,7 +84,7 @@ pub fn map_mt_chart_xy(
         y_min,
         y_max,
         MT_MARGIN_L,
-        MT_MARGIN_B,
+        MT_MARGIN_T,
         MT_W,
         MT_H,
     )
@@ -99,7 +99,7 @@ pub fn map_mt_chart_from_svg_y(sy: f64, y_min: f64, y_max: f64) -> f64 {
         y_min,
         y_max,
         MT_MARGIN_L,
-        MT_MARGIN_B,
+        MT_MARGIN_T,
         MT_W,
         MT_H,
     )
@@ -150,10 +150,16 @@ pub struct MtChartMarkerGuides {
     pub y_label_x: f64,
     pub y_label_y: f64,
     pub on_chart: bool,
+    pub draw_guides: bool,
+    pub notice: Option<String>,
+}
+
+pub fn mt_chart_da_on_fig2_axes(da_ft: f64) -> bool {
+    (FIG2_DA_MIN - 0.5..=FIG2_DA_MAX + 0.5).contains(&da_ft)
 }
 
 pub fn plot_bottom_y() -> f64 {
-    MT_MARGIN_B + MT_H
+    MT_MARGIN_T + MT_H
 }
 
 pub fn plot_left_x() -> f64 {
@@ -168,9 +174,23 @@ pub fn plot_top_y() -> f64 {
     MT_MARGIN_T
 }
 
-pub fn fig2_marker_guides(da_ft: f64, rpm: Option<f64>, out_of_chart: bool) -> MtChartMarkerGuides {
+pub fn fig2_marker_guides(
+    locale: crate::i18n::Locale,
+    da_ft: f64,
+    rpm: Option<f64>,
+    out_of_chart: bool,
+) -> MtChartMarkerGuides {
+    let axes_ok = mt_chart_da_on_fig2_axes(da_ft);
+    let on_chart = axes_ok && !out_of_chart && rpm.is_some() && rpm.unwrap().is_finite();
+    let draw_guides = on_chart;
+    let notice = if !on_chart {
+        Some(crate::i18n::format_mt_cruise_chart_ooc_notice(
+            locale, da_ft,
+        ))
+    } else {
+        None
+    };
     let da_clamped = da_ft.clamp(FIG2_DA_MIN, FIG2_DA_MAX);
-    let on_chart = !out_of_chart && rpm.is_some() && rpm.unwrap().is_finite();
     let rpm_v = if on_chart { rpm.unwrap() } else { f64::NAN };
     let (cx, cy) = if on_chart {
         map_mt_chart_xy(
@@ -182,33 +202,16 @@ pub fn fig2_marker_guides(da_ft: f64, rpm: Option<f64>, out_of_chart: bool) -> M
             FIG2_RPM_MAX,
         )
     } else {
-        let sy = map_mt_chart_xy(
-            da_clamped,
-            FIG2_RPM_MIN,
-            FIG2_DA_MIN,
-            FIG2_DA_MAX,
-            FIG2_RPM_MIN,
-            FIG2_RPM_MAX,
-        )
-        .1;
-        (
-            map_mt_chart_xy(
-                da_clamped,
-                FIG2_RPM_MIN,
-                FIG2_DA_MIN,
-                FIG2_DA_MAX,
-                FIG2_RPM_MIN,
-                FIG2_RPM_MAX,
-            )
-            .0,
-            sy,
-        )
+        (MT_MARGIN_L + MT_W * 0.5, MT_MARGIN_T + MT_H * 0.5)
     };
     let x_label = format!("DA {:.0} ft", da_ft);
     let y_label = if on_chart {
         format!("{:.0} RPM", rpm_v)
     } else {
-        "Fuera de carta".into()
+        match locale {
+            crate::i18n::Locale::Es => "Fuera de carta".into(),
+            crate::i18n::Locale::En => "Off chart".into(),
+        }
     };
     let axis_y = plot_bottom_y();
     let axis_x = plot_left_x();
@@ -224,17 +227,29 @@ pub fn fig2_marker_guides(da_ft: f64, rpm: Option<f64>, out_of_chart: bool) -> M
         y_label_x: axis_x + 6.0,
         y_label_y: cy,
         on_chart,
+        draw_guides,
+        notice,
     }
 }
 
 pub fn fig3_marker_guides(
+    locale: crate::i18n::Locale,
     da_ft: f64,
     tas_kt: Option<f64>,
     pct_bhp: f64,
     out_of_chart: bool,
 ) -> MtChartMarkerGuides {
+    let axes_ok = mt_chart_da_on_fig2_axes(da_ft);
+    let on_chart = axes_ok && !out_of_chart && tas_kt.is_some() && tas_kt.unwrap().is_finite();
+    let draw_guides = on_chart;
+    let notice = if !on_chart {
+        Some(crate::i18n::format_mt_cruise_chart_ooc_notice(
+            locale, da_ft,
+        ))
+    } else {
+        None
+    };
     let da_clamped = da_ft.clamp(FIG2_DA_MIN, FIG2_DA_MAX);
-    let on_chart = !out_of_chart && tas_kt.is_some() && tas_kt.unwrap().is_finite();
     let tas_v = if on_chart { tas_kt.unwrap() } else { f64::NAN };
     let (cx, cy) = if on_chart {
         map_mt_chart_xy(
@@ -246,33 +261,17 @@ pub fn fig3_marker_guides(
             FIG3_TAS_MAX,
         )
     } else {
-        (
-            map_mt_chart_xy(
-                da_clamped,
-                FIG3_TAS_MIN,
-                FIG2_DA_MIN,
-                FIG2_DA_MAX,
-                FIG3_TAS_MIN,
-                FIG3_TAS_MAX,
-            )
-            .0,
-            map_mt_chart_xy(
-                da_clamped,
-                FIG3_TAS_MIN,
-                FIG2_DA_MIN,
-                FIG2_DA_MAX,
-                FIG3_TAS_MIN,
-                FIG3_TAS_MAX,
-            )
-            .1,
-        )
+        (MT_MARGIN_L + MT_W * 0.5, MT_MARGIN_T + MT_H * 0.5)
     };
     let x_label = format!("DA {:.0} ft", da_ft);
     let pct_label = format_pct_bhp_label(pct_bhp);
     let value_lbl = if on_chart {
         format!("{:.0} kt", tas_v)
     } else {
-        "Fuera de carta".into()
+        match locale {
+            crate::i18n::Locale::Es => "Fuera de carta".into(),
+            crate::i18n::Locale::En => "Off chart".into(),
+        }
     };
     let axis_y = plot_bottom_y();
     let axis_x = plot_left_x();
@@ -289,26 +288,32 @@ pub fn fig3_marker_guides(
         y_label_x: axis_x + 6.0,
         y_label_y: cy,
         on_chart,
+        draw_guides,
+        notice,
     }
 }
 
 /// Serialize guide geometry for unit tests (no NaN in finite paths).
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn marker_guides_svg_snippet(g: &MtChartMarkerGuides) -> String {
-    let mut lines = vec![
-        format!(
+    let mut lines = Vec::new();
+    if g.draw_guides {
+        lines.push(format!(
             "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>",
             g.cx, g.cy, g.cx, g.x_axis_y
-        ),
-        format!(
+        ));
+        lines.push(format!(
             "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>",
             g.cx, g.cy, g.y_axis_x, g.cy
-        ),
-        format!("<text>{}</text>", g.x_label),
-        format!("<text>{}</text>", g.y_label),
-    ];
-    if g.on_chart {
-        lines.push(format!("<circle cx=\"{}\" cy=\"{}\" r=\"5\"/>", g.cx, g.cy));
+        ));
+        lines.push(format!("<text>{}</text>", g.x_label));
+        lines.push(format!("<text>{}</text>", g.y_label));
+        if g.on_chart {
+            lines.push(format!("<circle cx=\"{}\" cy=\"{}\" r=\"5\"/>", g.cx, g.cy));
+        }
+    }
+    if let Some(n) = &g.notice {
+        lines.push(format!("<text class=\"notice\">{}</text>", n));
     }
     lines.join("")
 }
@@ -334,6 +339,7 @@ pub fn fig3_family_polylines(mt: &Mt175rData) -> Vec<(i32, Vec<(f64, f64)>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::Locale;
     use da20_core::altitude::isa_troposphere_density_altitude_ft;
     use da20_core::cruise::isa_temp_c_at_pa;
     use da20_core::mt175r::charts::{lookup_fig2_rpm_at_pct, MT_PCT_BHP_MAX, MT_PCT_BHP_MIN};
@@ -431,7 +437,7 @@ mod tests {
         let rpm = cr.rpm.unwrap();
         let core_rpm = lookup_fig2_rpm_at_pct(&mt, da, 65.0).unwrap().rpm;
         assert!((rpm - core_rpm).abs() < 0.01, "ui={rpm} core={core_rpm}");
-        let g = fig2_marker_guides(da, Some(rpm), false);
+        let g = fig2_marker_guides(Locale::Es, da, Some(rpm), false);
         let svg = marker_guides_svg_snippet(&g);
         assert!(svg.contains(&format!("DA {:.0} ft", da.round())));
         assert!(svg.contains(&format!("{:.0} RPM", rpm.round())));
@@ -444,15 +450,18 @@ mod tests {
         let da = 13_000.0;
         let rpm = lookup_fig2_rpm_at_pct(&mt, da, 65.0);
         assert!(rpm.is_none());
-        let g = fig2_marker_guides(da, None, true);
-        assert!(g.y_label.contains("Fuera de carta"));
+        let g = fig2_marker_guides(Locale::Es, da, None, true);
+        assert!(!g.draw_guides);
+        let notice = g.notice.as_ref().expect("notice");
+        assert!(notice.contains("13000"));
         let svg = marker_guides_svg_snippet(&g);
+        assert!(svg.contains("Fuera de carta"));
         assert!(!svg.contains("NaN"));
     }
 
     #[test]
     fn marker_and_axis_labels_fit_viewbox() {
-        let g = fig2_marker_guides(7572.0, Some(2472.0), false);
+        let g = fig2_marker_guides(Locale::Es, 7572.0, Some(2472.0), false);
         assert!(label_box_fits_viewbox(
             g.x_label_x,
             g.x_label_y,
@@ -477,7 +486,7 @@ mod tests {
         let cr = compute_mt175r_cruise(&mt, &inputs).unwrap();
         let da = cr.density_altitude_ft.unwrap();
         let tas = cr.tas_chart_kt.unwrap();
-        let g = fig3_marker_guides(da, Some(tas), 65.0, false);
+        let g = fig3_marker_guides(Locale::Es, da, Some(tas), 65.0, false);
         let svg = marker_guides_svg_snippet(&g);
         assert!(svg.contains(&format!("DA {:.0} ft", da.round())));
         assert!(svg.contains(&format!("{:.0} kt", tas.round())));
