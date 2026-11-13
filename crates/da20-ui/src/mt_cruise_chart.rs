@@ -2,8 +2,9 @@
 
 use da20_core::altitude::isa_troposphere_density_altitude_ft;
 use da20_core::mt175r::charts::{
-    fig2_family_chart_points, fig2_pct_bhp_chart_points, fig3_curve_chart_points,
-    pct_bhp_from_fig2_drag_rpm, PRINTED_PCT_CURVES,
+    fig2_family_chart_points, fig2_pct_bhp_chart_points, fig2_pct_bhp_da_bounds,
+    fig3_family_chart_points, fig3_full_throttle_chart_points, fig3_pct_bhp_chart_points,
+    fig3_pct_bhp_da_bounds, pct_bhp_from_fig2_drag_rpm, PRINTED_PCT_CURVES,
 };
 use da20_core::mt175r::Mt175rData;
 use da20_core::rev29::charts::{map_from_svg, map_to_svg};
@@ -33,10 +34,44 @@ pub const FIG3_TAS_MAX: f64 = 150.0;
 pub const LABEL_FONT_PX: f64 = 9.0;
 #[cfg_attr(not(test), allow(dead_code))]
 pub const LABEL_CHAR_PX: f64 = 5.4;
+/// Minimum vertical separation between curve-end label bounding boxes.
+pub const END_LABEL_MIN_GAP_PX: f64 = 11.0;
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn estimate_text_width(text: &str) -> f64 {
     text.chars().count() as f64 * LABEL_CHAR_PX
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn label_bbox_start(x: f64, y: f64, text: &str) -> (f64, f64, f64, f64) {
+    let w = estimate_text_width(text);
+    let h = LABEL_FONT_PX;
+    (x, y - h * 0.5, x + w, y + h * 0.5)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn label_bboxes_overlap(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64)) -> bool {
+    a.0 < b.2 - 0.5 && a.2 > b.0 + 0.5 && a.1 < b.3 - 0.5 && a.3 > b.1 + 0.5
+}
+
+pub fn stagger_end_label_ys(base_ys: &[f64]) -> Vec<f64> {
+    let n = base_ys.len();
+    if n == 0 {
+        return vec![];
+    }
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| base_ys[a].total_cmp(&base_ys[b]));
+    let mut out = base_ys.to_vec();
+    let mut last = f64::NEG_INFINITY;
+    for idx in order {
+        let mut y = base_ys[idx];
+        if y < last + END_LABEL_MIN_GAP_PX {
+            y = last + END_LABEL_MIN_GAP_PX;
+        }
+        out[idx] = y;
+        last = y;
+    }
+    out
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -332,7 +367,158 @@ pub fn fig2_selected_polyline(mt: &Mt175rData, pct: f64) -> Vec<(f64, f64)> {
 pub fn fig3_family_polylines(mt: &Mt175rData) -> Vec<(i32, Vec<(f64, f64)>)> {
     PRINTED_PCT_CURVES
         .iter()
-        .map(|&p| (p, fig3_curve_chart_points(mt, p)))
+        .map(|&p| (p, fig3_family_chart_points(mt, p)))
+        .collect()
+}
+
+pub fn fig3_selected_polyline(mt: &Mt175rData, pct: f64) -> Vec<(f64, f64)> {
+    fig3_pct_bhp_chart_points(mt, pct)
+}
+
+fn end_label_x(da: f64, y: f64, y_min: f64, y_max: f64) -> f64 {
+    let (sx, _) = map_mt_chart_xy(da, y, FIG2_DA_MIN, FIG2_DA_MAX, y_min, y_max);
+    (sx + 10.0).min(plot_right_x() + 8.0)
+}
+
+/// Curve-end labels for Fig 2 (`text`, `x`, `y`, `highlight`).
+pub fn fig2_curve_end_label_positions(
+    mt: &Mt175rData,
+    selected_pct: f64,
+    skip_matching_printed_label: bool,
+) -> Vec<(String, f64, f64, bool)> {
+    let mut specs: Vec<(String, f64, f64, bool)> = Vec::new();
+    for p in PRINTED_PCT_CURVES {
+        if skip_matching_printed_label && (selected_pct - p as f64).abs() < 0.01 {
+            continue;
+        }
+        let pts = fig2_family_chart_points(mt, p);
+        let Some((da, rpm)) = pts.last().copied() else {
+            continue;
+        };
+        let (sx, sy) = map_mt_chart_xy(
+            da,
+            rpm,
+            FIG2_DA_MIN,
+            FIG2_DA_MAX,
+            FIG2_RPM_MIN,
+            FIG2_RPM_MAX,
+        );
+        let x = (sx + 10.0).min(plot_right_x() + 8.0);
+        specs.push((format!("{p}%"), x, sy, false));
+    }
+    let selected_pts = fig2_pct_bhp_chart_points(mt, selected_pct);
+    if !selected_pts.is_empty() {
+        let da_max = fig2_pct_bhp_da_bounds(mt, selected_pct)
+            .map(|(_, d1)| d1)
+            .unwrap_or_else(|| selected_pts.last().unwrap().0);
+        let rpm = selected_pts
+            .iter()
+            .find(|(d, _)| (*d - da_max).abs() < 1.0)
+            .map(|(_, r)| *r)
+            .unwrap_or_else(|| selected_pts.last().unwrap().1);
+        let (sx, sy) = map_mt_chart_xy(
+            da_max,
+            rpm,
+            FIG2_DA_MIN,
+            FIG2_DA_MAX,
+            FIG2_RPM_MIN,
+            FIG2_RPM_MAX,
+        );
+        let x = (sx + 10.0).min(plot_right_x() + 8.0);
+        let y = (sy - 12.0).max(plot_top_y() + 8.0);
+        let on_printed = PRINTED_PCT_CURVES
+            .iter()
+            .any(|p| (selected_pct - *p as f64).abs() < 0.01);
+        let show_selected = skip_matching_printed_label || !on_printed || selected_pts.len() > 1;
+        if show_selected {
+            specs.push((format_pct_bhp_label(selected_pct), x, y, true));
+        }
+    }
+    let svg_ys: Vec<f64> = specs.iter().map(|(_, _, y, _)| *y).collect();
+    let adj = stagger_end_label_ys(&svg_ys);
+    specs
+        .into_iter()
+        .zip(adj)
+        .map(|((text, x, _, hi), y)| (text, x, y, hi))
+        .collect()
+}
+
+/// Curve-end labels for Fig 3 (`text`, `x`, `y`, `highlight`).
+pub fn fig3_curve_end_label_positions(
+    mt: &Mt175rData,
+    selected_pct: f64,
+    skip_matching_printed_label: bool,
+) -> Vec<(String, f64, f64, bool)> {
+    let mut specs: Vec<(String, f64, f64, bool)> = Vec::new();
+    for p in PRINTED_PCT_CURVES {
+        if skip_matching_printed_label && (selected_pct - p as f64).abs() < 0.01 {
+            continue;
+        }
+        let pts = fig3_family_chart_points(mt, p);
+        let Some((da, tas)) = pts.last().copied() else {
+            continue;
+        };
+        let x = end_label_x(da, tas, FIG3_TAS_MIN, FIG3_TAS_MAX);
+        let sy = map_mt_chart_xy(
+            da,
+            tas,
+            FIG2_DA_MIN,
+            FIG2_DA_MAX,
+            FIG3_TAS_MIN,
+            FIG3_TAS_MAX,
+        )
+        .1;
+        specs.push((format!("{p}%"), x, sy, false));
+    }
+    let ft_pts = fig3_full_throttle_chart_points(mt);
+    if let Some((da, tas)) = ft_pts.last().copied() {
+        let x = end_label_x(da, tas, FIG3_TAS_MIN, FIG3_TAS_MAX);
+        let sy = map_mt_chart_xy(
+            da,
+            tas,
+            FIG2_DA_MIN,
+            FIG2_DA_MAX,
+            FIG3_TAS_MIN,
+            FIG3_TAS_MAX,
+        )
+        .1;
+        specs.push(("Full Throttle".into(), x, sy, false));
+    }
+    let selected_pts = fig3_pct_bhp_chart_points(mt, selected_pct);
+    if !selected_pts.is_empty() {
+        let da_max = fig3_pct_bhp_da_bounds(mt, selected_pct)
+            .map(|(_, d1)| d1)
+            .unwrap_or_else(|| selected_pts.last().unwrap().0);
+        let tas = selected_pts
+            .iter()
+            .find(|(d, _)| (*d - da_max).abs() < 1.0)
+            .map(|(_, t)| *t)
+            .unwrap_or_else(|| selected_pts.last().unwrap().1);
+        let x = end_label_x(da_max, tas, FIG3_TAS_MIN, FIG3_TAS_MAX);
+        let sy = map_mt_chart_xy(
+            da_max,
+            tas,
+            FIG2_DA_MIN,
+            FIG2_DA_MAX,
+            FIG3_TAS_MIN,
+            FIG3_TAS_MAX,
+        )
+        .1;
+        let y = (sy - 12.0).max(plot_top_y() + 8.0);
+        let on_printed = PRINTED_PCT_CURVES
+            .iter()
+            .any(|p| (selected_pct - *p as f64).abs() < 0.01);
+        let show_selected = skip_matching_printed_label || !on_printed || selected_pts.len() > 1;
+        if show_selected {
+            specs.push((format_pct_bhp_label(selected_pct), x, y, true));
+        }
+    }
+    let svg_ys: Vec<f64> = specs.iter().map(|(_, _, y, _)| *y).collect();
+    let adj = stagger_end_label_ys(&svg_ys);
+    specs
+        .into_iter()
+        .zip(adj)
+        .map(|((text, x, _, hi), y)| (text, x, y, hi))
         .collect()
 }
 
@@ -477,6 +663,59 @@ mod tests {
         let vb_w = MT_W + MT_MARGIN_L + MT_MARGIN_R;
         assert!(g.cx <= vb_w - MT_MARGIN_R);
         assert!(g.cx >= MT_MARGIN_L);
+    }
+
+    #[test]
+    fn fig2_curve_end_labels_no_overlap_at_60_and_65_pct() {
+        let mt = Mt175rData::production();
+        for pct in [60.0, 65.0] {
+            for skip in [false, true] {
+                let labels = fig2_curve_end_label_positions(&mt, pct, skip);
+                let boxes: Vec<_> = labels
+                    .iter()
+                    .map(|(t, x, y, _)| label_bbox_start(*x, *y, t))
+                    .collect();
+                for (i, a) in boxes.iter().enumerate() {
+                    for b in boxes.iter().skip(i + 1) {
+                        assert!(
+                            !label_bboxes_overlap(*a, *b),
+                            "overlap pct={pct} skip={skip} labels={labels:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fig3_curve_end_labels_no_overlap_at_60_and_65_pct() {
+        let mt = Mt175rData::production();
+        for pct in [60.0, 65.0] {
+            let labels = fig3_curve_end_label_positions(&mt, pct, false);
+            let boxes: Vec<_> = labels
+                .iter()
+                .map(|(t, x, y, _)| label_bbox_start(*x, *y, t))
+                .collect();
+            for (i, a) in boxes.iter().enumerate() {
+                for b in boxes.iter().skip(i + 1) {
+                    assert!(
+                        !label_bboxes_overlap(*a, *b),
+                        "overlap pct={pct} labels={labels:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fig3_selected_polyline_nonempty_at_60_pct() {
+        let mt = Mt175rData::production();
+        let pts = fig3_selected_polyline(&mt, 60.0);
+        assert!(
+            pts.len() > 2,
+            "expected interpolated Fig3 curve, got {}",
+            pts.len()
+        );
     }
 
     #[test]

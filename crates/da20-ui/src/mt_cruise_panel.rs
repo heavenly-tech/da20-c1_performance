@@ -14,10 +14,11 @@ use crate::mt_cruise_axes::{
     RPM_TICKS, TAS_TICKS_KT,
 };
 use crate::mt_cruise_chart::{
-    apply_mt_fig2_pct_drag, fig2_family_polylines, fig2_marker_guides, fig2_selected_polyline,
-    fig3_family_polylines, fig3_marker_guides, filter_plot_points, format_pct_bhp_label,
-    map_mt_chart_xy, mt_chart_da_on_fig2_axes, mt_cruise_density_altitude_ft, plot_right_x,
-    plot_top_y, selected_pct_bhp,
+    apply_mt_fig2_pct_drag, fig2_curve_end_label_positions, fig2_family_polylines,
+    fig2_marker_guides, fig2_selected_polyline, fig3_curve_end_label_positions,
+    fig3_family_polylines, fig3_marker_guides, fig3_selected_polyline, filter_plot_points,
+    format_pct_bhp_label, map_mt_chart_xy, mt_chart_da_on_fig2_axes, mt_cruise_density_altitude_ft,
+    selected_pct_bhp,
 };
 use crate::phase_state::persist_tab_inputs;
 use crate::phases::Phase;
@@ -37,61 +38,28 @@ fn polyline_svg(points: &[(f64, f64)], spec: MtAxisSpec) -> String {
     format_svg_polyline(&svg_pts)
 }
 
-fn family_curve_label(
-    points: &[(f64, f64)],
-    label: String,
-    spec: MtAxisSpec,
-    highlight: bool,
-) -> AnyView {
-    let plot_pts = filter_plot_points(points, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let Some((da, y)) = plot_pts.last().copied() else {
-        return view! { <span></span> }.into_any();
-    };
-    let (sx, sy) = map_mt_chart_xy(da, y, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let x = (sx + 10.0).min(plot_right_x() + 8.0);
-    if highlight {
-        view! {
-            <text
-                x=x
-                y=sy
-                class="chart-guide-label-hi"
-                font-size="9"
-                text-anchor="start"
-                dominant-baseline="middle"
-            >
-                {label}
-            </text>
-        }
-        .into_any()
-    } else {
-        view! {
-            {guide_line_label(x, sy, label, LabelAnchor::Start)}
-        }
-        .into_any()
-    }
-}
-
-fn selected_curve_label(points: &[(f64, f64)], label: String, spec: MtAxisSpec) -> AnyView {
-    let plot_pts = filter_plot_points(points, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let Some((da, y)) = plot_pts.last().copied() else {
-        return family_curve_label(points, label, spec, true);
-    };
-    let (sx, sy) = map_mt_chart_xy(da, y, spec.da_min, spec.da_max, spec.y_min, spec.y_max);
-    let x = (sx + 10.0).min(plot_right_x() + 8.0);
-    let y = (sy - 12.0).max(plot_top_y() + 8.0);
+fn render_curve_end_labels(labels: Vec<(String, f64, f64, bool)>) -> impl IntoView {
     view! {
-        <text
-            x=x
-            y=y
-            class="chart-guide-label-hi"
-            font-size="9"
-            text-anchor="start"
-            dominant-baseline="middle"
-        >
-            {label}
-        </text>
+        {labels.into_iter().map(|(text, x, y, highlight)| {
+            if highlight {
+                view! {
+                    <text
+                        x=x
+                        y=y
+                        class="chart-guide-label-hi"
+                        font-size="9"
+                        text-anchor="start"
+                        dominant-baseline="middle"
+                    >
+                        {text}
+                    </text>
+                }
+                .into_any()
+            } else {
+                view! { {guide_line_label(x, y, text, LabelAnchor::Start)} }.into_any()
+            }
+        }).collect_view()}
     }
-    .into_any()
 }
 
 fn render_marker_guides(g: &crate::mt_cruise_chart::MtChartMarkerGuides) -> impl IntoView {
@@ -212,7 +180,14 @@ pub fn MtCruisePanel(
             let selected_label = format_pct_bhp_label(selected_pct);
 
             let fig3_family = fig3_family_polylines(&mt);
+            let fig3_selected_pts = fig3_selected_polyline(&mt, selected_pct);
             let fig3_ft_line = polyline_svg(&fig3_full_throttle_chart_points(&mt), fig3_spec);
+            let skip_printed_end_label = fig2_brackets.len() <= 1
+                && (selected_pct - selected_pct.round() as i32 as f64).abs() < 0.01;
+            let fig2_end_labels =
+                fig2_curve_end_label_positions(&mt, selected_pct, skip_printed_end_label);
+            let fig3_end_labels =
+                fig3_curve_end_label_positions(&mt, selected_pct, skip_printed_end_label);
 
             let c = copy(loc);
             let da_axis_title = c.mt_da_axis_title.to_string();
@@ -277,24 +252,15 @@ pub fn MtCruisePanel(
                 >
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
                     {mt_chart_axes(fig2_spec, &RPM_TICKS, da_axis_title.clone())}
-                    {family.iter().map(|(pct, pts)| {
-                        let lbl = format!("{pct}%");
+                    {family.iter().map(|(_pct, pts)| {
                         let line = polyline_svg(pts, fig2_spec);
-                        let skip_end_label = fig2_brackets.len() <= 1
-                            && (selected_pct - *pct as f64).abs() < 0.01;
-                        view! {
-                            <polyline class="chart-stroke-line" points=line fill="none"/>
-                            {(!skip_end_label).then(|| family_curve_label(pts, lbl, fig2_spec, false))}
-                        }
+                        view! { <polyline class="chart-stroke-line" points=line fill="none"/> }
                     }).collect_view()}
                     {(!selected_pts.is_empty()).then(|| {
                         let line = polyline_svg(&selected_pts, fig2_spec);
-                        let lbl = selected_label.clone();
-                        view! {
-                            <polyline class="chart-stroke-line-hi" points=line fill="none"/>
-                            {selected_curve_label(&selected_pts, lbl, fig2_spec)}
-                        }
+                        view! { <polyline class="chart-stroke-line-hi" points=line fill="none"/> }
                     })}
+                    {render_curve_end_labels(fig2_end_labels)}
                     {render_marker_guides(&fig2_guides)}
                 </svg>
                 <p class="lab mono">{format!(
@@ -306,16 +272,15 @@ pub fn MtCruisePanel(
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
                     {mt_chart_axes(fig3_spec, &TAS_TICKS_KT, da_axis_title)}
                     <polyline class="chart-stroke-line" points=fig3_ft_line fill="none"/>
-                    {fig3_family.iter().map(|(pct, pts)| {
-                        let highlight = fig3_brackets.iter().any(|(p, w)| *p == *pct && *w > 0.99);
-                        let cls = if highlight {
-                            "chart-stroke-line-hi"
-                        } else {
-                            "chart-stroke-line"
-                        };
+                    {fig3_family.iter().map(|(_pct, pts)| {
                         let line = polyline_svg(pts, fig3_spec);
-                        view! { <polyline class=cls points=line fill="none"/> }
+                        view! { <polyline class="chart-stroke-line" points=line fill="none"/> }
                     }).collect_view()}
+                    {(!fig3_selected_pts.is_empty()).then(|| {
+                        let line = polyline_svg(&fig3_selected_pts, fig3_spec);
+                        view! { <polyline class="chart-stroke-line-hi" points=line fill="none"/> }
+                    })}
+                    {render_curve_end_labels(fig3_end_labels)}
                     {render_marker_guides(&fig3_guides)}
                 </svg>
                 <MtFig4TableView locale=locale data=data inputs=inputs/>
