@@ -668,7 +668,11 @@ fn build_cruise_result(
         fuel_flow_us_gal_h: tri.gph,
         table3_source: Some(table3_source),
         mt_fig4_source: None,
+        mt_fig2_source: None,
+        mt_fig3_source: None,
+        mt_fig4_ktas_kt: None,
         density_altitude_ft: None,
+        mt_gph_out_of_chart: false,
         warnings,
     })
 }

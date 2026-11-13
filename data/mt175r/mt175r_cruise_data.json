@@ -101,6 +101,16 @@
       "pass": true,
       "table_linear_interp_rpm": 2440.0
     },
+    "fig2_55pct_peak_scan_high_da": {
+      "source_image": "data/mt175r/figures/fig2_orig.png",
+      "method": "axis_calibration.fig2 maps DA\u2192image row and RPM\u2192column; at each target DA, scan a \u00b13 px row band for column-wise ink minima, smooth 5 px, keep local minima; 55% curve identified as the RPM peak between the 45% (~2232 RPM) and 65% (~2564 RPM) peaks at the same row (x\u2248436 px on 733\u00d7430 orig).",
+      "samples_rpm": {
+        "11800": 2398.8,
+        "11950": 2398.8,
+        "12000": 2398.8
+      },
+      "note": "Measured 2398.76 RPM at 11800 DA (rounded 2398.8); curve flat within digitization noise through 12000 ft."
+    },
     "fig3_speed_power": {
       "input": {
         "da_ft": 6000,
@@ -815,7 +825,7 @@
           "pct_bhp": 45,
           "da_ft_range": [
             100,
-            11950
+            12000
           ],
           "rpm_range": [
             1989.4,
@@ -947,6 +957,11 @@
               "da_ft": 11950,
               "rpm": 2234.9,
               "source": "peak_scan"
+            },
+            {
+              "da_ft": 12000,
+              "rpm": 2235.0,
+              "source": "printed_endpoint"
             }
           ]
         },
@@ -954,11 +969,11 @@
           "pct_bhp": 55,
           "da_ft_range": [
             100,
-            11500.0
+            12000
           ],
           "rpm_range": [
             2156.7,
-            2387.9
+            2398.8
           ],
           "fit": {
             "a": 491.7982842974355,
@@ -1091,6 +1106,21 @@
               "da_ft": 11500.0,
               "rpm": 2387.9,
               "source": "line_fit"
+            },
+            {
+              "da_ft": 11800,
+              "rpm": 2398.8,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 11950,
+              "rpm": 2398.8,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 12000,
+              "rpm": 2398.8,
+              "source": "peak_scan"
             }
           ]
         },
@@ -1098,7 +1128,7 @@
           "pct_bhp": 65,
           "da_ft_range": [
             100,
-            11950
+            12000
           ],
           "rpm_range": [
             2322.4,
@@ -1240,6 +1270,11 @@
               "da_ft": 11950,
               "rpm": 2567.2,
               "source": "peak_scan"
+            },
+            {
+              "da_ft": 12000,
+              "rpm": 2568.2,
+              "source": "peak_scan"
             }
           ]
         },
@@ -1344,6 +1379,11 @@
               "da_ft": 8000.0,
               "rpm": 2643.8,
               "source": "line_fit"
+            },
+            {
+              "da_ft": 8270,
+              "rpm": 2650.0,
+              "source": "printed_endpoint"
             }
           ],
           "note": "Printed 75% curve ends between the 8000 and 10000 ft grid lines, near DA 8270 ft / 2650 RPM. Do not extrapolate above this."
@@ -1375,7 +1415,7 @@
           "kind": "pct_bhp",
           "da_ft_range": [
             500.0,
-            11500.0
+            12000
           ],
           "tas_kt_range": [
             97.07,
@@ -1482,6 +1522,11 @@
             {
               "da_ft": 11500.0,
               "tas_kt": 106.3
+            },
+            {
+              "da_ft": 12000,
+              "tas_kt": 106.78,
+              "source": "peak_scan"
             }
           ]
         },
@@ -1490,7 +1535,7 @@
           "kind": "pct_bhp",
           "da_ft_range": [
             500.0,
-            11500.0
+            12000
           ],
           "tas_kt_range": [
             107.44,
@@ -1597,6 +1642,11 @@
             {
               "da_ft": 11500.0,
               "tas_kt": 116.62
+            },
+            {
+              "da_ft": 12000,
+              "tas_kt": 117.09,
+              "source": "peak_scan"
             }
           ]
         },
@@ -1605,7 +1655,7 @@
           "kind": "pct_bhp",
           "da_ft_range": [
             500.0,
-            11500.0
+            12000
           ],
           "tas_kt_range": [
             117.76,
@@ -1712,6 +1762,11 @@
             {
               "da_ft": 11500.0,
               "tas_kt": 127.02
+            },
+            {
+              "da_ft": 12000,
+              "tas_kt": 127.5,
+              "source": "printed_endpoint"
             }
           ]
         },
@@ -1811,7 +1866,7 @@
           "kind": "full_throttle",
           "da_ft_range": [
             500.0,
-            11500.0
+            12000
           ],
           "tas_kt_range": [
             128.51,
@@ -1919,6 +1974,11 @@
             {
               "da_ft": 11500.0,
               "tas_kt": 128.51
+            },
+            {
+              "da_ft": 12000,
+              "tas_kt": 127.5,
+              "source": "printed_endpoint"
             }
           ],
           "note": "Right-hand envelope of the speed-power chart. At a given DA, TAS cannot exceed this curve. 75% meets it at 8500 ft; 65% meets it at the top of the chart (DA 12000 ft, TAS \u2248 127.5 kt)."

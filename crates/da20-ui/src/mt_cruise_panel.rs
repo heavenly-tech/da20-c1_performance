@@ -20,6 +20,37 @@ const MT_MARGIN_R: f64 = 10.0;
 const MT_W: f64 = 320.0;
 const MT_H: f64 = 200.0;
 
+fn highlighted_curves(
+    cr: Option<&da20_core::types::CruiseResult>,
+    inputs: &FlightInputs,
+    solved_pct: Option<f64>,
+) -> Vec<(i32, f64)> {
+    if let Some(f2) = cr.and_then(|c| c.mt_fig2_source.as_ref()) {
+        return f2
+            .curve_brackets
+            .iter()
+            .filter(|b| b.weight > 1e-6)
+            .map(|b| (b.pct_bhp, b.weight))
+            .collect();
+    }
+    let pct = chart_pct_bhp(inputs, solved_pct);
+    vec![(pct, 1.0)]
+}
+
+fn bracket_caption(locale: Locale, brackets: &[(i32, f64)], pct_bhp_lbl: &str) -> String {
+    if brackets.len() <= 1 {
+        return String::new();
+    }
+    let parts: Vec<String> = brackets
+        .iter()
+        .map(|(p, w)| format!("{p}%={w:.3}"))
+        .collect();
+    match locale {
+        Locale::Es => format!(" · {pct_bhp_lbl}: {}", parts.join(", ")),
+        Locale::En => format!(" · {pct_bhp_lbl}: {}", parts.join(", ")),
+    }
+}
+
 fn chart_pct_bhp(inputs: &FlightInputs, solved_pct: Option<f64>) -> i32 {
     let pct = match inputs.cruise_solve_mode {
         CruiseSolveMode::SetPercentBhp => inputs.cruise_percent_bhp,
@@ -94,6 +125,17 @@ pub fn MtCruisePanel(
             let chart_ok = b.cruise.is_some();
             let cr = b.cruise.as_ref();
             let pct = chart_pct_bhp(&i, cr.and_then(|c| c.percent_bhp));
+            let fig2_brackets = highlighted_curves(cr, &i, cr.and_then(|c| c.percent_bhp));
+            let fig3_brackets = cr
+                .and_then(|c| c.mt_fig3_source.as_ref())
+                .map(|f3| {
+                    f3.curve_brackets
+                        .iter()
+                        .filter(|b| b.weight > 1e-6)
+                        .map(|b| (b.pct_bhp, b.weight))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| fig2_brackets.clone());
             let da = cr.and_then(|c| c.density_altitude_ft);
             let cursor_rpm = cr.and_then(|c| c.rpm);
             let cursor_tas = cr.and_then(|c| c.tas_chart_kt);
@@ -105,20 +147,46 @@ pub fn MtCruisePanel(
             let tas_min = 90.0;
             let tas_max = 140.0;
 
-            let fig2_line = polyline_svg(
-                &fig2_curve_chart_points(&mt, pct),
-                da_min,
-                da_max,
-                rpm_min,
-                rpm_max,
-            );
-            let fig3_line = polyline_svg(
-                &fig3_curve_chart_points(&mt, pct),
-                da_min,
-                da_max,
-                tas_min,
-                tas_max,
-            );
+            let fig2_lines: Vec<(String, String)> = fig2_brackets
+                .iter()
+                .map(|(p, w)| {
+                    let cls = if *w > 0.99 {
+                        "chart-stroke-line-hi"
+                    } else {
+                        "chart-stroke-line"
+                    };
+                    (
+                        cls.to_string(),
+                        polyline_svg(
+                            &fig2_curve_chart_points(&mt, *p),
+                            da_min,
+                            da_max,
+                            rpm_min,
+                            rpm_max,
+                        ),
+                    )
+                })
+                .collect();
+            let fig3_lines: Vec<(String, String)> = fig3_brackets
+                .iter()
+                .map(|(p, w)| {
+                    let cls = if *w > 0.99 {
+                        "chart-stroke-line-hi"
+                    } else {
+                        "chart-stroke-line"
+                    };
+                    (
+                        cls.to_string(),
+                        polyline_svg(
+                            &fig3_curve_chart_points(&mt, *p),
+                            da_min,
+                            da_max,
+                            tas_min,
+                            tas_max,
+                        ),
+                    )
+                })
+                .collect();
             let fig3_ft_line = polyline_svg(
                 &fig3_full_throttle_chart_points(&mt),
                 da_min,
@@ -145,17 +213,29 @@ pub fn MtCruisePanel(
             let c = copy(loc);
 
             view! {
-                <p class="lab mono">{format!("{} · {pct}% BHP", c.mt_fig2_title)}</p>
+                <p class="lab mono">{format!(
+                    "{} · {pct}% BHP{}",
+                    c.mt_fig2_title,
+                    bracket_caption(loc, &fig2_brackets, c.mt_pct_bhp_weight_lbl),
+                )}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
-                    <polyline class="chart-stroke-line" points=fig2_line fill="none"/>
+                    {fig2_lines.iter().map(|(cls, pts)| view! {
+                        <polyline class=cls.clone() points=pts.clone() fill="none"/>
+                    }).collect_view()}
                     {fig2_cursor}
                 </svg>
-                <p class="lab mono">{format!("{} · {pct}% BHP", c.mt_fig3_title)}</p>
+                <p class="lab mono">{format!(
+                    "{} · {pct}% BHP{}",
+                    c.mt_fig3_title,
+                    bracket_caption(loc, &fig3_brackets, c.mt_pct_bhp_weight_lbl),
+                )}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>
                     <rect class="chart-panel" x="0" y="0" width=vb_w height=vb_h/>
                     <polyline class="chart-stroke-line" points=fig3_ft_line fill="none"/>
-                    <polyline class="chart-stroke-line-hi" points=fig3_line fill="none"/>
+                    {fig3_lines.iter().map(|(cls, pts)| view! {
+                        <polyline class=cls.clone() points=pts.clone() fill="none"/>
+                    }).collect_view()}
                     {if chart_ok {
                         let da = da.expect("chart_ok");
                         let tas = cursor_tas.expect("chart_ok");

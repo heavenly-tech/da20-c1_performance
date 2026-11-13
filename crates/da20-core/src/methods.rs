@@ -58,6 +58,14 @@ pub fn all_methods() -> Vec<MethodEntry> {
             limitations: CRUISE_TABLE3_GPH_NOTE,
         },
         MethodEntry {
+            id: "cruise_mt175r",
+            title: "MT 175 R cruise (AFMS E-1487)",
+            afm_reference: "AFMS E-1487 Figures 1–4",
+            summary: "PA + OAT → density altitude (ISA troposphere formula; Fig 1 example ≈7374 ft vs 7391 printed NWS). Chain: Fig 2 RPM/%BHP → Fig 3 TAS (max gross, no weight correction; cap at Full Throttle) → Fig 4 GPH only. Fig 4 KTAS comparison only. Wheel fairings ~−5% TAS; GPH not scaled.",
+            interpolation: "Tabla or Interpolado tags only. Off chart below 45% BHP, past 75% endpoint, right of Full Throttle/2800 RPM, Fig 2 RPM < 2200 or DA < 2000 ft for GPH/endurance/range.",
+            limitations: "Fig 4 GPH transcribed as printed; two doubtful cells at DA 10000/12000 RPM 2200.",
+        },
+        MethodEntry {
             id: "landing",
             title: "Landing distance (Table 4)",
             afm_reference: "AFM page 5-17, Table 4",

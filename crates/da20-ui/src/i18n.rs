@@ -119,6 +119,8 @@ pub struct Copy {
     pub landing_tbl_roll_ft: &'static str,
     pub landing_tbl_50ft_ft: &'static str,
     pub mt_fig4_da_weight_lbl: &'static str,
+    pub mt_pct_bhp_weight_lbl: &'static str,
+    pub mt_fig4_ktas_compare: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
     /// Target PA for climb time-to-altitude (Climb tab; not cruise-tab PA).
@@ -263,15 +265,16 @@ pub fn copy(locale: Locale) -> &'static Copy {
 pub fn format_mt_cruise_bhp_not_achievable(
     locale: Locale,
     pct_bhp: f64,
-    rmin: f64,
-    rmax: f64,
+    min_pct: f64,
+    max_pct: f64,
 ) -> String {
+    let _ = pct_bhp;
     match locale {
         Locale::Es => format!(
-            "No alcanzable — %BHP {pct_bhp:.2}% fuera de [{rmin:.0}, {rmax:.0}] RPM a esta AD (Fig 4)."
+            "Fuera de carta — %BHP válido {min_pct:.0}–{max_pct:.0} % en Fig 2/3 (solo interpolación)."
         ),
         Locale::En => format!(
-            "Not achievable — %BHP {pct_bhp:.2}% outside [{rmin:.0}, {rmax:.0}] RPM at this DA (Fig 4)."
+            "Off chart — valid %BHP is {min_pct:.0}–{max_pct:.0}% on Fig 2/3 (interpolate only)."
         ),
     }
 }
@@ -355,6 +358,8 @@ const ES: Copy = Copy {
     landing_tbl_roll_ft: "Rodaje ft",
     landing_tbl_50ft_ft: "50 ft ft",
     mt_fig4_da_weight_lbl: "Peso DA",
+    mt_pct_bhp_weight_lbl: "Peso %BHP",
+    mt_fig4_ktas_compare: "Fig 4 KTAS (solo comparación)",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
     climb_target_altitude_ft: "Altitud objetivo de trepada (ft)",
@@ -559,6 +564,8 @@ const EN: Copy = Copy {
     landing_tbl_roll_ft: "Roll ft",
     landing_tbl_50ft_ft: "50 ft ft",
     mt_fig4_da_weight_lbl: "DA weight",
+    mt_pct_bhp_weight_lbl: "%BHP weight",
+    mt_fig4_ktas_compare: "Fig 4 KTAS (comparison only)",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
     climb_target_altitude_ft: "Climb target PA (ft)",
@@ -728,11 +735,11 @@ const ES_METHODS: [MethodCopy; 10] = [
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
-        title: "Crucero MT 175 R (AFMS E-1487 Fig 1–4)",
-        afm: "AFMS E-1487 Fig 4 (suplemento MT 175 R)",
-        summary: "Altitud de densidad ISA troposférica exacta: σ = (T_std/T₀)^5.25588 × (T₀/T_real) con T_std = 288,15 K − 0,0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0,0019812 (misma función que da20-core en cruise MT). Consulta Fig 4 en esa DA y RPM.",
-        interpolation: "Tabla o Interpolado. Valor = Σ (Peso DA × Peso RPM × celda) sobre las esquinas usadas (cada par de pesos en DA o RPM suma 1).\n\n«Peso» es el peso de la interpolación. Peso RPM: entre columnas impresas — p. ej. 2400 y 2500 a 2450 → 0,5 y 0,5; a 2475 → 0,75 y 0,25; siempre suman 1. Peso DA igual entre filas impresas alrededor de tu altitud de densidad.\n\nEjemplo: mitad en RPM y un cuarto en DA: 0,5×0,75×(DA baja, RPM bajo) + 0,5×0,75×(DA baja, RPM alto) + 0,5×0,25×(DA alta, RPM bajo) + 0,5×0,25×(DA alta, RPM alto).\n\nInterpolación lineal en ambas direcciones; la app muestra los pesos para repetirlo a mano desde las filas resaltadas.",
-        limitations: "Fuera del casco Fig 4 → «Fuera de carta». Despegue/trepada/aterrizaje sin cambio por hélice MT (AFMS E-1487).",
+        title: "Crucero MT 175 R (AFMS E-1487)",
+        afm: "AFMS E-1487 Fig 1–4",
+        summary: "PA + OAT → altitud de densidad (σ con exponente 5.25588 ISA troposférica; el ejemplo de la Fig 1 da ≈7374 ft frente a 7391 ft impreso por aproximación NWS). Cadena: Fig 2 (RPM / %BHP) → Fig 3 TAS (peso máximo bruto, mezcla a máxima potencia, sin corrección por peso; TAS limitada por Full Throttle) → Fig 4 solo GPH. El KTAS de la Fig 4 es solo comparación, nunca se promedia con la Fig 3. Carenados: ~−5% TAS; GPH sin escalar (pendiente de confirmación AFMS).",
+        interpolation: "Solo interpolación. Etiquetas Tabla o Interpolado. Fuera de carta bajo 45 % BHP, más allá del extremo del 75 %, a la derecha de Full Throttle/2800 RPM, RPM Fig 2 < 2200 o DA < 2000 ft, o por encima del techo RPM Fig 4 en esa DA (GPH/autonomía/alcance en cada ficha con sus propias entradas).",
+        limitations: "Fig 4 GPH transcrito tal como impreso (dos celdas dudosas a DA 10000/12000 y RPM 2200).",
     },
     MethodCopy {
         title: "Aterrizaje (Tabla 4)",
@@ -802,11 +809,11 @@ const EN_METHODS: [MethodCopy; 10] = [
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
-        title: "Cruise MT 175 R (AFMS E-1487 Fig 1–4)",
-        afm: "AFMS E-1487 Fig 4 (MT 175 R supplement)",
-        summary: "Exact ISA troposphere density altitude: σ = (T_std/T₀)^5.25588 × (T₀/T_actual) with T_std = 288.15 K − 0.0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0.0019812 (same as da20-core MT cruise). Fig 4 lookup at that DA and RPM.",
-        interpolation: "Table or Interpolated only. Result = Σ (DA weight × RPM weight × cell) over used corners (each bracketing weight pair sums to 1).\n\n\"Weight\" means the interpolation weight. RPM weight: between printed columns — e.g. 2400 and 2500 at 2450, each gets 0.5; at 2475, 0.75 and 0.25; always sum to 1. DA weight works the same between printed rows around your density altitude.\n\nExample halfway in RPM and a quarter of the way in DA: 0.5×0.75×(low DA, low RPM) + 0.5×0.75×(low DA, high RPM) + 0.5×0.25×(high DA, low RPM) + 0.5×0.25×(high DA, high RPM).\n\nOrdinary linear interpolation in both directions; the app shows the weights so you can redo it by hand from the highlighted rows.",
-        limitations: "Outside Fig 4 hull → Out of chart. Takeoff/climb/landing unchanged by MT propeller (AFMS E-1487).",
+        title: "MT 175 R cruise (AFMS E-1487)",
+        afm: "AFMS E-1487 Figs 1–4",
+        summary: "PA + OAT → density altitude (ISA troposphere σ with exponent 5.25588; Fig 1 example computes ≈7374 ft vs 7391 ft printed NWS approximation). Chain: Fig 2 (RPM / %BHP) → Fig 3 TAS (max gross weight, best-power mixture, no weight correction; TAS capped at Full Throttle) → Fig 4 GPH only. Fig 4 KTAS is comparison only, never averaged with Fig 3. Wheel fairings: ~−5% TAS; GPH not scaled (AFMS confirmation pending).",
+        interpolation: "Interpolate only. Tags Table or Interpolated. Off chart below 45% BHP, past the 75% endpoint, right of Full Throttle/2800 RPM, Fig 2 RPM < 2200 or DA < 2000 ft, or above the Fig 4 RPM ceiling at that DA (GPH/endurance/range per tab from that tab's inputs).",
+        limitations: "Fig 4 GPH transcribed as printed (two doubtful cells at DA 10000/12000 and RPM 2200).",
     },
     MethodCopy {
         title: "Landing (Table 4)",

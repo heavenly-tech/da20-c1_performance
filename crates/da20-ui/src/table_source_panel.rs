@@ -1,6 +1,8 @@
 use da20_core::cruise::table3_trace_uses_cell;
 use da20_core::mt175r::cruise::mt_fig4_trace_uses_cell;
-use da20_core::types::{MtFig4SourceTrace, Table3SourceTrace, Table4SourceTrace};
+use da20_core::types::{
+    MtFig2SourceTrace, MtFig3SourceTrace, MtFig4SourceTrace, Table3SourceTrace, Table4SourceTrace,
+};
 use leptos::prelude::*;
 
 use crate::i18n::{copy, Locale};
@@ -173,6 +175,54 @@ pub fn cruise_table_cell_highlight(
     trace
         .map(|t| table3_trace_uses_cell(t, pa, rpm, disa_c))
         .unwrap_or(false)
+}
+
+#[component]
+pub fn MtFig2Fig3SourcePanel(
+    locale: Locale,
+    fig2: Option<MtFig2SourceTrace>,
+    fig3: Option<MtFig3SourceTrace>,
+) -> impl IntoView {
+    let c = copy(locale);
+    let Some(f2) = fig2 else {
+        return view! { <span></span> }.into_any();
+    };
+    let weights2: String = f2
+        .curve_brackets
+        .iter()
+        .map(|b| format!("{}%={:.3}", b.pct_bhp, b.weight))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let weights3 = fig3
+        .as_ref()
+        .map(|f3| {
+            f3.curve_brackets
+                .iter()
+                .map(|b| format!("{}%={:.3}", b.pct_bhp, b.weight))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    view! {
+        <h4 class="table-source-title">"Fig 2 / Fig 3"</h4>
+        <div class="table-source-block">
+            <p class="mono table-source-meta">{format!(
+                "Fig 2 · {}: {} · RPM {:.1}",
+                c.mt_pct_bhp_weight_lbl,
+                weights2,
+                f2.rpm_result,
+            )}</p>
+            {fig3.map(|f3| view! {
+                <p class="mono table-source-meta">{format!(
+                    "Fig 3 · {}: {} · TAS {:.1} kt",
+                    c.mt_pct_bhp_weight_lbl,
+                    weights3,
+                    f3.tas_result_kt,
+                )}</p>
+            })}
+        </div>
+    }
+    .into_any()
 }
 
 #[component]

@@ -270,6 +270,10 @@ pub struct SavedBundle {
     pub landing_ooc: Option<ChartOutOfRange>,
     pub landing: Option<da20_core::types::LandingResult>,
     pub wind: Option<da20_core::types::WindResult>,
+    /// Cruise-chain result from the Endurance tab inputs only (may be partial Fig 4 GPH).
+    pub endurance_cruise: Option<da20_core::types::CruiseResult>,
+    pub endurance_out_of_chart: bool,
+    pub endurance_ooc: Option<ChartOutOfRange>,
     pub endurance: Option<da20_core::types::EnduranceResult>,
 }
 
@@ -293,13 +297,20 @@ pub fn compute_all_isolated(
     let climb_res =
         da20_core::climb::compute_climb(data, &climb_in, prefs.climb.climb_target_altitude_ft);
     let cruise_res = da20_core::cruise::compute_cruise(data, &cruise_in);
+    let endurance_cruise_res = da20_core::cruise::compute_cruise(data, &endurance_in);
     let landing_res = da20_core::landing::compute_landing(data, &landing_in);
 
     let takeoff_ooc = takeoff_ooc_from_err(takeoff_res.as_ref().err());
     let climb_ooc = climb_ooc_from_err(climb_res.as_ref().err());
-    let cruise_ooc = cruise_ooc_from_err(cruise_res.as_ref().err());
+    let cruise_ooc = cruise_ooc_from_result(&cruise_res);
+    let endurance_ooc = cruise_ooc_from_result(&endurance_cruise_res);
     let landing_ooc = landing_ooc_from_err(landing_res.as_ref().err());
     let cruise_bhp_not_achievable = matches!(&cruise_res, Err(CruiseError::BhpNotAchievable));
+
+    let endurance = match &endurance_cruise_res {
+        Ok(c) if !c.mt_gph_out_of_chart => compute_endurance(data, &endurance_in).ok(),
+        _ => None,
+    };
 
     SavedBundle {
         takeoff: takeoff_res.ok(),
@@ -308,7 +319,7 @@ pub fn compute_all_isolated(
         climb: climb_res.ok(),
         climb_out_of_chart: climb_ooc.is_some(),
         climb_ooc,
-        cruise: cruise_res.ok(),
+        cruise: cruise_res.as_ref().ok().cloned(),
         cruise_bhp_not_achievable,
         cruise_out_of_chart: cruise_ooc.is_some(),
         cruise_ooc,
@@ -316,7 +327,10 @@ pub fn compute_all_isolated(
         landing_out_of_chart: landing_ooc.is_some(),
         landing_ooc,
         wind: da20_core::wind::compute_wind(data, &takeoff_in).ok(),
-        endurance: compute_endurance(data, &endurance_in).ok(),
+        endurance_cruise: endurance_cruise_res.as_ref().ok().cloned(),
+        endurance_out_of_chart: endurance_ooc.is_some(),
+        endurance_ooc,
+        endurance,
     }
 }
 
@@ -324,13 +338,22 @@ pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle
     let takeoff_res = da20_core::takeoff::compute_takeoff(data, inputs);
     let climb_res = da20_core::climb::compute_climb(data, inputs, inputs.cruise_pressure_alt_ft);
     let cruise_res = da20_core::cruise::compute_cruise(data, inputs);
+    let endurance_cruise_res = da20_core::cruise::compute_cruise(data, inputs);
     let landing_res = da20_core::landing::compute_landing(data, inputs);
 
     let takeoff_ooc = takeoff_ooc_from_err(takeoff_res.as_ref().err());
     let climb_ooc = climb_ooc_from_err(climb_res.as_ref().err());
-    let cruise_ooc = cruise_ooc_from_err(cruise_res.as_ref().err());
+    let cruise_ooc = cruise_ooc_from_result(&cruise_res);
+    let endurance_ooc = cruise_ooc_from_result(&endurance_cruise_res);
     let landing_ooc = landing_ooc_from_err(landing_res.as_ref().err());
     let cruise_bhp_not_achievable = matches!(&cruise_res, Err(CruiseError::BhpNotAchievable));
+
+    let endurance = match &endurance_cruise_res {
+        Ok(c) if !c.mt_gph_out_of_chart => {
+            da20_core::endurance::compute_endurance(data, inputs).ok()
+        }
+        _ => None,
+    };
 
     SavedBundle {
         takeoff: takeoff_res.ok(),
@@ -339,7 +362,7 @@ pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle
         climb: climb_res.ok(),
         climb_out_of_chart: climb_ooc.is_some(),
         climb_ooc,
-        cruise: cruise_res.ok(),
+        cruise: cruise_res.as_ref().ok().cloned(),
         cruise_bhp_not_achievable,
         cruise_out_of_chart: cruise_ooc.is_some(),
         cruise_ooc,
@@ -347,7 +370,10 @@ pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle
         landing_out_of_chart: landing_ooc.is_some(),
         landing_ooc,
         wind: da20_core::wind::compute_wind(data, inputs).ok(),
-        endurance: None,
+        endurance_cruise: endurance_cruise_res.as_ref().ok().cloned(),
+        endurance_out_of_chart: endurance_ooc.is_some(),
+        endurance_ooc,
+        endurance,
     }
 }
 
@@ -365,6 +391,7 @@ fn climb_ooc_from_err(err: Option<&ClimbError>) -> Option<ChartOutOfRange> {
     }
 }
 
+#[allow(dead_code)]
 fn cruise_ooc_from_err(err: Option<&CruiseError>) -> Option<ChartOutOfRange> {
     match err {
         Some(CruiseError::OutOfChart { axis, min, max }) => Some(ChartOutOfRange {
@@ -372,6 +399,27 @@ fn cruise_ooc_from_err(err: Option<&CruiseError>) -> Option<ChartOutOfRange> {
             min: *min,
             max: *max,
         }),
+        _ => None,
+    }
+}
+
+fn cruise_ooc_from_result(
+    res: &Result<da20_core::types::CruiseResult, CruiseError>,
+) -> Option<ChartOutOfRange> {
+    match res {
+        Err(CruiseError::OutOfChart { axis, min, max }) => Some(ChartOutOfRange {
+            label: axis,
+            min: *min,
+            max: *max,
+        }),
+        Ok(c) if c.mt_gph_out_of_chart => {
+            let da = c.density_altitude_ft?;
+            let rpm = c.rpm?;
+            let mt = da20_core::mt175r::data::Mt175rData::production();
+            Some(da20_core::mt175r::cruise::fig4_gph_partial_ooc_range(
+                &mt, da, rpm,
+            ))
+        }
         _ => None,
     }
 }
@@ -617,6 +665,78 @@ mod tests {
         let s = format_readout_timestamp("2026-01-01T12:30:00.000Z", Locale::En);
         assert!(!s.ends_with('Z'));
         assert!(s.contains("2026"));
+    }
+
+    #[test]
+    fn endurance_partial_when_mt_fig4_gph_ceiling() {
+        use crate::prefs::FlightPrefs;
+        use da20_core::cruise::isa_temp_c_at_pa;
+        use da20_core::types::{CruiseSolveMode, PropellerKind};
+
+        let data = PerformanceData::production();
+        let pa = 12_000.0;
+        let mut prefs = FlightPrefs::default();
+        prefs.propeller = PropellerKind::Mt175R;
+        prefs.endurance.cruise.cruise_pressure_alt_ft = pa;
+        prefs.endurance.cruise.cruise_percent_bhp_saved = Some(65.0);
+        prefs.endurance.cruise.cruise_solve_saved = Some(CruiseSolveMode::SetPercentBhp);
+        prefs.endurance.cruise.cruise_oat_c_saved = Some(isa_temp_c_at_pa(pa));
+        prefs.endurance.cruise.cruise_oat_manual = true;
+
+        let b = compute_all_isolated(&data, &prefs);
+        assert!(b.endurance.is_none());
+        let ec = b.endurance_cruise.as_ref().expect("endurance_cruise");
+        assert!(ec.mt_gph_out_of_chart);
+        assert_eq!(b.cruise_ooc, None, "cruise tab must stay independent");
+        let ooc = b.endurance_ooc.expect("endurance_ooc");
+        assert_eq!(ooc.label, "Fig 4 GPH");
+        let es = crate::i18n::format_out_of_chart(Locale::Es, &ooc);
+        let en = crate::i18n::format_out_of_chart(Locale::En, &ooc);
+        assert!(es.starts_with("Fuera de carta"));
+        assert!(en.starts_with("Out of chart"));
+    }
+
+    #[test]
+    fn cruise_and_endurance_ooc_isolated_opposite_tabs() {
+        use crate::prefs::FlightPrefs;
+        use da20_core::cruise::isa_temp_c_at_pa;
+        use da20_core::types::{CruiseSolveMode, PropellerKind};
+
+        let data = PerformanceData::production();
+        let mut prefs = FlightPrefs::default();
+        prefs.propeller = PropellerKind::Mt175R;
+
+        // Cruise tab: on-chart (e.g. 6000 / 65%)
+        prefs.cruise.cruise_pressure_alt_ft = 6000.0;
+        prefs.cruise.cruise_percent_bhp_saved = Some(65.0);
+        prefs.cruise.cruise_solve_saved = Some(CruiseSolveMode::SetPercentBhp);
+        prefs.cruise.cruise_oat_c_saved = Some(isa_temp_c_at_pa(6000.0));
+        prefs.cruise.cruise_oat_manual = true;
+
+        // Endurance tab: Fig 4 RPM ceiling (12000 / 65%)
+        let pa_high = 12_000.0;
+        prefs.endurance.cruise.cruise_pressure_alt_ft = pa_high;
+        prefs.endurance.cruise.cruise_percent_bhp_saved = Some(65.0);
+        prefs.endurance.cruise.cruise_solve_saved = Some(CruiseSolveMode::SetPercentBhp);
+        prefs.endurance.cruise.cruise_oat_c_saved = Some(isa_temp_c_at_pa(pa_high));
+        prefs.endurance.cruise.cruise_oat_manual = true;
+
+        let b = compute_all_isolated(&data, &prefs);
+        assert!(b.cruise.is_some());
+        assert!(!b.cruise.as_ref().unwrap().mt_gph_out_of_chart);
+        assert!(b.cruise_ooc.is_none());
+        assert!(b.endurance.is_none());
+        assert!(b.endurance_cruise.as_ref().unwrap().mt_gph_out_of_chart);
+        assert!(b.endurance_ooc.is_some());
+
+        let json = serde_json::to_string(&prefs).unwrap();
+        let loaded: FlightPrefs = serde_json::from_str(&json).unwrap();
+        let b2 = compute_all_isolated(&data, &loaded);
+        assert_eq!(
+            b.endurance_ooc.as_ref().map(|o| o.max),
+            b2.endurance_ooc.as_ref().map(|o| o.max)
+        );
+        assert!(b2.cruise_ooc.is_none());
     }
 
     #[test]
