@@ -3,6 +3,8 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::JsCast;
 
+use crate::palette::clear_chart_palette_inline_overrides;
+
 const THEME_KEY: &str = "da20_theme_v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -82,6 +84,9 @@ pub fn apply_theme(pref: ThemePreference) {
             let _ = html.set_attribute("data-color-scheme", scheme);
             if let Ok(el) = html.dyn_into::<web_sys::HtmlElement>() {
                 let _ = el.style().set_property("color-scheme", scheme);
+                if pref == ThemePreference::Night {
+                    clear_chart_palette_inline_overrides(&el);
+                }
             }
         }
     }

@@ -166,7 +166,7 @@ pub fn MtCruisePanel(
                         view! { <span></span> }.into_any()
                     }}
                 </svg>
-                <p class="cursor-readout mono">{cursor_readout}</p>
+                <p class="cursor-readout readout-text">{cursor_readout}</p>
                 <MtFig4TableView locale=locale data=data inputs=inputs/>
             }
         }}

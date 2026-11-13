@@ -276,6 +276,30 @@ button {
   font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace;
 }
 
+/* Cockpit readouts: UI sans + tabular figures (not Courier-like fallbacks). */
+.readout-text,
+.cursor-readout,
+.wind-components p,
+.readout-summary,
+.readout-results {
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-block > p:not(.big) {
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-block > p.big {
+  font-size: 26px;
+  font-weight: 700;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

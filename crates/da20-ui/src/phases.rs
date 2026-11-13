@@ -321,10 +321,10 @@ fn phase_results(
                     <div class="results-block">
                         <ProvenanceLine locale=locale provenance=t.provenance.clone()/>
                         <p class="chip">{afm_lookup_tag_label(locale, t.afm_lookup_tag)}</p>
-                        <p class="mono">{gr_line}</p>
-                        <p class="mono">{to_line}</p>
+                        <p class="readout-text">{gr_line}</p>
+                        <p class="readout-text">{to_line}</p>
                         {(rounding == TakeoffDistanceRounding::Raw).then(|| view! {
-                            <p class="mono">{format_takeoff_conservative_estimate(
+                            <p class="readout-text">{format_takeoff_conservative_estimate(
                                 locale,
                                 t.distance_over_obstacle_conservative_ft,
                                 t.distance_over_obstacle_conservative_m,
@@ -354,8 +354,8 @@ fn phase_results(
                     let cross = format_crosswind_component(locale, w.components.crosswind_kt);
                     view! {
                         <div class="wind-components">
-                            {along.map(|line| view! { <p class="mono">{line}</p> })}
-                            <p class="mono">{cross}</p>
+                            {along.map(|line| view! { <p class="readout-text">{line}</p> })}
+                            <p class="readout-text">{cross}</p>
                         </div>
                     }.into_any()
                 }
@@ -432,7 +432,7 @@ fn phase_results(
                             <p class="chip warn">{c_loc.mt_tcca_badge}</p>
                         })}
                         {mt_prop.then(|| cr.density_altitude_ft.map(|da| view! {
-                            <p class="mono">{c_loc.density_altitude_readout}": "{da.round() as i64}" ft"</p>
+                            <p class="readout-text">{c_loc.density_altitude_readout}": "{da.round() as i64}" ft"</p>
                         }))}
                         <p class="chip">{afm_lookup_tag_label(locale, cr.afm_lookup_tag)}</p>
                         {if bhp_mode {

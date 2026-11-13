@@ -168,7 +168,7 @@ pub fn SharedAirfieldInputs(
                     }
                 })}
                 {(!override_active).then(|| view! {
-                    <p class="lab mono">
+                    <p class="lab readout-text">
                         "PA "
                         {pa.round() as i64}
                         " ft"
@@ -311,7 +311,7 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                         "—".into()
                     };
                     view! {
-                        <p class="lab mono">{c.density_altitude_readout}": "{da_txt}" ft"</p>
+                        <p class="lab readout-text">{c.density_altitude_readout}": "{da_txt}" ft"</p>
                     }
                 })}
                 <div class="toggle-row">
@@ -415,9 +415,9 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                 let show_xw_note = wind_chart_panel_needs_crosswind_note(&i);
                 view! {
                     <div class="wind-components">
-                        {along.map(|line| view! { <p class="lab mono">{line}</p> })}
+                        {along.map(|line| view! { <p class="lab readout-text">{line}</p> })}
                         {(comp.crosswind_kt.abs() > 0.05).then(|| view! {
-                            <p class="lab mono">{cross}</p>
+                            <p class="lab readout-text">{cross}</p>
                         })}
                         {show_xw_note.then(|| view! {
                             <p class="lab field-error">{c.wind_strip_crosswind_note}</p>

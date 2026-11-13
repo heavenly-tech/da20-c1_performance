@@ -150,6 +150,31 @@ fn set_var(html: &web_sys::HtmlElement, name: &str, value: &str) {
     let _ = html.style().set_property(name, value);
 }
 
+/// Palette JSON sets inline chart tokens on `<html>`; clear them so theme CSS wins (esp. Night).
+pub fn clear_chart_palette_inline_overrides(html: &web_sys::HtmlElement) {
+    const CHART_INLINE_VARS: &[&str] = &[
+        "--chart-surface-bg",
+        "--chart-grid",
+        "--chart-axis-label",
+        "--chart-trace-line",
+        "--chart-trace-highlight",
+        "--chart-guide",
+        "--chart-guide-active",
+        "--chart-user-path",
+        "--chart-marker",
+        "--chart-border",
+        "--chart-result",
+        "--chart-warning",
+        "--chart-bg",
+        "--chart-label",
+        "--chart-line",
+        "--chart-highlight",
+    ];
+    for name in CHART_INLINE_VARS {
+        let _ = html.style().remove_property(name);
+    }
+}
+
 /// Palette JSON only overrides chart tokens — never page text / UI colours.
 fn apply_palette_colors(html: &web_sys::HtmlElement, c: &PaletteColors) {
     set_var(html, "--chart-surface-bg", &c.background);
@@ -177,8 +202,9 @@ pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
         return;
     };
     let _ = html.set_attribute("data-palette", &palette.id);
-    // Night cockpit theme: chart colours come only from CSS tokens (red/amber).
+    // Night: page tokens + chart colours come only from CSS (red/amber), regardless of Paleta.
     if theme == ThemePreference::Night {
+        clear_chart_palette_inline_overrides(&html);
         return;
     }
     let Some(entry) = palette.entry() else {

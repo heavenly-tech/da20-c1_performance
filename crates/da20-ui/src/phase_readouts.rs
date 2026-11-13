@@ -124,8 +124,8 @@ pub fn PhaseReadoutsPanel(
                                     }>
                                     <strong>{r.label.clone()}</strong>
                                     <span class="lab">{format_readout_timestamp(&r.created_at_iso, loc)}</span>
-                                    <span class="mono readout-summary">{summary}</span>
-                                    <span class="mono readout-results">{results}</span>
+                                    <span class="readout-text readout-summary">{summary}</span>
+                                    <span class="readout-text readout-results">{results}</span>
                                 </button>
                                 <label class="overlay-toggle" title=copy(loc).overlay_on_chart>
                                     <input type="checkbox" prop:checked=checked
