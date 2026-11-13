@@ -719,15 +719,15 @@ const ES_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
-        summary: "ΔISA = OAT − ISA en PA. rmin(PA) lineal; RPM válido [rmin(PA), 2800]. Parámetro s normalizado, RPM_row por fila, mezcla en PA. %BHP: inversión en [rmin(PA), 2800]. Carenados: ~−5% TAS; GPH sin escalar. Filas usadas: «Peso PA» es el peso lineal de cada fila PA que enmarca la consulta (los dos pesos suman 1); «Peso RPM» es el peso de cada fila RPM dentro de esa PA; valor final = Σ Peso PA × Σ Peso RPM × celda.",
-        interpolation: "Tabla o Interpolado. Fuera de carta → sin número («Fuera de carta»).",
+        summary: "ΔISA = OAT − ISA en PA. rmin(PA) lineal; RPM válido [rmin(PA), 2800]. Parámetro s normalizado, RPM_row por fila, mezcla en PA. %BHP: inversión en [rmin(PA), 2800]. Carenados: ~−5% TAS; GPH sin escalar. Filas usadas: «Peso PA» y «Peso RPM» como arriba; «Peso ΔISA» es el peso de cada columna ΔISA dentro de la fila RPM.",
+        interpolation: "Tabla o Interpolado. Valor = Σ (Peso PA × Peso RPM × Peso ΔISA × celda) sobre las esquinas usadas. Fuera de carta → sin número («Fuera de carta»).",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
         title: "Crucero MT 175 R (AFMS E-1487 Fig 1–4)",
         afm: "AFMS E-1487 Fig 4 (suplemento MT 175 R)",
-        summary: "Altitud de densidad ISA troposférica exacta: σ = (T_std/T₀)^5,256 × (T₀/T_real) con T_std = 288,15 K − 0,0019812 °C/ft × PA; DA = (1 − σ^(1/4,256)) × T₀ / 0,0019812 (misma función que da20-core en cruise MT). Consulta Fig 4 en esa DA y RPM.",
-        interpolation: "Interpolación lineal en DA entre dos filas tabuladas (pesos «Peso DA» que suman 1) y en RPM dentro de cada DA («Peso RPM»). Resultado = Σ Peso DA × Σ Peso RPM × celda. Etiquetas: Tabla e Interpolado únicamente.",
+        summary: "Altitud de densidad ISA troposférica exacta: σ = (T_std/T₀)^5.25588 × (T₀/T_real) con T_std = 288,15 K − 0,0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0,0019812 (misma función que da20-core en cruise MT). Consulta Fig 4 en esa DA y RPM.",
+        interpolation: "Tabla o Interpolado. Valor = Σ (Peso DA × Peso RPM × celda) sobre las esquinas usadas (cada par de pesos en DA o RPM suma 1).",
         limitations: "Fuera del casco Fig 4 → «Fuera de carta». Despegue/trepada/aterrizaje sin cambio por hélice MT (AFMS E-1487).",
     },
     MethodCopy {
@@ -793,15 +793,15 @@ const EN_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
-        summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled. Row weights: «PA weight» is the linear blend weight for each bracketing PA row (the two weights sum to 1); «RPM weight» is the weight for each bracketing RPM row within that PA; final = Σ PA weight × Σ RPM weight × cell.",
-        interpolation: "Table or Interpolated tags only. Off chart → no numeric result («Fuera de carta» / Out of chart).",
+        summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled. Row weights: «PA weight» and «RPM weight» as above; «ΔISA weight» is the blend weight for each ΔISA column within the RPM row.",
+        interpolation: "Table or Interpolated only. Result = Σ (PA weight × RPM weight × ΔISA weight × cell) over used corners. Off chart → no numeric result.",
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
         title: "Cruise MT 175 R (AFMS E-1487 Fig 1–4)",
         afm: "AFMS E-1487 Fig 4 (MT 175 R supplement)",
-        summary: "Exact ISA troposphere density altitude: σ = (T_std/T₀)^5.256 × (T₀/T_actual) with T_std = 288.15 K − 0.0019812 °C/ft × PA; DA = (1 − σ^(1/4.256)) × T₀ / 0.0019812 (same as da20-core MT cruise). Fig 4 lookup at that DA and RPM.",
-        interpolation: "Linear in DA between the two bracketing tabulated DA rows («DA weight», weights sum to 1) and in RPM within each DA («RPM weight»). Result = Σ DA weight × Σ RPM weight × cell. Tags: Table and Interpolated only.",
+        summary: "Exact ISA troposphere density altitude: σ = (T_std/T₀)^5.25588 × (T₀/T_actual) with T_std = 288.15 K − 0.0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0.0019812 (same as da20-core MT cruise). Fig 4 lookup at that DA and RPM.",
+        interpolation: "Table or Interpolated only. Result = Σ (DA weight × RPM weight × cell) over used corners (each bracketing weight pair sums to 1).",
         limitations: "Outside Fig 4 hull → Out of chart. Takeoff/climb/landing unchanged by MT propeller (AFMS E-1487).",
     },
     MethodCopy {

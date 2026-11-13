@@ -16,8 +16,8 @@ use leptos::prelude::*;
 use crate::ground_oat::display_disa_c;
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
 use crate::prefs::{
-    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, snapshot_and_save_flight_prefs,
-    sync_ground_to_takeoff_inputs, FlightPrefs,
+    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, persist_manual_cruise_oat,
+    snapshot_and_save_flight_prefs, sync_ground_to_takeoff_inputs, FlightPrefs,
 };
 
 /// Takeoff vs climb vs landing (full) airfield blocks.
@@ -137,6 +137,7 @@ pub fn SharedAirfieldInputs(
     #[prop(default = AirfieldInputsMode::Full)] mode: AirfieldInputsMode,
     #[prop(default = false)] hide_pa_oat: bool,
 ) -> impl IntoView {
+    let write_ground_prefs = mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full;
     view! {
         {move || {
             let c = copy(locale.get());
@@ -186,31 +187,40 @@ pub fn SharedAirfieldInputs(
                         max=pa_max
                         get=move || inputs.get().pressure_altitude_input_ft
                         set=move |v| {
-                            inputs.update(|i| {
-                                i.pressure_altitude_input_ft = v;
-                                clear_pa_override(i);
-                            });
-                            flight_prefs.update(|p| {
-                                p.ground_elevation_ft = v;
-                                if !p.cruise_oat_manual {
-                                    inputs.update(|i| apply_estimated_cruise_oat(i, p));
-                                }
-                                p.save();
-                            });
+                            if write_ground_prefs {
+                                flight_prefs.update(|p| {
+                                    p.ground_elevation_ft = v;
+                                    inputs.update(|i| {
+                                        i.pressure_altitude_input_ft = v;
+                                        clear_pa_override(i);
+                                        sync_ground_to_takeoff_inputs(i, p);
+                                    });
+                                    p.save();
+                                });
+                            } else {
+                                inputs.update(|i| {
+                                    i.pressure_altitude_input_ft = v;
+                                    clear_pa_override(i);
+                                });
+                            }
                         }/>
                     <NumField label=move || c.oat.to_string()
                         min=oat_min
                         max=oat_max
                         get=move || inputs.get().oat_c
                         set=move |v| {
-                            inputs.update(|i| i.oat_c = v);
-                            flight_prefs.update(|p| {
-                                p.ground_oat_c = v;
-                                if !p.cruise_oat_manual {
-                                    inputs.update(|i| sync_ground_to_takeoff_inputs(i, p));
-                                }
-                                p.save();
-                            });
+                            if write_ground_prefs {
+                                flight_prefs.update(|p| {
+                                    p.ground_oat_c = v;
+                                    inputs.update(|i| {
+                                        i.oat_c = v;
+                                        sync_ground_to_takeoff_inputs(i, p);
+                                    });
+                                    p.save();
+                                });
+                            } else {
+                                inputs.update(|i| i.oat_c = v);
+                            }
                         }/>
                 })}
                 {(mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full).then(|| {
@@ -391,6 +401,7 @@ pub fn CruiseInputs(
                 let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
                 i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, isa + deviation);
             });
+            persist_manual_cruise_oat(p, &inputs.get_untracked());
             p.save();
         });
     };
@@ -441,6 +452,7 @@ pub fn CruiseInputs(
                             inputs.update(|i| {
                                 i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, v);
                             });
+                            persist_manual_cruise_oat(p, &inputs.get_untracked());
                             p.save();
                         });
                     }/>
@@ -452,6 +464,7 @@ pub fn CruiseInputs(
                         on:click=move |_| {
                             flight_prefs.update(|p| {
                                 p.cruise_oat_manual = false;
+                                p.cruise_oat_c_saved = None;
                                 inputs.update(|i| apply_estimated_cruise_oat(i, p));
                                 p.save();
                             });

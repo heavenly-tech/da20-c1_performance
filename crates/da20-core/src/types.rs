@@ -18,7 +18,8 @@ pub mod defaults {
     pub const RUNWAY: &str = "190";
     pub const WIND_DIR_DEG: f64 = 200.0;
     pub const WIND_SPEED_KT: f64 = 8.0;
-    pub const WEIGHT_LB: f64 = 1764.0;
+    /// Default planning weight (lb); ~799.7 kg — below Fig 5.4 hull (800 kg tabulated max).
+    pub const WEIGHT_LB: f64 = 1763.0;
     pub const CRUISE_PRESSURE_ALT_FT: f64 = 6500.0;
     pub const CRUISE_RPM: f64 = 2600.0;
     /// Fig 5.4 weight panel reference (AFM worked example, kg).

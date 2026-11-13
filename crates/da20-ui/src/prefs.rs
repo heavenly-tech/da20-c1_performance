@@ -11,6 +11,7 @@ use crate::ground_oat::estimated_oat_c_from_ground;
 
 pub const TAKEOFF_PREFS_STORAGE_KEY: &str = "da20_takeoff_prefs_v1";
 pub const FLIGHT_PREFS_STORAGE_KEY: &str = "da20_flight_prefs_v2";
+pub const FLIGHT_PREFS_STORAGE_KEY_V1: &str = "da20_flight_prefs_v1";
 
 pub const PREFERRED_DEFAULT_PERCENT_BHP: f64 = 65.0;
 
@@ -84,6 +85,8 @@ pub struct FlightPrefs {
     pub cruise_solve_saved: Option<CruiseSolveMode>,
     #[serde(default)]
     pub cruise_percent_bhp_saved: Option<f64>,
+    #[serde(default)]
+    pub cruise_oat_c_saved: Option<f64>,
     #[serde(default = "default_landing_ground_idle_1000_rpm")]
     pub landing_ground_idle_1000_rpm: bool,
 }
@@ -102,6 +105,7 @@ impl Default for FlightPrefs {
             cruise_oat_manual: false,
             cruise_solve_saved: None,
             cruise_percent_bhp_saved: None,
+            cruise_oat_c_saved: None,
             landing_ground_idle_1000_rpm: default_landing_ground_idle_1000_rpm(),
         }
     }
@@ -173,8 +177,10 @@ impl FlightPrefs {
             if let Ok(p) = LocalStorage::get::<Self>(FLIGHT_PREFS_STORAGE_KEY) {
                 return p;
             }
-            if let Ok(legacy) = LocalStorage::get::<FlightPrefsV1>(FLIGHT_PREFS_STORAGE_KEY) {
-                return legacy.into();
+            if let Ok(legacy) = LocalStorage::get::<FlightPrefsV1>(FLIGHT_PREFS_STORAGE_KEY_V1) {
+                let upgraded = upgrade_from_v1(legacy);
+                upgraded.save();
+                return upgraded;
             }
             Self::default()
         } else {
@@ -198,7 +204,11 @@ impl FlightPrefs {
         inputs.cruise_percent_bhp = self
             .cruise_percent_bhp_saved
             .unwrap_or_else(|| resolved_default_cruise_percent_bhp(data));
-        if !self.cruise_oat_manual {
+        if self.cruise_oat_manual {
+            if let Some(oat) = self.cruise_oat_c_saved {
+                inputs.cruise_oat_c = clamp_cruise_oat_for_propeller(inputs, oat);
+            }
+        } else {
             apply_estimated_cruise_oat(inputs, &self);
         }
         inputs.landing_ground_idle_1000_rpm = self.landing_ground_idle_1000_rpm;
@@ -214,20 +224,30 @@ impl FlightPrefs {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-struct FlightPrefsV1 {
+pub(crate) struct FlightPrefsV1 {
     #[serde(default)]
     propeller: PropellerKind,
     #[serde(default = "default_wheel_fairings_installed")]
     wheel_fairings_installed: bool,
 }
 
-impl From<FlightPrefsV1> for FlightPrefs {
-    fn from(v1: FlightPrefsV1) -> Self {
-        Self {
-            propeller: v1.propeller,
-            wheel_fairings_installed: v1.wheel_fairings_installed,
-            ..Self::default()
-        }
+pub fn upgrade_from_v1(v1: FlightPrefsV1) -> FlightPrefs {
+    FlightPrefs {
+        propeller: v1.propeller,
+        wheel_fairings_installed: v1.wheel_fairings_installed,
+        ..FlightPrefs::default()
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn upgrade_flight_prefs_from_v1_json(json: &str) -> Result<FlightPrefs, serde_json::Error> {
+    let v1: FlightPrefsV1 = serde_json::from_str(json)?;
+    Ok(upgrade_from_v1(v1))
+}
+
+pub fn persist_manual_cruise_oat(prefs: &mut FlightPrefs, inputs: &FlightInputs) {
+    if prefs.cruise_oat_manual {
+        prefs.cruise_oat_c_saved = Some(inputs.cruise_oat_c);
     }
 }
 
@@ -235,7 +255,15 @@ pub fn snapshot_and_save_flight_prefs(inputs: &FlightInputs, prefs: &mut FlightP
     prefs.propeller = inputs.propeller;
     prefs.wheel_fairings_installed = inputs.wheel_fairings_installed;
     prefs.landing_ground_idle_1000_rpm = inputs.landing_ground_idle_1000_rpm;
+    persist_manual_cruise_oat(prefs, inputs);
     prefs.save();
+}
+
+/// Chart-phase PA/OAT edits (climb/landing) must not rewrite aerodrome ground prefs.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn apply_chart_phase_pa_oat(inputs: &mut FlightInputs, pa_ft: f64, oat_c: f64) {
+    inputs.pressure_altitude_input_ft = pa_ft;
+    inputs.oat_c = oat_c;
 }
 
 impl TakeoffPrefs {
@@ -283,6 +311,7 @@ mod tests {
             cruise_oat_manual: true,
             cruise_solve_saved: Some(CruiseSolveMode::SetRpm),
             cruise_percent_bhp_saved: Some(70.0),
+            cruise_oat_c_saved: Some(12.5),
             landing_ground_idle_1000_rpm: true,
         };
         let json = serde_json::to_string(&prefs).expect("serialize");
@@ -336,18 +365,77 @@ mod tests {
 
     #[test]
     fn manual_cruise_oat_override_sticks() {
+        let data = PerformanceData::production();
         let prefs = FlightPrefs {
             cruise_oat_manual: true,
+            cruise_oat_c_saved: Some(5.0),
             ground_elevation_ft: 2000.0,
             ground_oat_c: 25.0,
             ..FlightPrefs::default()
         };
-        let mut inputs = FlightInputs {
-            cruise_oat_c: 5.0,
-            ..Default::default()
-        };
+        let mut inputs = FlightInputs::default();
+        prefs.apply_to_inputs(&data, &mut inputs);
         sync_ground_to_takeoff_inputs(&mut inputs, &prefs);
         assert!((inputs.cruise_oat_c - 5.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn v1_prefs_upgrade_keeps_propeller_and_fairings() {
+        let json = r#"{"propeller":"Mt175R","wheel_fairings_installed":false}"#;
+        let upgraded = upgrade_flight_prefs_from_v1_json(json).expect("v1 json");
+        assert_eq!(upgraded.propeller, PropellerKind::Mt175R);
+        assert!(!upgraded.wheel_fairings_installed);
+        assert!(upgraded.landing_ground_idle_1000_rpm);
+        assert!(!upgraded.cruise_oat_manual);
+        assert_eq!(upgraded.cruise_solve_saved, None);
+        assert_eq!(upgraded.cruise_percent_bhp_saved, None);
+        assert_eq!(upgraded.cruise_oat_c_saved, None);
+    }
+
+    #[test]
+    fn climb_pa_edit_leaves_ground_prefs_and_cruise_estimate() {
+        let prefs = FlightPrefs {
+            ground_elevation_ft: 2130.0,
+            ground_oat_c: 20.0,
+            cruise_oat_manual: false,
+            ..FlightPrefs::default()
+        };
+        let mut inputs = FlightInputs::default();
+        sync_ground_to_takeoff_inputs(&mut inputs, &prefs);
+        let cruise_oat_before = inputs.cruise_oat_c;
+        let climb_oat = inputs.oat_c;
+        apply_chart_phase_pa_oat(&mut inputs, 8000.0, climb_oat);
+        assert_eq!(prefs.ground_elevation_ft, 2130.0);
+        assert_eq!(prefs.ground_oat_c, 20.0);
+        assert!((inputs.cruise_oat_c - cruise_oat_before).abs() < 1e-9);
+    }
+
+    #[test]
+    fn manual_cruise_oat_saved_round_trips_through_apply() {
+        let data = PerformanceData::production();
+        let prefs = FlightPrefs {
+            cruise_oat_manual: true,
+            cruise_oat_c_saved: Some(-8.5),
+            ..FlightPrefs::default()
+        };
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        let loaded: FlightPrefs = serde_json::from_str(&json).expect("deserialize");
+        let mut inputs = FlightInputs::default();
+        loaded.apply_to_inputs(&data, &mut inputs);
+        assert!((inputs.cruise_oat_c - (-8.5)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn ground_sync_keeps_takeoff_pa_with_aerodrome() {
+        let prefs = FlightPrefs {
+            ground_elevation_ft: 1500.0,
+            ground_oat_c: 18.0,
+            ..FlightPrefs::default()
+        };
+        let mut inputs = FlightInputs::default();
+        sync_ground_to_takeoff_inputs(&mut inputs, &prefs);
+        assert_eq!(inputs.pressure_altitude_input_ft, 1500.0);
+        assert_eq!(inputs.oat_c, 18.0);
     }
 
     #[test]
