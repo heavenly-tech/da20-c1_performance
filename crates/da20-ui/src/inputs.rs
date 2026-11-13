@@ -15,9 +15,10 @@ use leptos::prelude::*;
 
 use crate::ground_oat::display_disa_c;
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
+use crate::phase_state::{apply_cruise_ground_elevation, apply_cruise_ground_oat};
 use crate::prefs::{
     apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, persist_manual_cruise_oat,
-    snapshot_and_save_flight_prefs, sync_ground_to_takeoff_inputs, FlightPrefs,
+    snapshot_and_save_flight_prefs, FlightPrefs,
 };
 
 /// Takeoff vs climb vs landing (full) airfield blocks.
@@ -30,8 +31,11 @@ pub enum AirfieldInputsMode {
     Landing,
 }
 
-pub fn shared_airfield_writes_ground_prefs(mode: AirfieldInputsMode) -> bool {
-    mode == AirfieldInputsMode::Takeoff
+pub fn shared_airfield_writes_tab_prefs(mode: AirfieldInputsMode) -> bool {
+    matches!(
+        mode,
+        AirfieldInputsMode::Takeoff | AirfieldInputsMode::Climb | AirfieldInputsMode::Landing
+    )
 }
 
 pub fn shared_airfield_pressure_altitude_display(
@@ -53,18 +57,38 @@ pub fn shared_airfield_set_pressure_altitude(
     inputs: &mut FlightInputs,
     pa_ft: f64,
 ) {
-    if shared_airfield_writes_ground_prefs(mode) {
-        prefs.ground_elevation_ft = pa_ft;
-        inputs.pressure_altitude_input_ft = pa_ft;
-        clear_pa_override(inputs);
-        sync_ground_to_takeoff_inputs(inputs, prefs);
-    } else if let Some(phase) =
-        chart_phase.filter(|p| matches!(p, ChartPhase::Climb | ChartPhase::Landing))
-    {
-        set_pa_override(inputs, pa_ft, phase);
-    } else {
-        inputs.pressure_altitude_input_ft = pa_ft;
-        clear_pa_override(inputs);
+    match mode {
+        AirfieldInputsMode::Takeoff => {
+            prefs.takeoff.pressure_altitude_ft = pa_ft;
+            inputs.pressure_altitude_input_ft = pa_ft;
+            clear_pa_override(inputs);
+        }
+        AirfieldInputsMode::Climb => {
+            if let Some(phase) = chart_phase.filter(|p| *p == ChartPhase::Climb) {
+                set_pa_override(inputs, pa_ft, phase);
+                prefs.climb.pa_override = inputs.pa_override;
+            } else {
+                prefs.climb.pressure_altitude_ft = pa_ft;
+                inputs.pressure_altitude_input_ft = pa_ft;
+                clear_pa_override(inputs);
+                prefs.climb.pa_override = None;
+            }
+        }
+        AirfieldInputsMode::Landing => {
+            if let Some(phase) = chart_phase.filter(|p| *p == ChartPhase::Landing) {
+                set_pa_override(inputs, pa_ft, phase);
+                prefs.landing.pa_override = inputs.pa_override;
+            } else {
+                prefs.landing.pressure_altitude_ft = pa_ft;
+                inputs.pressure_altitude_input_ft = pa_ft;
+                clear_pa_override(inputs);
+                prefs.landing.pa_override = None;
+            }
+        }
+        AirfieldInputsMode::Full => {
+            inputs.pressure_altitude_input_ft = pa_ft;
+            clear_pa_override(inputs);
+        }
     }
 }
 
@@ -75,12 +99,12 @@ pub fn shared_airfield_set_oat_c(
     inputs: &mut FlightInputs,
     oat_c: f64,
 ) {
-    if shared_airfield_writes_ground_prefs(mode) {
-        prefs.ground_oat_c = oat_c;
-        inputs.oat_c = oat_c;
-        sync_ground_to_takeoff_inputs(inputs, prefs);
-    } else {
-        inputs.oat_c = oat_c;
+    inputs.oat_c = oat_c;
+    match mode {
+        AirfieldInputsMode::Takeoff => prefs.takeoff.oat_c = oat_c,
+        AirfieldInputsMode::Climb => prefs.climb.oat_c = oat_c,
+        AirfieldInputsMode::Landing => prefs.landing.oat_c = oat_c,
+        AirfieldInputsMode::Full => {}
     }
 }
 
@@ -145,7 +169,7 @@ pub fn NumField(
 }
 
 #[component]
-pub fn SharedGroundInputs(
+pub fn CruiseGroundInputs(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     flight_prefs: RwSignal<FlightPrefs>,
@@ -158,24 +182,20 @@ pub fn SharedGroundInputs(
                 <NumField label=move || c.ground_elevation_ft.to_string()
                     min=limits::FIG52_PA_FT.0
                     max=limits::FIG52_PA_FT.1
-                    get=move || flight_prefs.get().ground_elevation_ft
+                    get=move || flight_prefs.get().cruise_planning.ground_elevation_ft
                     set=move |v| {
                         flight_prefs.update(|p| {
-                            p.ground_elevation_ft = v;
-                            inputs.update(|i| sync_ground_to_takeoff_inputs(i, p));
-                            p.save();
+                            inputs.update(|i| apply_cruise_ground_elevation(p, i, v));
                         });
                     }/>
                 <NumField label=move || c.ground_oat_c.to_string()
                     display_fraction_digits=Some(1)
                     min=limits::FIG52_OAT_C.0
                     max=limits::FIG52_OAT_C.1
-                    get=move || flight_prefs.get().ground_oat_c
+                    get=move || flight_prefs.get().cruise_planning.ground_oat_c
                     set=move |v| {
                         flight_prefs.update(|p| {
-                            p.ground_oat_c = v;
-                            inputs.update(|i| sync_ground_to_takeoff_inputs(i, p));
-                            p.save();
+                            inputs.update(|i| apply_cruise_ground_oat(p, i, v));
                         });
                     }/>
             }
@@ -253,7 +273,7 @@ pub fn SharedAirfieldInputs(
                                         v,
                                     );
                                 });
-                                if shared_airfield_writes_ground_prefs(mode) {
+                                if shared_airfield_writes_tab_prefs(mode) {
                                     p.save();
                                 }
                             });
@@ -265,7 +285,7 @@ pub fn SharedAirfieldInputs(
                         set=move |v| {
                             flight_prefs.update(|p| {
                                 inputs.update(|i| shared_airfield_set_oat_c(mode, p, i, v));
-                                if shared_airfield_writes_ground_prefs(mode) {
+                                if shared_airfield_writes_tab_prefs(mode) {
                                     p.save();
                                 }
                             });
@@ -471,6 +491,7 @@ pub fn CruiseInputs(
                         flight_prefs.update(|p| {
                             inputs.update(|i| {
                                 i.cruise_pressure_alt_ft = v;
+                                p.cruise_planning.cruise_pressure_alt_ft = v;
                                 if !p.cruise_oat_manual {
                                     apply_estimated_cruise_oat(i, p);
                                 } else if i.propeller == PropellerKind::Sensenich {
@@ -566,7 +587,15 @@ pub fn CruiseInputs(
                         view! {
                             <NumField label=move || c.cruise_rpm.to_string()
                                 get=move || inputs.get().cruise_rpm
-                                set=move |v| inputs.update(|i| i.cruise_rpm = v)/>
+                                set=move |v| {
+                                    flight_prefs.update(|p| {
+                                        inputs.update(|i| {
+                                            i.cruise_rpm = v;
+                                            p.cruise_planning.cruise_rpm = v;
+                                        });
+                                        p.save();
+                                    });
+                                }/>
                         }.into_any()
                     } else {
                         view! {
@@ -739,27 +768,32 @@ pub fn set_chart_pa(inputs: RwSignal<FlightInputs>, pa_ft: f64, phase: ChartPhas
 #[cfg(test)]
 mod airfield_setter_tests {
     use super::*;
-    use crate::prefs::{sync_ground_to_takeoff_inputs, FlightPrefs};
+    use crate::phase_state::{assemble_takeoff_inputs, hydrate_tab_inputs};
+    use crate::phases::Phase;
+    use crate::prefs::FlightPrefs;
     use da20_core::altitude::effective_pressure_altitude_ft;
+    use da20_core::takeoff::compute_takeoff;
+    use da20_core::PerformanceData;
 
-    fn seeded_aerodrome() -> (FlightPrefs, FlightInputs) {
-        let prefs = FlightPrefs {
-            ground_elevation_ft: 2130.0,
-            ground_oat_c: 20.0,
-            cruise_oat_manual: false,
-            ..FlightPrefs::default()
-        };
+    fn seeded_prefs() -> (FlightPrefs, FlightInputs) {
+        let mut prefs = FlightPrefs::default();
+        prefs.takeoff.pressure_altitude_ft = 2130.0;
+        prefs.takeoff.oat_c = 20.0;
+        prefs.cruise_planning.ground_elevation_ft = 2130.0;
+        prefs.cruise_planning.ground_oat_c = 20.0;
+        let data = PerformanceData::production();
         let mut inputs = FlightInputs::default();
-        sync_ground_to_takeoff_inputs(&mut inputs, &prefs);
+        hydrate_tab_inputs(Phase::Climb, &prefs, &data, &mut inputs);
         (prefs, inputs)
     }
 
     #[test]
-    fn climb_pa_setter_leaves_ground_prefs_takeoff_pa_and_cruise_estimate() {
-        let (mut prefs, mut inputs) = seeded_aerodrome();
-        let takeoff_pa = inputs.pressure_altitude_input_ft;
-        let takeoff_oat = inputs.oat_c;
-        let cruise_before = inputs.cruise_oat_c;
+    fn climb_pa_setter_leaves_takeoff_prefs_and_takeoff_compute() {
+        let data = PerformanceData::production();
+        let (mut prefs, mut inputs) = seeded_prefs();
+        let takeoff_roll_before = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs))
+            .unwrap()
+            .ground_roll_ft;
 
         shared_airfield_set_pressure_altitude(
             AirfieldInputsMode::Climb,
@@ -769,23 +803,22 @@ mod airfield_setter_tests {
             8000.0,
         );
 
-        assert_eq!(prefs.ground_elevation_ft, 2130.0);
-        assert_eq!(prefs.ground_oat_c, 20.0);
-        assert_eq!(inputs.pressure_altitude_input_ft, takeoff_pa);
-        assert_eq!(inputs.oat_c, takeoff_oat);
-        assert!((inputs.cruise_oat_c - cruise_before).abs() < 1e-9);
+        assert_eq!(prefs.takeoff.pressure_altitude_ft, 2130.0);
+        assert_eq!(prefs.takeoff.oat_c, 20.0);
         assert_eq!(
             effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Climb)),
             8000.0
         );
+        let takeoff_roll_after = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs))
+            .unwrap()
+            .ground_roll_ft;
+        assert!((takeoff_roll_before - takeoff_roll_after).abs() < f64::EPSILON);
     }
 
     #[test]
-    fn landing_pa_setter_leaves_ground_prefs_takeoff_pa_and_cruise_estimate() {
-        let (mut prefs, mut inputs) = seeded_aerodrome();
-        let takeoff_pa = inputs.pressure_altitude_input_ft;
-        let takeoff_oat = inputs.oat_c;
-        let cruise_before = inputs.cruise_oat_c;
+    fn landing_pa_setter_leaves_takeoff_prefs() {
+        let data = PerformanceData::production();
+        let (mut prefs, mut inputs) = seeded_prefs();
 
         shared_airfield_set_pressure_altitude(
             AirfieldInputsMode::Landing,
@@ -795,26 +828,25 @@ mod airfield_setter_tests {
             3500.0,
         );
 
-        assert_eq!(prefs.ground_elevation_ft, 2130.0);
-        assert_eq!(prefs.ground_oat_c, 20.0);
-        assert_eq!(inputs.pressure_altitude_input_ft, takeoff_pa);
-        assert_eq!(inputs.oat_c, takeoff_oat);
-        assert!((inputs.cruise_oat_c - cruise_before).abs() < 1e-9);
+        assert_eq!(prefs.takeoff.pressure_altitude_ft, 2130.0);
         assert_eq!(
             effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Landing)),
             3500.0
         );
+        assert_eq!(
+            prefs.landing.pa_override.as_ref().map(|o| o.pa_ft),
+            Some(3500.0)
+        );
     }
 
     #[test]
-    fn landing_oat_setter_leaves_ground_prefs_without_cruise_resync() {
-        let (mut prefs, mut inputs) = seeded_aerodrome();
-        let cruise_before = inputs.cruise_oat_c;
+    fn landing_oat_setter_updates_landing_not_takeoff() {
+        let (mut prefs, mut inputs) = seeded_prefs();
 
         shared_airfield_set_oat_c(AirfieldInputsMode::Landing, &mut prefs, &mut inputs, -5.0);
 
-        assert_eq!(prefs.ground_oat_c, 20.0);
-        assert!((inputs.cruise_oat_c - cruise_before).abs() < 1e-9);
+        assert_eq!(prefs.takeoff.oat_c, 20.0);
+        assert_eq!(prefs.landing.oat_c, -5.0);
         assert_eq!(inputs.oat_c, -5.0);
     }
 }

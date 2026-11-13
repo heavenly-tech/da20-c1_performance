@@ -747,7 +747,7 @@ const ES_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "OAT de crucero desde tierra",
         afm: "Planificación UI (no carta AFM)",
-        summary: "Parámetros compartidos «Tierra / Aeródromo»: elevación (ft) y OAT en tierra. En despegue alimentan PA y OAT de carta (sin QNH). En crucero, por defecto OAT_alt = OAT_tierra − 1,98 °C/1000 ft × (PA_crucero − elevación). ΔISA mostrado: OAT_crucero − (15 − 1,98 × PA/1000).",
+        summary: "En la ficha Crucero (y Autonomía), «Tierra / Aeródromo» guarda solo elevación y OAT en tierra para esa ficha. Por defecto OAT_alt = OAT_tierra − 1,98 °C/1000 ft × (PA_crucero − elevación). Despegue, subida y aterrizaje tienen PA y OAT propios, independientes. ΔISA mostrado: OAT_crucero − (15 − 1,98 × PA/1000).",
         interpolation: "Aproximación de gradiente estándar; el usuario puede fijar OAT de crucero manualmente y volver a la estimación.",
         limitations: "En la vida real el gradiente varía e inversiones térmicas son frecuentes (p. ej. Santiago); la estimación no sustituye METAR/sondas. El cálculo de performance sigue las reglas interpolate-only y «Fuera de carta» del núcleo.",
     },
@@ -822,7 +822,7 @@ const EN_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "Cruise OAT from ground",
         afm: "UI planning layer (not an AFM chart)",
-        summary: "Shared Ground / Aerodrome inputs: elevation (ft) and ground OAT. On takeoff they feed chart PA and OAT (no QNH). On cruise, default OAT_alt = OAT_ground − 1.98 °C per 1000 ft × (cruise_PA − elevation). Displayed ΔISA: cruise_OAT − (15 − 1.98 × PA/1000).",
+        summary: "On the Cruise (and Endurance) tab, Ground / Aerodrome stores elevation and ground OAT for that tab only. Default OAT_alt = OAT_ground − 1.98 °C per 1000 ft × (cruise_PA − elevation). Takeoff, climb, and landing keep their own PA and OAT. Displayed ΔISA: cruise_OAT − (15 − 1.98 × PA/1000).",
         interpolation: "Standard lapse estimate; the user can override cruise OAT manually and revert to the estimate.",
         limitations: "Real lapse rates vary and inversions are common (e.g. Santiago); the estimate is not a substitute for METAR/soundings. Downstream performance still uses interpolate-only rules and Out of chart from the core.",
     },

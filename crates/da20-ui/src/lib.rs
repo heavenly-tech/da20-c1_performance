@@ -12,6 +12,7 @@ mod interactive_chart;
 mod mt_cruise_panel;
 mod palette;
 mod phase_readouts;
+mod phase_state;
 mod phases;
 mod prefs;
 mod routing;

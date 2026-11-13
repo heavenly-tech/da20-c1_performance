@@ -273,6 +273,56 @@ pub struct SavedBundle {
     pub endurance: Option<da20_core::types::EnduranceResult>,
 }
 
+pub fn compute_all_isolated(
+    data: &PerformanceData,
+    prefs: &crate::prefs::FlightPrefs,
+) -> SavedBundle {
+    use crate::phase_state::{
+        assemble_climb_inputs, assemble_cruise_inputs, assemble_endurance_inputs,
+        assemble_landing_inputs, assemble_takeoff_inputs,
+    };
+    use da20_core::endurance::compute_endurance;
+
+    let takeoff_in = assemble_takeoff_inputs(prefs);
+    let climb_in = assemble_climb_inputs(prefs);
+    let cruise_in = assemble_cruise_inputs(prefs, data);
+    let landing_in = assemble_landing_inputs(prefs);
+    let endurance_in = assemble_endurance_inputs(prefs, data);
+
+    let takeoff_res = da20_core::takeoff::compute_takeoff(data, &takeoff_in);
+    let climb_res = da20_core::climb::compute_climb(
+        data,
+        &climb_in,
+        prefs.cruise_planning.cruise_pressure_alt_ft,
+    );
+    let cruise_res = da20_core::cruise::compute_cruise(data, &cruise_in);
+    let landing_res = da20_core::landing::compute_landing(data, &landing_in);
+
+    let takeoff_ooc = takeoff_ooc_from_err(takeoff_res.as_ref().err());
+    let climb_ooc = climb_ooc_from_err(climb_res.as_ref().err());
+    let cruise_ooc = cruise_ooc_from_err(cruise_res.as_ref().err());
+    let landing_ooc = landing_ooc_from_err(landing_res.as_ref().err());
+    let cruise_bhp_not_achievable = matches!(&cruise_res, Err(CruiseError::BhpNotAchievable));
+
+    SavedBundle {
+        takeoff: takeoff_res.ok(),
+        takeoff_out_of_chart: takeoff_ooc.is_some(),
+        takeoff_ooc,
+        climb: climb_res.ok(),
+        climb_out_of_chart: climb_ooc.is_some(),
+        climb_ooc,
+        cruise: cruise_res.ok(),
+        cruise_bhp_not_achievable,
+        cruise_out_of_chart: cruise_ooc.is_some(),
+        cruise_ooc,
+        landing: landing_res.ok(),
+        landing_out_of_chart: landing_ooc.is_some(),
+        landing_ooc,
+        wind: da20_core::wind::compute_wind(data, &takeoff_in).ok(),
+        endurance: compute_endurance(data, &endurance_in).ok(),
+    }
+}
+
 pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle {
     let takeoff_res = da20_core::takeoff::compute_takeoff(data, inputs);
     let climb_res = da20_core::climb::compute_climb(data, inputs, inputs.cruise_pressure_alt_ft);

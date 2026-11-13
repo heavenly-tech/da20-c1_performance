@@ -11,8 +11,8 @@ use crate::i18n::{
     format_obstacle_over, format_out_of_chart, format_takeoff_conservative_estimate, Locale,
 };
 use crate::inputs::{
-    AirfieldInputsMode, ClimbFlapToggle, CruiseInputs, NumField, SharedAirfieldInputs,
-    SharedGroundInputs, SharedLandingGroundIdleToggle, SharedPropellerSelector,
+    AirfieldInputsMode, ClimbFlapToggle, CruiseGroundInputs, CruiseInputs, NumField,
+    SharedAirfieldInputs, SharedLandingGroundIdleToggle, SharedPropellerSelector,
     SharedWheelFairingToggle,
 };
 use crate::interactive_chart::{ChartKind, CruiseTableView, InteractiveChart, LandingTableView};
@@ -20,7 +20,7 @@ use crate::mt_cruise_panel::MtCruisePanel;
 use crate::phase_readouts::PhaseReadoutsPanel;
 use crate::prefs::FlightPrefs;
 use crate::prefs::TakeoffPrefs;
-use crate::storage::{compute_all, ReadingsStore, SavedBundle};
+use crate::storage::{compute_all, compute_all_isolated, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
 use crate::table_source_panel::{MtFig4SourcePanel, Table3SourcePanel, Table4SourcePanel};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
@@ -55,7 +55,7 @@ pub fn PhaseShell(
         {move || match phase.get() {
             Phase::Takeoff => view! {
                 <>
-                    <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff takeoff_prefs=takeoff_prefs flight_prefs=flight_prefs ground_inputs=true>
+                    <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff takeoff_prefs=takeoff_prefs flight_prefs=flight_prefs>
                         <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
                         <TakeoffNumericBlock locale=locale inputs=inputs prefs=takeoff_prefs/>
                     </PhaseGrid>
@@ -66,13 +66,18 @@ pub fn PhaseShell(
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Climb flight_prefs=flight_prefs>
                     <NumField label=move || copy(locale.get()).weight.to_string()
                         get=move || inputs.get().weight_lb
-                        set=move |v| inputs.update(|i| {
+                        set=move |v| {
                             let kg_min = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.0;
                             let kg_max = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.1;
                             let lb_min = kg_min / 0.45359237;
                             let lb_max = kg_max / 0.45359237;
-                            i.weight_lb = v.clamp(lb_min, lb_max);
-                        })/>
+                            let w = v.clamp(lb_min, lb_max);
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| i.weight_lb = w);
+                                p.climb.weight_lb = w;
+                                p.save();
+                            });
+                        }/>
                     <ClimbFlapToggle locale=locale inputs=inputs data=data/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     {move || {
@@ -97,10 +102,22 @@ pub fn PhaseShell(
                     <CruiseInputs locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <NumField label=move || copy(locale.get()).fuel_usable.to_string()
                         get=move || inputs.get().fuel_usable_us_gal
-                        set=move |v| inputs.update(|i| i.fuel_usable_us_gal = v)/>
+                        set=move |v| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| i.fuel_usable_us_gal = v);
+                                p.endurance.fuel_usable_us_gal = v;
+                                p.save();
+                            });
+                        }/>
                     <NumField label=move || copy(locale.get()).fuel_reserve.to_string()
                         get=move || inputs.get().fuel_reserve_us_gal
-                        set=move |v| inputs.update(|i| i.fuel_reserve_us_gal = v)/>
+                        set=move |v| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| i.fuel_reserve_us_gal = v);
+                                p.endurance.fuel_reserve_us_gal = v;
+                                p.save();
+                            });
+                        }/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Landing => view! {
@@ -135,10 +152,14 @@ fn PhaseGrid(
     let overlay_ids = RwSignal::new(HashSet::<String>::new());
     let bundle = Memo::new(move |_| {
         let d = data.get();
-        let i = inputs.get();
-        let mut b = compute_all(&d, &i);
-        b.endurance = compute_endurance(&d, &i).ok();
-        b
+        if let Some(fp) = flight_prefs {
+            compute_all_isolated(&d, &fp.get())
+        } else {
+            let i = inputs.get();
+            let mut b = compute_all(&d, &i);
+            b.endurance = compute_endurance(&d, &i).ok();
+            b
+        }
     });
 
     view! {
@@ -151,7 +172,7 @@ fn PhaseGrid(
                             flight_prefs
                                 .map(|fp| {
                                     view! {
-                                        <SharedGroundInputs
+                                        <CruiseGroundInputs
                                             locale=locale
                                             inputs=inputs
                                             flight_prefs=fp
