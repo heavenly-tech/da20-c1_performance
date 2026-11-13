@@ -111,73 +111,90 @@ pub fn hydrate_tab_inputs(
 }
 
 pub fn assemble_takeoff_inputs(prefs: &FlightPrefs) -> FlightInputs {
-    let mut i = FlightInputs::default();
-    i.pressure_altitude_input_ft = prefs.takeoff.pressure_altitude_ft;
-    i.oat_c = prefs.takeoff.oat_c;
-    i.weight_lb = prefs.takeoff.weight_lb;
-    i.runway = prefs.takeoff.runway.clone();
-    i.wind_dir_deg = prefs.takeoff.wind_dir_deg;
-    i.wind_speed_kt = prefs.takeoff.wind_speed_kt;
-    i.obstacle_height_m = prefs.takeoff.obstacle_height_m;
-    i.wheel_fairings_installed = prefs.wheel_fairings_installed;
-    i
+    FlightInputs {
+        pressure_altitude_input_ft: prefs.takeoff.pressure_altitude_ft,
+        oat_c: prefs.takeoff.oat_c,
+        weight_lb: prefs.takeoff.weight_lb,
+        runway: prefs.takeoff.runway.clone(),
+        wind_dir_deg: prefs.takeoff.wind_dir_deg,
+        wind_speed_kt: prefs.takeoff.wind_speed_kt,
+        obstacle_height_m: prefs.takeoff.obstacle_height_m,
+        wheel_fairings_installed: prefs.wheel_fairings_installed,
+        ..Default::default()
+    }
 }
 
 pub fn assemble_climb_inputs(prefs: &FlightPrefs) -> FlightInputs {
-    let mut i = FlightInputs::default();
-    i.pressure_altitude_input_ft = prefs.climb.pressure_altitude_ft;
-    i.oat_c = prefs.climb.oat_c;
-    i.weight_lb = prefs.climb.weight_lb;
-    i.climb_figure = prefs.climb.climb_figure;
-    i.pa_override = prefs.climb.pa_override;
-    i.wheel_fairings_installed = prefs.wheel_fairings_installed;
-    i.cruise_pressure_alt_ft = prefs.cruise_planning.cruise_pressure_alt_ft;
-    i
+    FlightInputs {
+        pressure_altitude_input_ft: prefs.climb.pressure_altitude_ft,
+        oat_c: prefs.climb.oat_c,
+        weight_lb: prefs.climb.weight_lb,
+        climb_figure: prefs.climb.climb_figure,
+        pa_override: prefs.climb.pa_override,
+        wheel_fairings_installed: prefs.wheel_fairings_installed,
+        cruise_pressure_alt_ft: prefs.cruise_planning.cruise_pressure_alt_ft,
+        ..Default::default()
+    }
 }
 
 pub fn assemble_landing_inputs(prefs: &FlightPrefs) -> FlightInputs {
-    let mut i = FlightInputs::default();
-    i.pressure_altitude_input_ft = prefs.landing.pressure_altitude_ft;
-    i.oat_c = prefs.landing.oat_c;
-    i.pa_override = prefs.landing.pa_override;
-    i.wheel_fairings_installed = prefs.wheel_fairings_installed;
-    i.landing_ground_idle_1000_rpm = prefs.landing_ground_idle_1000_rpm;
-    i
+    FlightInputs {
+        pressure_altitude_input_ft: prefs.landing.pressure_altitude_ft,
+        oat_c: prefs.landing.oat_c,
+        pa_override: prefs.landing.pa_override,
+        wheel_fairings_installed: prefs.wheel_fairings_installed,
+        landing_ground_idle_1000_rpm: prefs.landing_ground_idle_1000_rpm,
+        ..Default::default()
+    }
 }
 
 pub fn assemble_cruise_inputs(prefs: &FlightPrefs, data: &PerformanceData) -> FlightInputs {
-    let mut i = FlightInputs::default();
-    i.propeller = prefs.propeller;
-    i.wheel_fairings_installed = prefs.wheel_fairings_installed;
-    i.cruise_pressure_alt_ft = prefs.cruise_planning.cruise_pressure_alt_ft;
-    i.cruise_rpm = prefs.cruise_planning.cruise_rpm;
-    i.weight_lb = prefs.cruise_planning.weight_lb;
-    i.cruise_solve_mode = prefs
+    let cruise_pressure_alt_ft = prefs.cruise_planning.cruise_pressure_alt_ft;
+    let solve_mode = prefs
         .cruise_solve_saved
         .unwrap_or(CruiseSolveMode::SetPercentBhp);
-    i.cruise_percent_bhp = prefs
+    let percent_bhp = prefs
         .cruise_percent_bhp_saved
         .unwrap_or_else(|| crate::prefs::resolved_default_cruise_percent_bhp(data));
-    if prefs.cruise_oat_manual {
-        if let Some(oat) = prefs.cruise_oat_c_saved {
-            i.cruise_oat_c = clamp_cruise_oat_for_propeller(&i, oat);
-        }
+    let probe = FlightInputs {
+        propeller: prefs.propeller,
+        cruise_pressure_alt_ft,
+        cruise_solve_mode: solve_mode,
+        cruise_percent_bhp: percent_bhp,
+        ..Default::default()
+    };
+    let cruise_oat_c = if prefs.cruise_oat_manual {
+        prefs
+            .cruise_oat_c_saved
+            .map(|oat| clamp_cruise_oat_for_propeller(&probe, oat))
+            .unwrap_or(probe.cruise_oat_c)
     } else {
         let est = estimated_oat_c_from_ground(
             prefs.cruise_planning.ground_elevation_ft,
             prefs.cruise_planning.ground_oat_c,
-            i.cruise_pressure_alt_ft,
+            cruise_pressure_alt_ft,
         );
-        i.cruise_oat_c = clamp_cruise_oat_for_propeller(&i, est);
+        clamp_cruise_oat_for_propeller(&probe, est)
+    };
+    FlightInputs {
+        propeller: prefs.propeller,
+        wheel_fairings_installed: prefs.wheel_fairings_installed,
+        cruise_pressure_alt_ft,
+        cruise_rpm: prefs.cruise_planning.cruise_rpm,
+        weight_lb: prefs.cruise_planning.weight_lb,
+        cruise_solve_mode: solve_mode,
+        cruise_percent_bhp: percent_bhp,
+        cruise_oat_c,
+        ..Default::default()
     }
-    i
 }
 
 pub fn assemble_endurance_inputs(prefs: &FlightPrefs, data: &PerformanceData) -> FlightInputs {
-    let mut i = assemble_cruise_inputs(prefs, data);
-    i.fuel_usable_us_gal = prefs.endurance.fuel_usable_us_gal;
-    i.fuel_reserve_us_gal = prefs.endurance.fuel_reserve_us_gal;
-    i
+    FlightInputs {
+        fuel_usable_us_gal: prefs.endurance.fuel_usable_us_gal,
+        fuel_reserve_us_gal: prefs.endurance.fuel_reserve_us_gal,
+        ..assemble_cruise_inputs(prefs, data)
+    }
 }
 
 /// Cruise ground OAT edit helper used by cruise-only ground fields.

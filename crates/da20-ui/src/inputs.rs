@@ -817,7 +817,6 @@ mod airfield_setter_tests {
 
     #[test]
     fn landing_pa_setter_leaves_takeoff_prefs() {
-        let data = PerformanceData::production();
         let (mut prefs, mut inputs) = seeded_prefs();
 
         shared_airfield_set_pressure_altitude(
