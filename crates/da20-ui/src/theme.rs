@@ -82,6 +82,9 @@ pub fn apply_theme(pref: ThemePreference) {
             let _ = html.set_attribute("data-theme", pref.data_attr());
             let scheme = color_scheme_value(pref);
             let _ = html.set_attribute("data-color-scheme", scheme);
+            if let Ok(Some(meta)) = doc.query_selector("meta[name='color-scheme']") {
+                let _ = meta.set_attribute("content", scheme);
+            }
             if let Ok(el) = html.dyn_into::<web_sys::HtmlElement>() {
                 let _ = el.style().set_property("color-scheme", scheme);
                 if pref == ThemePreference::Night {

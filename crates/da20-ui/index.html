@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light only" />
     <script>
       (function () {
         try {
@@ -24,8 +24,10 @@
             theme = "light";
           }
           document.documentElement.setAttribute("data-theme", theme);
-          document.documentElement.style.colorScheme =
-            theme === "light" ? "light only" : "dark only";
+          var scheme = theme === "light" ? "light only" : "dark only";
+          document.documentElement.style.colorScheme = scheme;
+          var meta = document.querySelector('meta[name="color-scheme"]');
+          if (meta) meta.setAttribute("content", scheme);
         } catch (e) {}
       })();
     </script>

@@ -1,21 +1,20 @@
-//! WCAG contrast + text/chart token separation (hex values must match `style.css`).
+//! WCAG contrast + text/chart token separation — parsed from `style.css` (source of truth).
 
 #![cfg(test)]
 
+use std::collections::{HashMap, HashSet};
+
+const STYLE_CSS: &str = include_str!("../style.css");
+
 const AA_BODY: f64 = 4.5;
-const AA_LARGE_UI: f64 = 3.0;
+const AA_UI_NON_TEXT: f64 = 3.0;
 
-struct TokenSet {
-    colors: &'static [&'static str],
-}
-
-struct ThemeSpec {
-    name: &'static str,
-    text_ui: TokenSet,
-    chart: TokenSet,
-    /// (foreground hex, background hex, min_ratio, label)
-    text_pairs: &'static [(&'static str, &'static str, f64, &'static str)],
-    chart_pairs: &'static [(&'static str, &'static str, f64, &'static str)],
+#[derive(Clone, Copy)]
+struct ContrastCheck {
+    fg: &'static str,
+    bg: &'static str,
+    min: f64,
+    label: &'static str,
 }
 
 fn parse_hex(hex: &str) -> Option<[u8; 3]> {
@@ -44,7 +43,7 @@ fn relative_luminance(rgb: [u8; 3]) -> f64 {
     0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-fn contrast_ratio(fg: &str, bg: &str) -> f64 {
+pub fn contrast_ratio(fg: &str, bg: &str) -> f64 {
     let lf = relative_luminance(parse_hex(fg).expect("fg hex"));
     let lb = relative_luminance(parse_hex(bg).expect("bg hex"));
     let lighter = lf.max(lb);
@@ -56,145 +55,411 @@ fn normalize_hex(hex: &str) -> String {
     hex.trim_start_matches('#').to_ascii_lowercase()
 }
 
-const LIGHT_TEXT_UI: &[&str] = &[
-    "#e6e9ed", "#ffffff", "#0a0a0a", "#30363d", "#8f4b00", "#a31638", "#1a0e00", "#6d777f",
-    "#5c656d", "#0057b8", "#fff4e5", "#7a3d00", "#9a3412", "#0f5c38",
-];
+fn extract_theme_block(css: &str, theme: &str) -> String {
+    let needle = format!("[data-theme=\"{theme}\"]");
+    let start = css
+        .find(&needle)
+        .unwrap_or_else(|| panic!("missing theme block {needle}"));
+    let rest = &css[start..];
+    let open = rest.find('{').expect("theme block brace");
+    let mut depth = 0i32;
+    let mut end = open;
+    for (i, ch) in rest[open..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = open + i + 1;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    rest[..end].to_string()
+}
 
-const LIGHT_CHART: &[&str] = &[
-    "#f4f7fa", "#3d4f63", "#6b7580", "#152a40", "#1a5694", "#6b2fa0", "#c56a08", "#d9820a",
-    "#0a6b7c", "#5b21b6", "#14532d", "#7c2d12", "#4c1d95", "#9d174d", "#0369a1",
-];
+fn parse_variables(block: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for line in block.lines() {
+        let line = line.trim();
+        if !line.starts_with("--") {
+            continue;
+        }
+        let Some((name, rest)) = line.split_once(':') else {
+            continue;
+        };
+        let value = rest.trim().trim_end_matches(';').trim();
+        map.insert(name.trim().to_string(), value.to_string());
+    }
+    map
+}
 
-const DARK_TEXT_UI: &[&str] = &[
-    "#1c2128", "#2a313a", "#f3f5f7", "#c5cdd6", "#ffb020", "#ff7b6b", "#1a1200", "#5a6570",
-    "#252c34", "#4a5563", "#6ba3e8", "#2a1e08", "#ffd27a", "#3a2a05", "#5fd4a8", "#ff9a8c",
-    "#ffd4ce",
-];
+fn resolve_var(map: &HashMap<String, String>, name: &str, depth: usize) -> Option<String> {
+    if depth > 24 {
+        return None;
+    }
+    let value = map.get(name)?;
+    let value = value.trim();
+    if let Some(hex) = value.strip_prefix('#') {
+        return Some(format!("#{hex}"));
+    }
+    if let Some(inner) = value.strip_prefix("var(").and_then(|s| s.strip_suffix(')')) {
+        let var = inner.trim();
+        return resolve_var(map, var, depth + 1);
+    }
+    None
+}
 
-const DARK_CHART: &[&str] = &[
-    "#222830", "#4a5668", "#7a8798", "#b8c8d8", "#5f9fd8", "#a8c4f0", "#e8a020", "#f0b830",
-    "#40c890", "#ff90a0", "#56b4e9", "#e69f00", "#2fb38a", "#ffa8d0", "#ffe8a0",
-];
+fn resolve_key(map: &HashMap<String, String>, key: &str) -> Option<String> {
+    let name = if key.starts_with("--") {
+        key.to_string()
+    } else {
+        format!("--{key}")
+    };
+    resolve_var(map, &name, 0)
+}
 
-const NIGHT_TEXT_UI: &[&str] = &[
-    "#060303", "#0e0606", "#d85858", "#c86868", "#b8650a", "#e06060", "#1a0800", "#5c1818",
-    "#120808", "#9e3030", "#140606", "#a07018", "#180808", "#c84848",
-];
+fn is_text_ui_var(name: &str) -> bool {
+    name.starts_with("--text-")
+        || name.starts_with("--ui-")
+        || matches!(
+            name,
+            "--disc-bg"
+                | "--disc-fg"
+                | "--disc-border"
+                | "--caution-fg"
+                | "--caution-border"
+                | "--ooc-fg"
+                | "--badge-not-tcca-fg"
+                | "--badge-not-tcca-border"
+                | "--selection-fg"
+        )
+}
 
-const NIGHT_CHART: &[&str] = &[
-    "#0a0404", "#701818", "#a04040", "#ca6060", "#b83818", "#cc5018", "#904018", "#a84820",
-    "#c85820", "#802020", "#582020", "#682828", "#783018", "#903838", "#984020",
-];
+fn is_chart_var(name: &str) -> bool {
+    name.starts_with("--chart-") || name.starts_with("--trace-")
+}
 
-const THEMES: &[ThemeSpec] = &[
-    ThemeSpec {
-        name: "light",
-        text_ui: TokenSet {
-            colors: LIGHT_TEXT_UI,
-        },
-        chart: TokenSet {
-            colors: LIGHT_CHART,
-        },
-        text_pairs: &[
-            ("#0a0a0a", "#e6e9ed", AA_BODY, "text-primary on page bg"),
-            ("#30363d", "#e6e9ed", AA_BODY, "text-muted on page bg"),
-            ("#0a0a0a", "#ffffff", AA_BODY, "text-primary on surface"),
-            ("#30363d", "#ffffff", AA_BODY, "text-muted on surface"),
-            ("#7a3d00", "#fff4e5", AA_BODY, "disclaimer text"),
-            ("#8f4b00", "#e6e9ed", AA_LARGE_UI, "accent on page (large)"),
-            ("#a31638", "#ffffff", AA_BODY, "warning on input"),
+fn contrast_checks(theme: &str) -> &'static [ContrastCheck] {
+    match theme {
+        "light" => &[
+            ContrastCheck {
+                fg: "text-primary",
+                bg: "ui-page-bg",
+                min: AA_BODY,
+                label: "body on page",
+            },
+            ContrastCheck {
+                fg: "text-muted",
+                bg: "ui-page-bg",
+                min: AA_BODY,
+                label: "muted on page",
+            },
+            ContrastCheck {
+                fg: "text-primary",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "body on surface",
+            },
+            ContrastCheck {
+                fg: "ui-btn-primary-fg",
+                bg: "ui-btn-primary-bg",
+                min: AA_BODY,
+                label: "primary button",
+            },
+            ContrastCheck {
+                fg: "ui-btn-secondary-fg",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "secondary button (kg/lb, toggles off)",
+            },
+            ContrastCheck {
+                fg: "ui-btn-toggle-on-fg",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "toggle on (propeller/fairing)",
+            },
+            ContrastCheck {
+                fg: "ui-disc-fg",
+                bg: "ui-disc-bg",
+                min: AA_BODY,
+                label: "disclaimer",
+            },
+            ContrastCheck {
+                fg: "text-warning",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "warning / out-of-chart on surface",
+            },
+            ContrastCheck {
+                fg: "ui-border",
+                bg: "ui-page-bg",
+                min: AA_UI_NON_TEXT,
+                label: "page border (non-text UI)",
+            },
+            ContrastCheck {
+                fg: "ui-input-border",
+                bg: "ui-input-bg",
+                min: AA_UI_NON_TEXT,
+                label: "input border",
+            },
+            ContrastCheck {
+                fg: "ui-focus-ring",
+                bg: "ui-page-bg",
+                min: AA_UI_NON_TEXT,
+                label: "focus ring on page",
+            },
+            ContrastCheck {
+                fg: "chart-axis-label",
+                bg: "chart-surface-bg",
+                min: AA_BODY,
+                label: "chart axis label",
+            },
+            ContrastCheck {
+                fg: "chart-trace-line",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart trace",
+            },
+            ContrastCheck {
+                fg: "chart-grid",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart grid",
+            },
+            ContrastCheck {
+                fg: "chart-result",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart result trace",
+            },
+            ContrastCheck {
+                fg: "chart-warning",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart warning trace",
+            },
         ],
-        chart_pairs: &[
-            ("#152a40", "#f4f7fa", AA_BODY, "axis label on chart surface"),
-            ("#1a5694", "#f4f7fa", AA_LARGE_UI, "trace on chart surface"),
-            ("#6b7580", "#f4f7fa", AA_LARGE_UI, "grid on chart surface"),
-            ("#3d4f63", "#f4f7fa", AA_LARGE_UI, "chart border tone"),
+        "dark" => &[
+            ContrastCheck {
+                fg: "text-primary",
+                bg: "ui-page-bg",
+                min: AA_BODY,
+                label: "body on page",
+            },
+            ContrastCheck {
+                fg: "text-muted",
+                bg: "ui-page-bg",
+                min: AA_BODY,
+                label: "muted on page",
+            },
+            ContrastCheck {
+                fg: "ui-btn-primary-fg",
+                bg: "ui-btn-primary-bg",
+                min: AA_BODY,
+                label: "primary button",
+            },
+            ContrastCheck {
+                fg: "ui-btn-secondary-fg",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "secondary button",
+            },
+            ContrastCheck {
+                fg: "ui-btn-toggle-on-fg",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "toggle on",
+            },
+            ContrastCheck {
+                fg: "ui-disc-fg",
+                bg: "ui-disc-bg",
+                min: AA_BODY,
+                label: "disclaimer",
+            },
+            ContrastCheck {
+                fg: "ui-border",
+                bg: "ui-page-bg",
+                min: AA_UI_NON_TEXT,
+                label: "page border",
+            },
+            ContrastCheck {
+                fg: "ui-input-border",
+                bg: "ui-input-bg",
+                min: AA_UI_NON_TEXT,
+                label: "input border",
+            },
+            ContrastCheck {
+                fg: "ui-focus-ring",
+                bg: "ui-page-bg",
+                min: AA_UI_NON_TEXT,
+                label: "focus ring",
+            },
+            ContrastCheck {
+                fg: "chart-axis-label",
+                bg: "chart-surface-bg",
+                min: AA_BODY,
+                label: "chart axis label",
+            },
+            ContrastCheck {
+                fg: "chart-trace-line",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart trace",
+            },
+            ContrastCheck {
+                fg: "chart-grid",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart grid",
+            },
         ],
-    },
-    ThemeSpec {
-        name: "dark",
-        text_ui: TokenSet {
-            colors: DARK_TEXT_UI,
-        },
-        chart: TokenSet { colors: DARK_CHART },
-        text_pairs: &[
-            ("#f3f5f7", "#1c2128", AA_BODY, "text-primary on page bg"),
-            ("#c5cdd6", "#1c2128", AA_BODY, "text-muted on page bg"),
-            ("#f3f5f7", "#2a313a", AA_BODY, "text-primary on surface"),
-            ("#ffd27a", "#3a2a05", AA_BODY, "disclaimer text"),
-            ("#ff7b6b", "#2a313a", AA_BODY, "warning on surface"),
+        "night" => &[
+            ContrastCheck {
+                fg: "text-primary",
+                bg: "ui-page-bg",
+                min: AA_BODY,
+                label: "body on page",
+            },
+            ContrastCheck {
+                fg: "text-muted",
+                bg: "ui-page-bg",
+                min: AA_BODY,
+                label: "muted on page",
+            },
+            ContrastCheck {
+                fg: "ui-btn-primary-fg",
+                bg: "ui-btn-primary-bg",
+                min: AA_BODY,
+                label: "primary button",
+            },
+            ContrastCheck {
+                fg: "ui-btn-secondary-fg",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "secondary button",
+            },
+            ContrastCheck {
+                fg: "ui-btn-toggle-on-fg",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "toggle on",
+            },
+            ContrastCheck {
+                fg: "ui-disc-fg",
+                bg: "ui-disc-bg",
+                min: AA_BODY,
+                label: "disclaimer",
+            },
+            ContrastCheck {
+                fg: "text-warning",
+                bg: "ui-surface-bg",
+                min: AA_BODY,
+                label: "out-of-chart",
+            },
+            ContrastCheck {
+                fg: "ui-border",
+                bg: "ui-page-bg",
+                min: AA_UI_NON_TEXT,
+                label: "page border",
+            },
+            ContrastCheck {
+                fg: "ui-input-border",
+                bg: "ui-input-bg",
+                min: AA_UI_NON_TEXT,
+                label: "input border",
+            },
+            ContrastCheck {
+                fg: "ui-focus-ring",
+                bg: "ui-page-bg",
+                min: AA_UI_NON_TEXT,
+                label: "focus ring",
+            },
+            ContrastCheck {
+                fg: "chart-axis-label",
+                bg: "chart-surface-bg",
+                min: AA_BODY,
+                label: "chart axis label",
+            },
+            ContrastCheck {
+                fg: "chart-trace-line",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart trace",
+            },
+            ContrastCheck {
+                fg: "chart-grid",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart grid",
+            },
+            ContrastCheck {
+                fg: "chart-result",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart result trace",
+            },
+            ContrastCheck {
+                fg: "chart-warning",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart warning trace",
+            },
         ],
-        chart_pairs: &[
-            ("#b8c8d8", "#222830", AA_BODY, "axis label on chart surface"),
-            ("#5f9fd8", "#222830", AA_LARGE_UI, "trace on chart surface"),
-            ("#7a8798", "#222830", AA_LARGE_UI, "grid on chart surface"),
-        ],
-    },
-    ThemeSpec {
-        name: "night",
-        text_ui: TokenSet {
-            colors: NIGHT_TEXT_UI,
-        },
-        chart: TokenSet {
-            colors: NIGHT_CHART,
-        },
-        text_pairs: &[
-            ("#d85858", "#060303", AA_BODY, "text-primary on page bg"),
-            ("#c86868", "#060303", AA_BODY, "text-muted on page bg"),
-            ("#e06060", "#0e0606", AA_BODY, "warning on surface"),
-        ],
-        chart_pairs: &[
-            ("#ca6060", "#0a0404", AA_BODY, "axis label on chart surface"),
-            ("#b83818", "#0a0404", AA_LARGE_UI, "trace on chart surface"),
-            ("#a04040", "#0a0404", AA_LARGE_UI, "grid on chart surface"),
-        ],
-    },
-];
+        _ => &[],
+    }
+}
+
+fn themes() -> [&'static str; 3] {
+    ["light", "dark", "night"]
+}
 
 #[test]
 fn text_and_chart_token_sets_do_not_share_hex_values() {
-    for theme in THEMES {
-        let chart_norm: std::collections::HashSet<String> = theme
-            .chart
-            .colors
-            .iter()
-            .map(|h| normalize_hex(h))
-            .collect();
-        for ui in theme.text_ui.colors {
-            let u = normalize_hex(ui);
+    for theme in themes() {
+        let block = extract_theme_block(STYLE_CSS, theme);
+        let map = parse_variables(&block);
+        let mut text_hex = HashSet::new();
+        let mut chart_hex = HashSet::new();
+        for name in map.keys() {
+            if is_text_ui_var(name) {
+                if let Some(h) = resolve_var(&map, name, 0) {
+                    text_hex.insert(normalize_hex(&h));
+                }
+            }
+            if is_chart_var(name) {
+                if let Some(h) = resolve_var(&map, name, 0) {
+                    chart_hex.insert(normalize_hex(&h));
+                }
+            }
+        }
+        for t in &text_hex {
             assert!(
-                !chart_norm.contains(&u),
-                "theme {}: hex #{u} appears in both text/ui and chart sets",
-                theme.name
+                !chart_hex.contains(t),
+                "theme {theme}: hex #{t} in both text/ui and chart sets"
             );
         }
     }
 }
 
 #[test]
-fn wcag_contrast_for_token_pairs() {
-    for theme in THEMES {
-        for (fg, bg, min, label) in theme.text_pairs {
-            let ratio = contrast_ratio(fg, bg);
+fn wcag_contrast_from_style_css() {
+    for theme in themes() {
+        let block = extract_theme_block(STYLE_CSS, theme);
+        let map = parse_variables(&block);
+        for check in contrast_checks(theme) {
+            let fg = resolve_key(&map, check.fg)
+                .unwrap_or_else(|| panic!("theme {theme}: could not resolve --{}", check.fg));
+            let bg = resolve_key(&map, check.bg)
+                .unwrap_or_else(|| panic!("theme {theme}: could not resolve --{}", check.bg));
+            let ratio = contrast_ratio(&fg, &bg);
             assert!(
-                ratio >= *min,
-                "theme {} text check failed for {}: {:.2}:1 < {:.1}:1 (fg {fg} on bg {bg})",
-                theme.name,
-                label,
-                ratio,
-                min
-            );
-        }
-        for (fg, bg, min, label) in theme.chart_pairs {
-            let ratio = contrast_ratio(fg, bg);
-            assert!(
-                ratio >= *min,
-                "theme {} chart check failed for {}: {:.2}:1 < {:.1}:1 (fg {fg} on bg {bg})",
-                theme.name,
-                label,
-                ratio,
-                min
+                ratio >= check.min,
+                "theme {theme} failed {}: {ratio:.2}:1 < {:.1}:1 ({fg} on {bg})",
+                check.label,
+                check.min
             );
         }
     }

@@ -5,15 +5,19 @@
   --text-muted: #30363d;
   --text-accent: #8f4b00;
   --text-warning: #a31638;
-  --text-on-accent: #1a0e00;
+  --text-on-accent: #fff8f0;
   --text-link: #8f4b00;
   --text-success: #0f5c38;
   --ui-page-bg: #e6e9ed;
   --ui-surface-bg: #ffffff;
-  --ui-border: #6d777f;
+  --ui-border: #4f5a65;
   --ui-input-bg: #ffffff;
-  --ui-input-border: #5c656d;
-  --ui-focus-ring: #0057b8;
+  --ui-input-border: #4a5563;
+  --ui-focus-ring: #004a9e;
+  --ui-btn-primary-bg: #8a4300;
+  --ui-btn-primary-fg: #fff8f0;
+  --ui-btn-secondary-fg: #0a0a0a;
+  --ui-btn-toggle-on-fg: #8a4300;
   --ui-disc-bg: #fff4e5;
   --ui-disc-fg: #7a3d00;
   --ui-disc-border: #9a3412;
@@ -54,7 +58,7 @@
   --focus-ring: var(--ui-focus-ring);
   --input-bg: var(--ui-input-bg);
   --input-border: var(--ui-input-border);
-  --btn-on-fg: var(--text-on-accent);
+  --btn-on-fg: var(--ui-btn-primary-fg);
   --disc-bg: var(--ui-disc-bg);
   --disc-fg: var(--ui-disc-fg);
   --disc-border: var(--ui-disc-border);
@@ -90,10 +94,14 @@
   --text-success: #5fd4a8;
   --ui-page-bg: #1c2128;
   --ui-surface-bg: #2a313a;
-  --ui-border: #5a6570;
+  --ui-border: #8a96a5;
   --ui-input-bg: #252c34;
-  --ui-input-border: #4a5563;
-  --ui-focus-ring: #6ba3e8;
+  --ui-input-border: #9aa5b4;
+  --ui-focus-ring: #8ab8f0;
+  --ui-btn-primary-bg: #f0b030;
+  --ui-btn-primary-fg: #1a1200;
+  --ui-btn-secondary-fg: #f3f5f7;
+  --ui-btn-toggle-on-fg: #f0b030;
   --ui-disc-bg: #3a2a05;
   --ui-disc-fg: #ffd27a;
   --ui-disc-border: #ffb020;
@@ -133,7 +141,7 @@
   --focus-ring: var(--ui-focus-ring);
   --input-bg: var(--ui-input-bg);
   --input-border: var(--ui-input-border);
-  --btn-on-fg: var(--text-on-accent);
+  --btn-on-fg: var(--ui-btn-primary-fg);
   --disc-bg: var(--ui-disc-bg);
   --disc-fg: var(--ui-disc-fg);
   --disc-border: var(--ui-disc-border);
@@ -169,12 +177,16 @@
   --text-success: #a07018;
   --ui-page-bg: #060303;
   --ui-surface-bg: #0e0606;
-  --ui-border: #5c1818;
+  --ui-border: #a05050;
   --ui-input-bg: #120808;
-  --ui-input-border: #5c1818;
-  --ui-focus-ring: #9e3030;
+  --ui-input-border: #b05858;
+  --ui-focus-ring: #e07070;
+  --ui-btn-primary-bg: #d07810;
+  --ui-btn-primary-fg: #1a0800;
+  --ui-btn-secondary-fg: #d85858;
+  --ui-btn-toggle-on-fg: #d07810;
   --ui-disc-bg: #140606;
-  --ui-disc-fg: #c84848;
+  --ui-disc-fg: #f08080;
   --ui-disc-border: #b8650a;
   --ui-scrollbar-thumb: #5c1818;
   --ui-scrollbar-track: #060303;
@@ -189,9 +201,9 @@
   --chart-guide-active: #a84820;
   --chart-user-path: #c85820;
   --chart-marker: #802020;
-  --chart-result: #582020;
-  --chart-warning: #883838;
-  --trace-1: #582020;
+  --chart-result: #ae5858;
+  --chart-warning: #c87878;
+  --trace-1: #a84848;
   --trace-2: #682828;
   --trace-3: #783018;
   --trace-4: #903838;
@@ -212,7 +224,7 @@
   --focus-ring: var(--ui-focus-ring);
   --input-bg: var(--ui-input-bg);
   --input-border: var(--ui-input-border);
-  --btn-on-fg: var(--text-on-accent);
+  --btn-on-fg: var(--ui-btn-primary-fg);
   --disc-bg: var(--ui-disc-bg);
   --disc-fg: var(--ui-disc-fg);
   --disc-border: var(--ui-disc-border);
@@ -599,8 +611,8 @@ button {
 }
 
 .btn {
-  background: var(--amb);
-  color: var(--btn-on-fg);
+  background: var(--ui-btn-primary-bg);
+  color: var(--ui-btn-primary-fg);
   border: 0;
   padding: 8px 14px;
   border-radius: 6px;
@@ -610,13 +622,15 @@ button {
 
 .btn.g {
   background: transparent;
-  color: var(--txt);
-  border: 1px solid var(--line);
+  color: var(--ui-btn-secondary-fg);
+  border: 1px solid var(--ui-border);
 }
 
 .btn.g.on {
-  color: var(--amb);
-  border-color: var(--amb);
+  color: var(--ui-btn-toggle-on-fg);
+  border-color: var(--ui-btn-toggle-on-fg);
+  background: var(--ui-surface-bg);
+  font-weight: 700;
 }
 
 .toggle-row {
