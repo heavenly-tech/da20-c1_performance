@@ -150,7 +150,7 @@ pub fn InteractiveChart(
                     render_svg(kind, locale.get(), &d, &i, cursor_x.get(), cursor_y.get())
                 }}
             </svg>
-            <p class="cursor-readout mono">
+            <p class="cursor-readout readout-text">
                 {move || {
                     let c = copy(locale.get());
                     let d = data.get();

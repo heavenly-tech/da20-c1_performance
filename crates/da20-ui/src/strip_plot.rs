@@ -31,11 +31,12 @@ use crate::chart_axes::{
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
-    copy, format_climb_readout_interactive_pair, format_strip_chart_roll_obs,
+    copy, format_climb_readout_interactive_pair, format_out_of_chart, format_strip_chart_roll_obs,
     format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
     format_takeoff_strip_pa_trace_label, Locale,
 };
-use crate::phase_readouts::OVERLAY_STROKE_COLORS;
+use crate::phase_readouts::overlay_trace_var;
+use crate::storage::compute_all;
 use crate::storage::ReadingsStore;
 
 const STRIP_INPUT_CURSOR_DASH: &str = "5 4";
@@ -332,7 +333,7 @@ pub fn StripHandPlot(
                     .into_any(),
                 }}
             </svg>
-            <p class="cursor-readout mono"
+            <p class="cursor-readout readout-text"
                 class:results-muted=move || {
                     kind == StripKind::Takeoff
                         && runway_heading_status(&inputs.get().runway)
@@ -384,6 +385,14 @@ fn readout_line(
             {
                 return format!("{}: — | {}: —", c.plot_readout_chart, c.plot_readout_core);
             }
+            let bundle = compute_all(&data, &inputs);
+            if let Some(ooc) = &bundle.takeoff_ooc {
+                let msg = format_out_of_chart(locale, ooc);
+                return format!(
+                    "{}: {msg} | {}: —",
+                    c.plot_readout_chart, c.plot_readout_core
+                );
+            }
             let path = takeoff_hand_path(inner, &inputs, pa);
             let takeoff = compute_takeoff(&data, &inputs);
             let core = takeoff
@@ -415,6 +424,14 @@ fn readout_line(
             )
         }
         StripKind::Climb => {
+            let bundle = compute_all(&data, &inputs);
+            if let Some(ooc) = &bundle.climb_ooc {
+                let msg = format_out_of_chart(locale, ooc);
+                return format!(
+                    "{}: {msg} | {}: —",
+                    c.plot_readout_chart, c.plot_readout_core
+                );
+            }
             let path = climb_hand_path(inner, &inputs, pa);
             let core = compute_climb(&data, &inputs, inputs.cruise_pressure_alt_ft)
                 .map(|r| {
@@ -789,7 +806,8 @@ fn saved_path_overlays(
                         .map(|(x, y)| format!("{x:.1},{y:.1}"))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    let color = OVERLAY_STROKE_COLORS[idx % OVERLAY_STROKE_COLORS.len()];
+                    let color = overlay_trace_var(idx);
+                    let dash = crate::theme::overlay_trace_dash(idx);
                     let pa_guide = match kind {
                         StripKind::Takeoff => {
                             let label = format_takeoff_strip_pa_trace_label(locale, pa);
@@ -823,7 +841,7 @@ fn saved_path_overlays(
                                 stroke=color
                                 stroke-width="2.5"
                                 opacity="0.88"
-                                stroke-dasharray="7 4"
+                                stroke-dasharray=dash
                             />
                         </>
                     })
@@ -1362,6 +1380,26 @@ mod strip_drag_tests {
         assert!((x_tailwind_kt(5.0) - TAKEOFF_TW.x).abs() < 1e-6);
         assert!((x_tailwind_kt(0.0) - (TAKEOFF_TW.x + TAKEOFF_TW.w)).abs() < 1e-6);
         assert!((x_headwind_kt(20.0) - (TAKEOFF_HW.x + TAKEOFF_HW.w)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn takeoff_strip_readout_ooc_never_shows_nan() {
+        use da20_core::types::FlightInputs;
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            weight_lb: 2500.0,
+            ..Default::default()
+        };
+        let line = readout_line(Locale::Es, StripKind::Takeoff, data, inputs);
+        assert!(
+            !line.contains("NaN"),
+            "readout must not format NaN distances: {line}"
+        );
+        assert!(
+            line.contains("Fuera") || line.contains("carta") || line.contains('—'),
+            "expected OOC or placeholder: {line}"
+        );
     }
 
     #[test]

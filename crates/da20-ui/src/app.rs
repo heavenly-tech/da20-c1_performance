@@ -19,7 +19,7 @@ pub fn App() -> impl IntoView {
     let initial_phase = read_phase_from_location().unwrap_or(Phase::Takeoff);
     let phase = RwSignal::new(initial_phase);
     let locale = RwSignal::new(Locale::load());
-    let theme = RwSignal::new(ThemePreference::load());
+    let theme = RwSignal::new(ThemePreference::load_initial());
     let palette = RwSignal::new(PaletteChoice::for_theme(theme.get_untracked()));
     let data = RwSignal::new(PerformanceData::production());
     let flight_prefs = FlightPrefs::load();
@@ -65,6 +65,7 @@ pub fn App() -> impl IntoView {
 
     view! {
         <PaletteThemeEffect theme=theme palette=palette/>
+        <crate::theme::ThemeDomSync theme=theme/>
         <div class="app">
             <Disclaimer locale=locale/>
             <header class="header">

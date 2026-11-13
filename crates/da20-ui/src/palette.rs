@@ -50,7 +50,7 @@ fn file() -> &'static PalettesFile {
 pub fn default_palette_id(theme: ThemePreference) -> &'static str {
     match theme {
         ThemePreference::Light => DEFAULT_LIGHT_PALETTE,
-        ThemePreference::Dark => DEFAULT_DARK_PALETTE,
+        ThemePreference::Dark | ThemePreference::Night => DEFAULT_DARK_PALETTE,
     }
 }
 
@@ -66,6 +66,8 @@ fn normalize_palette_id(id: &str, theme: ThemePreference) -> String {
 struct PerThemePalettes {
     light: Option<String>,
     dark: Option<String>,
+    #[serde(default)]
+    night: Option<String>,
 }
 
 impl PerThemePalettes {
@@ -81,6 +83,7 @@ impl PerThemePalettes {
         let stored = match theme {
             ThemePreference::Light => self.light.as_deref(),
             ThemePreference::Dark => self.dark.as_deref(),
+            ThemePreference::Night => self.night.as_deref(),
         };
         PaletteChoice {
             id: normalize_palette_id(stored.unwrap_or(default_palette_id(theme)), theme),
@@ -92,6 +95,7 @@ impl PerThemePalettes {
         match theme {
             ThemePreference::Light => self.light = Some(id),
             ThemePreference::Dark => self.dark = Some(id),
+            ThemePreference::Night => self.night = Some(id),
         }
     }
 }
@@ -146,25 +150,45 @@ fn set_var(html: &web_sys::HtmlElement, name: &str, value: &str) {
     let _ = html.style().set_property(name, value);
 }
 
+/// Palette JSON sets inline chart tokens on `<html>`; clear them so theme CSS wins (esp. Night).
+pub fn clear_chart_palette_inline_overrides(html: &web_sys::HtmlElement) {
+    const CHART_INLINE_VARS: &[&str] = &[
+        "--chart-surface-bg",
+        "--chart-grid",
+        "--chart-axis-label",
+        "--chart-trace-line",
+        "--chart-trace-highlight",
+        "--chart-guide",
+        "--chart-guide-active",
+        "--chart-user-path",
+        "--chart-marker",
+        "--chart-border",
+        "--chart-result",
+        "--chart-warning",
+        "--chart-bg",
+        "--chart-label",
+        "--chart-line",
+        "--chart-highlight",
+    ];
+    for name in CHART_INLINE_VARS {
+        let _ = html.style().remove_property(name);
+    }
+}
+
+/// Palette JSON only overrides chart tokens — never page text / UI colours.
 fn apply_palette_colors(html: &web_sys::HtmlElement, c: &PaletteColors) {
-    set_var(html, "--chart-bg", &c.background);
+    set_var(html, "--chart-surface-bg", &c.background);
     set_var(html, "--chart-grid", &c.grid);
-    set_var(html, "--chart-label", &c.axis_text);
-    set_var(html, "--chart-line", &c.guide_active);
-    set_var(html, "--chart-highlight", &c.user_path);
+    set_var(html, "--chart-axis-label", &c.axis_text);
+    set_var(html, "--chart-trace-line", &c.guide_active);
+    set_var(html, "--chart-trace-highlight", &c.user_path);
     set_var(html, "--chart-guide", &c.guide);
     set_var(html, "--chart-guide-active", &c.guide_active);
     set_var(html, "--chart-user-path", &c.user_path);
     set_var(html, "--chart-marker", &c.markers);
     set_var(html, "--chart-border", &c.border);
-    set_var(html, "--ok", &c.result);
-    set_var(html, "--warn", &c.warning);
-    set_var(html, "--bg", &c.background);
-    set_var(html, "--panel", &c.background);
-    set_var(html, "--line", &c.border);
-    set_var(html, "--txt", &c.axis_text);
-    set_var(html, "--mut", &c.guide);
-    set_var(html, "--amb", &c.user_path);
+    set_var(html, "--chart-result", &c.result);
+    set_var(html, "--chart-warning", &c.warning);
 }
 
 pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
@@ -178,17 +202,24 @@ pub fn apply_palette(palette: &PaletteChoice, theme: ThemePreference) {
         return;
     };
     let _ = html.set_attribute("data-palette", &palette.id);
+    // Night: page tokens + chart colours come only from CSS (red/amber), regardless of Paleta.
+    if theme == ThemePreference::Night {
+        clear_chart_palette_inline_overrides(&html);
+        return;
+    }
     let Some(entry) = palette.entry() else {
         return;
     };
     let c = match theme {
         ThemePreference::Light => &entry.light,
         ThemePreference::Dark => &entry.dark,
+        ThemePreference::Night => return,
     };
     apply_palette_colors(&html, c);
     if palette.id == "vfr_chart" && theme == ThemePreference::Dark {
         set_var(&html, "--chart-user-path", VFR_DARK_USER_PATH);
         set_var(&html, "--chart-marker", VFR_DARK_USER_PATH);
+        set_var(&html, "--chart-trace-highlight", VFR_DARK_USER_PATH);
     }
 }
 
@@ -227,5 +258,22 @@ mod tests {
             normalize_palette_id("unknown", ThemePreference::Dark),
             "vfr_chart"
         );
+    }
+
+    /// Night chart colours come only from `style.css` (red/amber), not VFR/Okabe JSON backgrounds.
+    #[test]
+    fn palette_json_light_background_is_not_night_chart_surface() {
+        const NIGHT_CHART_SURFACE: &str = "#0a0404";
+        for id in PALETTE_ORDER {
+            let entry = file().get(*id).expect("palette");
+            assert_ne!(
+                entry.light.background.to_ascii_lowercase(),
+                NIGHT_CHART_SURFACE
+            );
+            assert_ne!(
+                entry.dark.background.to_ascii_lowercase(),
+                NIGHT_CHART_SURFACE
+            );
+        }
     }
 }
