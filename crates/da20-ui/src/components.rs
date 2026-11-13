@@ -36,23 +36,30 @@ pub fn Nav(
                 locale.set(next);
                 next.save();
             }>{move || format!("{} · {}", copy(locale.get()).lang_toggle, locale.get().label())}</button>
-            <button class="lang-btn" type="button" on:click=move |_| {
-                let current = theme.get();
-                let next = current.toggle();
-                theme.set(next);
-                next.save();
-                crate::theme::apply_theme(next);
-                let p = PaletteChoice::for_theme(next);
-                palette.set(p.clone());
-                apply_palette(&p, next);
-            }>{move || format!(
-                "{} · {}",
-                copy(locale.get()).theme_toggle,
-                match theme.get() {
-                    ThemePreference::Light => copy(locale.get()).theme_light,
-                    ThemePreference::Dark => copy(locale.get()).theme_dark,
-                }
-            )}</button>
+            <label class="theme-picker lang-btn">
+                <span class="palette-picker-label">{move || copy(locale.get()).theme_toggle}</span>
+                <select class="palette-select" prop:value=move || theme.get().data_attr().to_string()
+                    on:change=move |ev| {
+                        let value = ev
+                            .target()
+                            .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok())
+                            .map(|s| s.value())
+                            .unwrap_or_default();
+                        let Some(next) = ThemePreference::from_data_attr(&value) else {
+                            return;
+                        };
+                        theme.set(next);
+                        next.save();
+                        crate::theme::apply_theme(next);
+                        let p = PaletteChoice::for_theme(next);
+                        palette.set(p.clone());
+                        apply_palette(&p, next);
+                    }>
+                    <option value="light">{move || copy(locale.get()).theme_light}</option>
+                    <option value="dark">{move || copy(locale.get()).theme_dark}</option>
+                    <option value="night">{move || copy(locale.get()).theme_night}</option>
+                </select>
+            </label>
             <label class="palette-picker lang-btn">
                 <span class="palette-picker-label">{move || copy(locale.get()).palette_toggle}</span>
                 <select class="palette-select" prop:value=move || palette.get().id.clone()

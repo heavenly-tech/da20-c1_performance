@@ -35,7 +35,7 @@ use crate::i18n::{
     format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
     format_takeoff_strip_pa_trace_label, Locale,
 };
-use crate::phase_readouts::OVERLAY_STROKE_COLORS;
+use crate::phase_readouts::overlay_trace_var;
 use crate::storage::ReadingsStore;
 
 const STRIP_INPUT_CURSOR_DASH: &str = "5 4";
@@ -789,7 +789,7 @@ fn saved_path_overlays(
                         .map(|(x, y)| format!("{x:.1},{y:.1}"))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    let color = OVERLAY_STROKE_COLORS[idx % OVERLAY_STROKE_COLORS.len()];
+                    let color = overlay_trace_var(idx);
                     let pa_guide = match kind {
                         StripKind::Takeoff => {
                             let label = format_takeoff_strip_pa_trace_label(locale, pa);

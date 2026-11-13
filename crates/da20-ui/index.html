@@ -3,6 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("da20_theme_v1");
+          var theme = "light";
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (typeof parsed === "string") {
+              theme = parsed.replace(/^"|"$/g, "").toLowerCase();
+            }
+          } else if (
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches
+          ) {
+            theme = "dark";
+          }
+          if (theme !== "light" && theme !== "dark" && theme !== "night") {
+            theme = "light";
+          }
+          document.documentElement.setAttribute("data-theme", theme);
+          document.documentElement.style.colorScheme =
+            theme === "light" ? "light only" : "dark only";
+        } catch (e) {}
+      })();
+    </script>
     <title>DA20-C1 Eclipse Performance Planner</title>
     <link data-trunk rel="css" href="style.css" />
     <link data-trunk rel="rust" href="Cargo.toml" />

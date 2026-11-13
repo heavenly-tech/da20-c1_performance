@@ -19,6 +19,8 @@ mod strip_plot;
 mod table_source_panel;
 mod takeoff_panel;
 mod theme;
+#[cfg(test)]
+mod theme_contrast;
 
 use app::App;
 

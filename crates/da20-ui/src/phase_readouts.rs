@@ -17,8 +17,7 @@ use crate::storage::{compute_all, format_readout_timestamp, new_reading, Reading
 use da20_core::endurance::compute_endurance;
 use da20_core::PerformanceData;
 
-pub const OVERLAY_STROKE_COLORS: [&str; 5] =
-    ["#0072B2", "#E69F00", "#009E73", "#CC79A7", "#56B4E9"];
+pub use crate::theme::overlay_trace_var;
 
 #[component]
 pub fn PhaseReadoutsPanel(
