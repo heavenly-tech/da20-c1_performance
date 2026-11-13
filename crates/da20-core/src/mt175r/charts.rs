@@ -429,6 +429,20 @@ mod tests {
     }
 
     #[test]
+    fn fig2_family_45pct_not_flat_from_axis_clamp() {
+        let data = Mt175rData::production();
+        let pts = fig2_family_chart_points(&data, 45);
+        let early: Vec<_> = pts.iter().filter(|(da, _)| *da <= 2000.0).collect();
+        let rpms: Vec<f64> = early.iter().map(|(_, r)| *r).collect();
+        let spread = rpms.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+            - rpms.iter().copied().fold(f64::INFINITY, f64::min);
+        assert!(
+            spread > 15.0,
+            "45% should rise with DA, not map as flat: {rpms:?}"
+        );
+    }
+
+    #[test]
     fn fig2_family_points_are_digitized_samples_only() {
         let data = Mt175rData::production();
         let family_75 = fig2_family_chart_points(&data, 75);

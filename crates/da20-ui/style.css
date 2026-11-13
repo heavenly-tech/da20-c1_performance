@@ -683,6 +683,15 @@ button {
   stroke-linejoin: round;
 }
 
+.chart-guide-label-hi {
+  fill: var(--chart-highlight);
+  font-weight: 600;
+  paint-order: stroke fill;
+  stroke: var(--chart-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
 .chart-axis-title {
   fill: var(--chart-label);
   font-size: 11px;

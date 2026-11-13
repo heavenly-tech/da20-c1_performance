@@ -9,19 +9,60 @@ use da20_core::mt175r::Mt175rData;
 use da20_core::rev29::charts::{map_from_svg, map_to_svg};
 use da20_core::types::{CruiseSolveMode, FlightInputs};
 
-pub const MT_MARGIN_L: f64 = 44.0;
-pub const MT_MARGIN_B: f64 = 28.0;
-pub const MT_MARGIN_T: f64 = 12.0;
-pub const MT_MARGIN_R: f64 = 10.0;
+use crate::chart_guides::LabelAnchor;
+
+/// Left gutter: Y tick labels + marker readout.
+pub const MT_MARGIN_L: f64 = 56.0;
+pub const MT_MARGIN_B: f64 = 52.0;
+pub const MT_MARGIN_T: f64 = 14.0;
+/// Right gutter: %BHP family labels.
+pub const MT_MARGIN_R: f64 = 52.0;
 pub const MT_W: f64 = 320.0;
 pub const MT_H: f64 = 200.0;
 
 pub const FIG2_DA_MIN: f64 = 0.0;
 pub const FIG2_DA_MAX: f64 = 12_000.0;
-pub const FIG2_RPM_MIN: f64 = 2100.0;
-pub const FIG2_RPM_MAX: f64 = 2900.0;
+/// AFMS Fig 2 printed axis (`domains.fig2_power.rpm` in mt175r_cruise_data.json).
+pub const FIG2_RPM_MIN: f64 = 1900.0;
+pub const FIG2_RPM_MAX: f64 = 2800.0;
 pub const FIG3_TAS_MIN: f64 = 90.0;
-pub const FIG3_TAS_MAX: f64 = 140.0;
+pub const FIG3_TAS_MAX: f64 = 150.0;
+
+/// Rough single-line label box for viewBox fit tests (9px chart-guide-label).
+pub const LABEL_FONT_PX: f64 = 9.0;
+pub const LABEL_CHAR_PX: f64 = 5.4;
+
+pub fn estimate_text_width(text: &str) -> f64 {
+    text.chars().count() as f64 * LABEL_CHAR_PX
+}
+
+pub fn label_box_fits_viewbox(x: f64, y: f64, text: &str, anchor: LabelAnchor) -> bool {
+    let w = estimate_text_width(text);
+    let h = LABEL_FONT_PX;
+    let (x0, x1) = match anchor {
+        LabelAnchor::Start => (x, x + w),
+        LabelAnchor::Middle => (x - w * 0.5, x + w * 0.5),
+        LabelAnchor::End => (x - w, x),
+    };
+    let vb_w = MT_W + MT_MARGIN_L + MT_MARGIN_R;
+    let vb_h = MT_H + MT_MARGIN_B + MT_MARGIN_T;
+    x0 >= 0.0 && x1 <= vb_w && y - h * 0.5 >= 0.0 && y + h * 0.5 <= vb_h
+}
+
+/// Drop off-chart samples so polylines are not flattened by axis clamping.
+pub fn filter_plot_points(
+    points: &[(f64, f64)],
+    da_min: f64,
+    da_max: f64,
+    y_min: f64,
+    y_max: f64,
+) -> Vec<(f64, f64)> {
+    points
+        .iter()
+        .copied()
+        .filter(|(da, y)| (da_min..=da_max).contains(da) && (y_min..=y_max).contains(y))
+        .collect()
+}
 
 pub fn map_mt_chart_xy(
     x: f64,
@@ -100,15 +141,27 @@ pub struct MtChartMarkerGuides {
     pub y_axis_x: f64,
     pub x_label: String,
     pub y_label: String,
+    pub x_label_x: f64,
+    pub x_label_y: f64,
+    pub y_label_x: f64,
+    pub y_label_y: f64,
     pub on_chart: bool,
 }
 
-fn chart_axis_y() -> f64 {
+pub fn plot_bottom_y() -> f64 {
     MT_MARGIN_B + MT_H
 }
 
-fn chart_axis_x() -> f64 {
+pub fn plot_left_x() -> f64 {
     MT_MARGIN_L
+}
+
+pub fn plot_right_x() -> f64 {
+    MT_MARGIN_L + MT_W
+}
+
+pub fn plot_top_y() -> f64 {
+    MT_MARGIN_T
 }
 
 pub fn fig2_marker_guides(da_ft: f64, rpm: Option<f64>, out_of_chart: bool) -> MtChartMarkerGuides {
@@ -153,13 +206,19 @@ pub fn fig2_marker_guides(da_ft: f64, rpm: Option<f64>, out_of_chart: bool) -> M
     } else {
         "Fuera de carta".into()
     };
+    let axis_y = plot_bottom_y();
+    let axis_x = plot_left_x();
     MtChartMarkerGuides {
         cx,
         cy,
-        x_axis_y: chart_axis_y(),
-        y_axis_x: chart_axis_x(),
-        x_label,
-        y_label,
+        x_axis_y: axis_y,
+        y_axis_x: axis_x,
+        x_label: x_label.clone(),
+        y_label: y_label.clone(),
+        x_label_x: cx,
+        x_label_y: axis_y - 10.0,
+        y_label_x: axis_x + 6.0,
+        y_label_y: cy,
         on_chart,
     }
 }
@@ -211,13 +270,20 @@ pub fn fig3_marker_guides(
     } else {
         "Fuera de carta".into()
     };
+    let axis_y = plot_bottom_y();
+    let axis_x = plot_left_x();
+    let y_label = format!("{value_lbl} · {pct_label}");
     MtChartMarkerGuides {
         cx,
         cy,
-        x_axis_y: chart_axis_y(),
-        y_axis_x: chart_axis_x(),
-        x_label,
-        y_label: format!("{value_lbl} · {pct_label}"),
+        x_axis_y: axis_y,
+        y_axis_x: axis_x,
+        x_label: x_label.clone(),
+        y_label: y_label.clone(),
+        x_label_x: cx,
+        x_label_y: axis_y - 10.0,
+        y_label_x: axis_x + 6.0,
+        y_label_y: cy,
         on_chart,
     }
 }
@@ -378,6 +444,26 @@ mod tests {
         assert!(g.y_label.contains("Fuera de carta"));
         let svg = marker_guides_svg_snippet(&g);
         assert!(!svg.contains("NaN"));
+    }
+
+    #[test]
+    fn marker_and_axis_labels_fit_viewbox() {
+        let g = fig2_marker_guides(7572.0, Some(2472.0), false);
+        assert!(label_box_fits_viewbox(
+            g.x_label_x,
+            g.x_label_y,
+            &g.x_label,
+            LabelAnchor::Middle
+        ));
+        assert!(label_box_fits_viewbox(
+            g.y_label_x,
+            g.y_label_y,
+            &g.y_label,
+            LabelAnchor::Start
+        ));
+        let vb_w = MT_W + MT_MARGIN_L + MT_MARGIN_R;
+        assert!(g.cx <= vb_w - MT_MARGIN_R);
+        assert!(g.cx >= MT_MARGIN_L);
     }
 
     #[test]
