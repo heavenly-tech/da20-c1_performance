@@ -93,14 +93,10 @@ fn strip_takeoff_pa_curve_guide(
     label: String,
 ) -> impl IntoView {
     let cursor = takeoff_pa_curve_point_at_oat(inner, pa_ft, oat_c);
-    let pts: String = takeoff_pa_curve_strip_points(inner, pa_ft)
-        .iter()
-        .map(|(x, y)| format!("{x:.1},{y:.1}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let (cx, _cy) = cursor;
     let iso = takeoff_pa_curve_strip_points(inner, pa_ft);
-    let (edge_x, edge_y) = iso.last().copied().unwrap_or((
+    let pts = format_finite_svg_polyline(&iso);
+    let (cx, _cy) = cursor;
+    let (edge_x, edge_y) = last_finite_strip_point(&iso).unwrap_or((
         TAKEOFF_OAT.x + TAKEOFF_OAT.w,
         takeoff_pa_isoline_y_at_panel_right(inner, pa_ft),
     ));
@@ -136,14 +132,10 @@ fn strip_climb_ea_cursor_with_pa_row(
     label: String,
 ) -> impl IntoView {
     let cursor = climb_fan_pa_curve_point_at_oat(inner, pa_ft, oat_c);
-    let pts: String = climb_fan_pa_curve_strip_points(inner, pa_ft)
-        .iter()
-        .map(|(x, y)| format!("{x:.1},{y:.1}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let (cx, _cy) = cursor;
     let iso = climb_fan_pa_curve_strip_points(inner, pa_ft);
-    let (edge_x, edge_y) = iso.last().copied().unwrap_or((
+    let pts = format_finite_svg_polyline(&iso);
+    let (cx, _cy) = cursor;
+    let (edge_x, edge_y) = last_finite_strip_point(&iso).unwrap_or((
         CLIMB_EQ.x + CLIMB_EQ.w,
         climb_pa_isoline_y_at_panel_right(inner, pa_ft),
     ));
@@ -174,19 +166,13 @@ fn strip_climb_pa_curve_guide_overlay(
     color: &'static str,
 ) -> impl IntoView {
     let cursor = climb_fan_pa_curve_point_at_oat(inner, pa_ft, oat_c);
-    let pts: String = climb_fan_pa_curve_strip_points(inner, pa_ft)
-        .iter()
-        .map(|(x, y)| format!("{x:.1},{y:.1}"))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let iso = climb_fan_pa_curve_strip_points(inner, pa_ft);
+    let pts = format_finite_svg_polyline(&iso);
     let (cx, _cy) = cursor;
-    let (edge_x, edge_y) = climb_fan_pa_curve_strip_points(inner, pa_ft)
-        .last()
-        .copied()
-        .unwrap_or((
-            CLIMB_EQ.x + CLIMB_EQ.w,
-            climb_pa_isoline_y_at_panel_right(inner, pa_ft),
-        ));
+    let (edge_x, edge_y) = last_finite_strip_point(&iso).unwrap_or((
+        CLIMB_EQ.x + CLIMB_EQ.w,
+        climb_pa_isoline_y_at_panel_right(inner, pa_ft),
+    ));
     view! {
         <polyline
             points=pts
@@ -227,18 +213,12 @@ fn strip_takeoff_pa_curve_guide_overlay(
     label: String,
     color: &'static str,
 ) -> impl IntoView {
-    let pts: String = takeoff_pa_curve_strip_points(inner, pa_ft)
-        .iter()
-        .map(|(x, y)| format!("{x:.1},{y:.1}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let (edge_x, edge_y) = takeoff_pa_curve_strip_points(inner, pa_ft)
-        .last()
-        .copied()
-        .unwrap_or((
-            TAKEOFF_OAT.x + TAKEOFF_OAT.w,
-            takeoff_pa_isoline_y_at_panel_right(inner, pa_ft),
-        ));
+    let iso = takeoff_pa_curve_strip_points(inner, pa_ft);
+    let pts = format_finite_svg_polyline(&iso);
+    let (edge_x, edge_y) = last_finite_strip_point(&iso).unwrap_or((
+        TAKEOFF_OAT.x + TAKEOFF_OAT.w,
+        takeoff_pa_isoline_y_at_panel_right(inner, pa_ft),
+    ));
     view! {
         <polyline
             points=pts
@@ -403,6 +383,22 @@ pub fn format_svg_polyline(points: &[(f64, f64)]) -> String {
         .map(|(x, y)| format!("{x:.1},{y:.1}"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn format_finite_svg_polyline(points: &[(f64, f64)]) -> String {
+    let finite: Vec<_> = points
+        .iter()
+        .copied()
+        .filter(|(x, y)| x.is_finite() && y.is_finite())
+        .collect();
+    format_svg_polyline(&finite)
+}
+
+fn last_finite_strip_point(pts: &[(f64, f64)]) -> Option<(f64, f64)> {
+    pts.iter()
+        .copied()
+        .rev()
+        .find(|(x, y)| x.is_finite() && y.is_finite())
 }
 
 fn readout_line(
@@ -1358,6 +1354,44 @@ mod strip_drag_tests {
         let right = pts.last().unwrap().0;
         assert!((left - TAKEOFF_OAT.x).abs() < 1.0);
         assert!((right - (TAKEOFF_OAT.x + TAKEOFF_OAT.w)).abs() < 1.0);
+    }
+
+    #[test]
+    fn takeoff_pa_isoline_svg_polyline_has_no_nan_at_high_pa() {
+        use da20_core::rev29::hand_plot::takeoff_pa_curve_strip_points;
+
+        let data = PerformanceData::production();
+        let inner = data.inner();
+        for pa in [5999.0, 6000.0, 7000.0, 8000.0, 10_000.0] {
+            let pts = takeoff_pa_curve_strip_points(inner, pa);
+            let polyline = format_finite_svg_polyline(&pts);
+            assert!(
+                !polyline.contains("NaN"),
+                "PA {pa} ft isoline polyline must not contain NaN: {polyline}"
+            );
+            assert!(!polyline.is_empty());
+        }
+    }
+
+    #[test]
+    fn takeoff_strip_readout_at_8000_pa_20c_not_out_of_chart() {
+        use da20_core::types::{ChartPhase, FlightInputs, PaOverride};
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            oat_c: 20.0,
+            pa_override: Some(PaOverride {
+                pa_ft: 8000.0,
+                phase: ChartPhase::Takeoff,
+            }),
+            ..Default::default()
+        };
+        let line = readout_line(Locale::Es, StripKind::Takeoff, data, inputs);
+        assert!(
+            !line.contains("Fuera de carta"),
+            "expected numeric readout: {line}"
+        );
+        assert!(!line.contains("NaN"));
     }
 
     #[test]
