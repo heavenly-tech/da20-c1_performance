@@ -266,9 +266,7 @@ mod tests {
     use super::*;
     use da20_core::altitude::isa_troposphere_density_altitude_ft;
     use da20_core::cruise::isa_temp_c_at_pa;
-    use da20_core::mt175r::charts::{
-        lookup_fig2_rpm_at_pct, MT_PCT_BHP_MAX, MT_PCT_BHP_MIN,
-    };
+    use da20_core::mt175r::charts::{lookup_fig2_rpm_at_pct, MT_PCT_BHP_MAX, MT_PCT_BHP_MIN};
     use da20_core::mt175r::cruise::compute_mt175r_cruise;
     use da20_core::types::PropellerKind;
 
