@@ -238,4 +238,25 @@ mod tests {
         assert_eq!(table4_only.distance_over_50ft_ft.round() as i64, 1360);
         assert!(table4_only.ground_roll_chart_ft.is_none());
     }
+
+    #[test]
+    fn wheel_fairings_do_not_change_landing() {
+        let data = PerformanceData::production();
+        let base = FlightInputs {
+            pressure_altitude_input_ft: 2130.0,
+            ..Default::default()
+        };
+        let with_fairings = FlightInputs {
+            wheel_fairings_installed: true,
+            ..base.clone()
+        };
+        let without_fairings = FlightInputs {
+            wheel_fairings_installed: false,
+            ..base
+        };
+        let a = compute_landing(&data, &with_fairings).unwrap();
+        let b = compute_landing(&data, &without_fairings).unwrap();
+        assert_eq!(a.ground_roll_ft, b.ground_roll_ft);
+        assert_eq!(a.distance_over_50ft_ft, b.distance_over_50ft_ft);
+    }
 }

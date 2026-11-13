@@ -12,7 +12,7 @@ use leptos::prelude::*;
 
 use crate::i18n::{afm_lookup_tag_label, copy, Locale};
 use crate::inputs::{input_value, NumField};
-use crate::prefs::{ObstacleUnit, TakeoffPrefs, WeightUnit};
+use crate::prefs::{persist_takeoff_tab_from_inputs, FlightPrefs, ObstacleUnit, TakeoffPrefs, WeightUnit};
 
 /// Commit a typed takeoff weight field value (kg or lb display) into `weight_lb`.
 /// Accepts a decimal point or comma. Does not rewrite the in-progress draft.
@@ -70,11 +70,12 @@ pub fn TakeoffNumericBlock(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     view! {
-        <TakeoffWeightField locale=locale inputs=inputs prefs=prefs/>
-        <TakeoffSignedHeadwindField locale=locale inputs=inputs/>
-        <TakeoffObstacleUnitField locale=locale inputs=inputs prefs=prefs/>
+        <TakeoffWeightField locale=locale inputs=inputs prefs=prefs flight_prefs=flight_prefs/>
+        <TakeoffSignedHeadwindField locale=locale inputs=inputs flight_prefs=flight_prefs/>
+        <TakeoffObstacleUnitField locale=locale inputs=inputs prefs=prefs flight_prefs=flight_prefs/>
         <TakeoffRoundingToggle locale=locale prefs=prefs/>
     }
 }
@@ -82,11 +83,15 @@ pub fn TakeoffNumericBlock(
 fn commit_takeoff_weight_raw(
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
+    flight_prefs: RwSignal<FlightPrefs>,
     raw: &str,
 ) {
     let unit = prefs.get_untracked().weight;
-    inputs.update(|i| {
-        apply_takeoff_weight_field_value(&mut i.weight_lb, unit, raw);
+    flight_prefs.update(|p| {
+        inputs.update(|i| {
+            apply_takeoff_weight_field_value(&mut i.weight_lb, unit, raw);
+            persist_takeoff_tab_from_inputs(p, i);
+        });
     });
 }
 
@@ -95,6 +100,7 @@ fn TakeoffWeightField(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     let editing = RwSignal::new(false);
     let draft = RwSignal::new(String::new());
@@ -116,7 +122,7 @@ fn TakeoffWeightField(
     });
 
     let commit_and_close = move |raw: String| {
-        commit_takeoff_weight_raw(inputs, prefs, &raw);
+        commit_takeoff_weight_raw(inputs, prefs, flight_prefs, &raw);
         editing.set(false);
     };
 
@@ -156,7 +162,7 @@ fn TakeoffWeightField(
                         on:click=move |_| {
                             if editing.get_untracked() {
                                 if let Some(el) = input_ref.get_untracked() {
-                                    commit_takeoff_weight_raw(inputs, prefs, &el.value());
+                                    commit_takeoff_weight_raw(inputs, prefs, flight_prefs, &el.value());
                                 }
                                 editing.set(false);
                             }
@@ -169,7 +175,7 @@ fn TakeoffWeightField(
                         on:click=move |_| {
                             if editing.get_untracked() {
                                 if let Some(el) = input_ref.get_untracked() {
-                                    commit_takeoff_weight_raw(inputs, prefs, &el.value());
+                                    commit_takeoff_weight_raw(inputs, prefs, flight_prefs, &el.value());
                                 }
                                 editing.set(false);
                             }
@@ -187,6 +193,7 @@ fn TakeoffWeightField(
 fn TakeoffSignedHeadwindField(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     view! {
         <div class="f">
@@ -205,9 +212,12 @@ fn TakeoffSignedHeadwindField(
                 }
                 on:input=move |ev| {
                     if let Ok(v) = input_value(&ev).parse::<f64>() {
-                        inputs.update(|i| {
-                            let v = v.clamp(-5.0, 20.0);
-                            da20_core::wind::apply_signed_along_runway_wind(i, v);
+                        flight_prefs.update(|p| {
+                            inputs.update(|i| {
+                                let v = v.clamp(-5.0, 20.0);
+                                da20_core::wind::apply_signed_along_runway_wind(i, v);
+                                persist_takeoff_tab_from_inputs(p, i);
+                            });
                         });
                     }
                 }
@@ -221,6 +231,7 @@ fn TakeoffObstacleUnitField(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -250,13 +261,16 @@ fn TakeoffObstacleUnitField(
                             }
                             on:input=move |ev| {
                                 if let Ok(v) = input_value(&ev).parse::<f64>() {
-                                    inputs.update(|i| {
-                                        let m = match prefs.get_untracked().obstacle {
-                                            ObstacleUnit::Meters => v,
-                                            ObstacleUnit::Feet => ft_to_m(v),
-                                        };
-                                        i.obstacle_height_m =
-                                            m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
+                                    flight_prefs.update(|p| {
+                                        inputs.update(|i| {
+                                            let m = match prefs.get_untracked().obstacle {
+                                                ObstacleUnit::Meters => v,
+                                                ObstacleUnit::Feet => ft_to_m(v),
+                                            };
+                                            i.obstacle_height_m =
+                                                m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
+                                            persist_takeoff_tab_from_inputs(p, i);
+                                        });
                                     });
                                 }
                             }
@@ -277,15 +291,25 @@ fn TakeoffObstacleUnitField(
                 </div>
                 <div class="toggle-row">
                     <button type="button" class="btn g"
-                        on:click=move |_| inputs.update(|i| {
-                            i.obstacle_height_m = defaults::OBSTACLE_PRESET_AFM_EXAMPLE_M;
-                        })>
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| {
+                                    i.obstacle_height_m = defaults::OBSTACLE_PRESET_AFM_EXAMPLE_M;
+                                    persist_takeoff_tab_from_inputs(p, i);
+                                });
+                            });
+                        }>
                         {c.obstacle_preset_afm}
                     </button>
                     <button type="button" class="btn g"
-                        on:click=move |_| inputs.update(|i| {
-                            i.obstacle_height_m = defaults::OBSTACLE_HEIGHT_DEFAULT_M;
-                        })>
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| {
+                                    i.obstacle_height_m = defaults::OBSTACLE_HEIGHT_DEFAULT_M;
+                                    persist_takeoff_tab_from_inputs(p, i);
+                                });
+                            });
+                        }>
                         {c.obstacle_preset_screen}
                     </button>
                 </div>

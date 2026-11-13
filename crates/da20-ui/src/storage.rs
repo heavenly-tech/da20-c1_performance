@@ -293,7 +293,7 @@ pub fn compute_all_isolated(
     let climb_res = da20_core::climb::compute_climb(
         data,
         &climb_in,
-        prefs.cruise_planning.cruise_pressure_alt_ft,
+        prefs.climb.climb_target_altitude_ft,
     );
     let cruise_res = da20_core::cruise::compute_cruise(data, &cruise_in);
     let landing_res = da20_core::landing::compute_landing(data, &landing_in);
@@ -620,5 +620,48 @@ mod tests {
         let s = format_readout_timestamp("2026-01-01T12:30:00.000Z", Locale::En);
         assert!(!s.ends_with('Z'));
         assert!(s.contains("2026"));
+    }
+
+    #[test]
+    fn tab_prefs_edit_reload_matches_compute_all_isolated() {
+        use crate::inputs::{
+            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
+            AirfieldInputsMode,
+        };
+        use crate::phase_state::{assemble_takeoff_inputs, hydrate_tab_inputs};
+        use crate::phases::Phase;
+        use crate::prefs::FlightPrefs;
+        use da20_core::takeoff::compute_takeoff;
+        use da20_core::types::ChartPhase;
+
+        let data = PerformanceData::production();
+        let mut prefs = FlightPrefs::default();
+        let mut inputs = FlightInputs::default();
+        hydrate_tab_inputs(Phase::Takeoff, &prefs, &data, &mut inputs);
+        shared_airfield_set_pressure_altitude(
+            AirfieldInputsMode::Takeoff,
+            Some(ChartPhase::Takeoff),
+            &mut prefs,
+            &mut inputs,
+            4200.0,
+        );
+        shared_airfield_set_oat_c(AirfieldInputsMode::Takeoff, &mut prefs, &mut inputs, 12.0);
+        crate::prefs::persist_takeoff_tab_from_inputs(&mut prefs, &inputs);
+
+        let roll_direct =
+            compute_takeoff(&data, &assemble_takeoff_inputs(&prefs)).unwrap().ground_roll_ft;
+        let bundle_live = compute_all_isolated(&data, &prefs);
+        assert!(
+            (bundle_live.takeoff.as_ref().unwrap().ground_roll_ft - roll_direct).abs()
+                < f64::EPSILON
+        );
+
+        let json = serde_json::to_string(&prefs).expect("serialize prefs");
+        let loaded: FlightPrefs = serde_json::from_str(&json).expect("deserialize prefs");
+        let bundle_reload = compute_all_isolated(&data, &loaded);
+        assert_eq!(
+            bundle_live.takeoff.as_ref().unwrap().ground_roll_ft,
+            bundle_reload.takeoff.as_ref().unwrap().ground_roll_ft
+        );
     }
 }

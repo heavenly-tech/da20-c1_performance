@@ -56,8 +56,7 @@ pub fn PhaseShell(
             Phase::Takeoff => view! {
                 <>
                     <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Takeoff takeoff_prefs=takeoff_prefs flight_prefs=flight_prefs>
-                        <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
-                        <TakeoffNumericBlock locale=locale inputs=inputs prefs=takeoff_prefs/>
+                        <TakeoffNumericBlock locale=locale inputs=inputs prefs=takeoff_prefs flight_prefs=flight_prefs/>
                     </PhaseGrid>
                     <TakeoffSweepPanel locale=locale data=data inputs=inputs prefs=takeoff_prefs/>
                 </>
@@ -78,7 +77,7 @@ pub fn PhaseShell(
                                 p.save();
                             });
                         }/>
-                    <ClimbFlapToggle locale=locale inputs=inputs data=data/>
+                    <ClimbFlapToggle locale=locale inputs=inputs data=data flight_prefs=flight_prefs/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     {move || {
                         let c = copy(locale.get());
@@ -92,14 +91,14 @@ pub fn PhaseShell(
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Cruise airfield=false flight_prefs=flight_prefs ground_inputs=true>
                     <SharedPropellerSelector locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
-                    <CruiseInputs locale=locale inputs=inputs flight_prefs=flight_prefs/>
+                    <CruiseInputs editor_phase=Phase::Cruise locale=locale inputs=inputs flight_prefs=flight_prefs/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Endurance => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Endurance airfield=false flight_prefs=flight_prefs ground_inputs=true>
                     <SharedPropellerSelector locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
-                    <CruiseInputs locale=locale inputs=inputs flight_prefs=flight_prefs/>
+                    <CruiseInputs editor_phase=Phase::Endurance locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <NumField label=move || copy(locale.get()).fuel_usable.to_string()
                         get=move || inputs.get().fuel_usable_us_gal
                         set=move |v| {
@@ -122,7 +121,6 @@ pub fn PhaseShell(
             }.into_any(),
             Phase::Landing => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Landing flight_prefs=flight_prefs>
-                    <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <SharedLandingGroundIdleToggle
                         locale=locale
                         inputs=inputs
@@ -173,6 +171,7 @@ fn PhaseGrid(
                                 .map(|fp| {
                                     view! {
                                         <CruiseGroundInputs
+                                            editor_phase=phase
                                             locale=locale
                                             inputs=inputs
                                             flight_prefs=fp
@@ -211,7 +210,7 @@ fn PhaseGrid(
                 </div>
                 <div class="card chart-card">
                     <h3>{phase_title(locale, phase, inputs)}</h3>
-                    {phase_chart(phase, locale, data, inputs, store, overlay_ids)}
+                    {phase_chart(phase, locale, data, inputs, flight_prefs, store, overlay_ids)}
                     {move || phase_results(locale.get(), phase, bundle.get(), inputs.get(), takeoff_prefs.map(|p| p.get()))}
                     <PhaseReadoutsPanel
                         locale=locale
@@ -297,35 +296,46 @@ fn phase_chart(
     locale: RwSignal<Locale>,
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
+    flight_prefs: Option<RwSignal<FlightPrefs>>,
     store: RwSignal<ReadingsStore>,
     overlay_ids: RwSignal<HashSet<String>>,
 ) -> impl IntoView {
     let phase_key = phase_storage_name(phase);
     match phase {
-        Phase::Takeoff => view! {
-            <StripHandPlot
-                locale=locale
-                kind=StripKind::Takeoff
-                data=data
-                inputs=inputs
-                store=store
-                phase_key=phase_key
-                overlay_ids=overlay_ids
-            />
+        Phase::Takeoff => {
+            let fp = flight_prefs.expect("takeoff chart needs flight_prefs");
+            view! {
+                <StripHandPlot
+                    locale=locale
+                    kind=StripKind::Takeoff
+                    data=data
+                    inputs=inputs
+                    flight_prefs=fp
+                    sync_phase=Phase::Takeoff
+                    store=store
+                    phase_key=phase_key
+                    overlay_ids=overlay_ids
+                />
+            }
+            .into_any()
         }
-        .into_any(),
-        Phase::Climb => view! {
-            <StripHandPlot
-                locale=locale
-                kind=StripKind::Climb
-                data=data
-                inputs=inputs
-                store=store
-                phase_key=phase_key
-                overlay_ids=overlay_ids
-            />
+        Phase::Climb => {
+            let fp = flight_prefs.expect("climb chart needs flight_prefs");
+            view! {
+                <StripHandPlot
+                    locale=locale
+                    kind=StripKind::Climb
+                    data=data
+                    inputs=inputs
+                    flight_prefs=fp
+                    sync_phase=Phase::Climb
+                    store=store
+                    phase_key=phase_key
+                    overlay_ids=overlay_ids
+                />
+            }
+            .into_any()
         }
-        .into_any(),
         Phase::Cruise => view! {
             {move || match inputs.get().propeller {
                 PropellerKind::Mt175R => view! {
@@ -728,3 +738,38 @@ fn MethodsManual(locale: RwSignal<Locale>, data: RwSignal<PerformanceData>) -> i
 }
 
 use da20_core::types::FlightInputs;
+
+/// Phases that render `SharedWheelFairingToggle` (AFM fairing effect: climb ROC + cruise TAS only).
+pub(crate) fn phase_shows_wheel_fairing_toggle(phase: Phase) -> bool {
+    matches!(phase, Phase::Climb | Phase::Cruise | Phase::Endurance)
+}
+
+/// Phases that render `SharedPropellerSelector` (MT supplement applies to cruise/endurance only).
+pub(crate) fn phase_shows_propeller_selector(phase: Phase) -> bool {
+    matches!(phase, Phase::Cruise | Phase::Endurance)
+}
+
+#[cfg(test)]
+mod phase_chrome_tests {
+    use super::*;
+
+    #[test]
+    fn propeller_selector_only_on_cruise_and_endurance() {
+        assert!(!phase_shows_propeller_selector(Phase::Takeoff));
+        assert!(!phase_shows_propeller_selector(Phase::Climb));
+        assert!(phase_shows_propeller_selector(Phase::Cruise));
+        assert!(phase_shows_propeller_selector(Phase::Endurance));
+        assert!(!phase_shows_propeller_selector(Phase::Landing));
+        assert!(!phase_shows_propeller_selector(Phase::Manual));
+    }
+
+    #[test]
+    fn wheel_fairing_toggle_not_on_takeoff_or_landing() {
+        assert!(!phase_shows_wheel_fairing_toggle(Phase::Takeoff));
+        assert!(phase_shows_wheel_fairing_toggle(Phase::Climb));
+        assert!(phase_shows_wheel_fairing_toggle(Phase::Cruise));
+        assert!(phase_shows_wheel_fairing_toggle(Phase::Endurance));
+        assert!(!phase_shows_wheel_fairing_toggle(Phase::Landing));
+        assert!(!phase_shows_wheel_fairing_toggle(Phase::Manual));
+    }
+}

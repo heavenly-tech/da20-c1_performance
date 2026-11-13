@@ -720,14 +720,14 @@ const ES_METHODS: [MethodCopy; 10] = [
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
         summary: "ΔISA = OAT − ISA en PA. rmin(PA) lineal; RPM válido [rmin(PA), 2800]. Parámetro s normalizado, RPM_row por fila, mezcla en PA. %BHP: inversión en [rmin(PA), 2800]. Carenados: ~−5% TAS; GPH sin escalar. Filas usadas: «Peso PA» y «Peso RPM» como arriba; «Peso ΔISA» es el peso de cada columna ΔISA dentro de la fila RPM.",
-        interpolation: "Tabla o Interpolado. Valor = Σ (Peso PA × Peso RPM × Peso ΔISA × celda) sobre las esquinas usadas. Fuera de carta → sin número («Fuera de carta»).",
+        interpolation: "Tabla o Interpolado. Valor = Σ (Peso PA × Peso RPM × Peso ΔISA × celda) sobre las esquinas usadas. Fuera de carta → sin número («Fuera de carta»).\n\n«Peso» es el peso de la interpolación (no el peso del avión). Peso RPM: qué fracción de tu RPM queda entre dos columnas impresas — p. ej. columnas 2400 y 2500 y vuelas 2450 → 0,5 y 0,5; a 2475 → 2500 lleva 0,75 y 2400 0,25; siempre suman 1. Peso PA (y Peso ΔISA en Tabla 3) funciona igual entre las dos filas impresas alrededor de tu valor.\n\nEjemplo: a mitad de camino en RPM y un cuarto del camino en PA: 0,5×0,75×(PA baja, RPM bajo) + 0,5×0,75×(PA baja, RPM alto) + 0,5×0,25×(PA alta, RPM bajo) + 0,5×0,25×(PA alta, RPM alto).\n\nEs interpolación lineal ordinaria en ambas direcciones; la app muestra los pesos para poder repetirlo a mano con las filas impresas resaltadas.",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
         title: "Crucero MT 175 R (AFMS E-1487 Fig 1–4)",
         afm: "AFMS E-1487 Fig 4 (suplemento MT 175 R)",
         summary: "Altitud de densidad ISA troposférica exacta: σ = (T_std/T₀)^5.25588 × (T₀/T_real) con T_std = 288,15 K − 0,0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0,0019812 (misma función que da20-core en cruise MT). Consulta Fig 4 en esa DA y RPM.",
-        interpolation: "Tabla o Interpolado. Valor = Σ (Peso DA × Peso RPM × celda) sobre las esquinas usadas (cada par de pesos en DA o RPM suma 1).",
+        interpolation: "Tabla o Interpolado. Valor = Σ (Peso DA × Peso RPM × celda) sobre las esquinas usadas (cada par de pesos en DA o RPM suma 1).\n\n«Peso» es el peso de la interpolación. Peso RPM: entre columnas impresas — p. ej. 2400 y 2500 a 2450 → 0,5 y 0,5; a 2475 → 0,75 y 0,25; siempre suman 1. Peso DA igual entre filas impresas alrededor de tu altitud de densidad.\n\nEjemplo: mitad en RPM y un cuarto en DA: 0,5×0,75×(DA baja, RPM bajo) + 0,5×0,75×(DA baja, RPM alto) + 0,5×0,25×(DA alta, RPM bajo) + 0,5×0,25×(DA alta, RPM alto).\n\nInterpolación lineal en ambas direcciones; la app muestra los pesos para repetirlo a mano desde las filas resaltadas.",
         limitations: "Fuera del casco Fig 4 → «Fuera de carta». Despegue/trepada/aterrizaje sin cambio por hélice MT (AFMS E-1487).",
     },
     MethodCopy {
@@ -747,7 +747,7 @@ const ES_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "OAT de crucero desde tierra",
         afm: "Planificación UI (no carta AFM)",
-        summary: "En la ficha Crucero (y Autonomía), «Tierra / Aeródromo» guarda solo elevación y OAT en tierra para esa ficha. Por defecto OAT_alt = OAT_tierra − 1,98 °C/1000 ft × (PA_crucero − elevación). Despegue, subida y aterrizaje tienen PA y OAT propios, independientes. ΔISA mostrado: OAT_crucero − (15 − 1,98 × PA/1000).",
+        summary: "En Crucero y Autonomía, «Tierra / Aeródromo» es independiente en cada ficha: elevación y OAT en tierra solo alimentan la estimación de OAT de crucero en esa misma ficha (OAT_alt = OAT_tierra − 1,98 °C/1000 ft × (PA_crucero − elevación)). Despegue, subida y aterrizaje guardan su propia PA y OAT. ΔISA mostrado: OAT_crucero − (15 − 1,98 × PA/1000).",
         interpolation: "Aproximación de gradiente estándar; el usuario puede fijar OAT de crucero manualmente y volver a la estimación.",
         limitations: "En la vida real el gradiente varía e inversiones térmicas son frecuentes (p. ej. Santiago); la estimación no sustituye METAR/sondas. El cálculo de performance sigue las reglas interpolate-only y «Fuera de carta» del núcleo.",
     },
@@ -794,14 +794,14 @@ const EN_METHODS: [MethodCopy; 10] = [
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
         summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled. Row weights: «PA weight» and «RPM weight» as above; «ΔISA weight» is the blend weight for each ΔISA column within the RPM row.",
-        interpolation: "Table or Interpolated only. Result = Σ (PA weight × RPM weight × ΔISA weight × cell) over used corners. Off chart → no numeric result.",
+        interpolation: "Table or Interpolated only. Result = Σ (PA weight × RPM weight × ΔISA weight × cell) over used corners. Off chart → no numeric result.\n\n\"Weight\" means the interpolation weight (not aircraft weight). RPM weight: how far your RPM sits between two printed RPM columns — e.g. columns 2400 and 2500 and you fly 2450, each gets 0.5; at 2475, 2500 gets 0.75 and 2400 gets 0.25; the two always sum to 1. PA weight (and ΔISA weight on Table 3) works the same for the two printed rows around your value.\n\nExample halfway in RPM and a quarter of the way in PA: 0.5×0.75×(low PA, low RPM) + 0.5×0.75×(low PA, high RPM) + 0.5×0.25×(high PA, low RPM) + 0.5×0.25×(high PA, high RPM).\n\nThis is ordinary linear interpolation in both directions; the app shows the weights so you can redo it by hand from the highlighted printed rows.",
         limitations: "GPH as printed (known oddities).",
     },
     MethodCopy {
         title: "Cruise MT 175 R (AFMS E-1487 Fig 1–4)",
         afm: "AFMS E-1487 Fig 4 (MT 175 R supplement)",
         summary: "Exact ISA troposphere density altitude: σ = (T_std/T₀)^5.25588 × (T₀/T_actual) with T_std = 288.15 K − 0.0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0.0019812 (same as da20-core MT cruise). Fig 4 lookup at that DA and RPM.",
-        interpolation: "Table or Interpolated only. Result = Σ (DA weight × RPM weight × cell) over used corners (each bracketing weight pair sums to 1).",
+        interpolation: "Table or Interpolated only. Result = Σ (DA weight × RPM weight × cell) over used corners (each bracketing weight pair sums to 1).\n\n\"Weight\" means the interpolation weight. RPM weight: between printed columns — e.g. 2400 and 2500 at 2450, each gets 0.5; at 2475, 0.75 and 0.25; always sum to 1. DA weight works the same between printed rows around your density altitude.\n\nExample halfway in RPM and a quarter of the way in DA: 0.5×0.75×(low DA, low RPM) + 0.5×0.75×(low DA, high RPM) + 0.5×0.25×(high DA, low RPM) + 0.5×0.25×(high DA, high RPM).\n\nOrdinary linear interpolation in both directions; the app shows the weights so you can redo it by hand from the highlighted rows.",
         limitations: "Outside Fig 4 hull → Out of chart. Takeoff/climb/landing unchanged by MT propeller (AFMS E-1487).",
     },
     MethodCopy {
@@ -822,7 +822,7 @@ const EN_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "Cruise OAT from ground",
         afm: "UI planning layer (not an AFM chart)",
-        summary: "On the Cruise (and Endurance) tab, Ground / Aerodrome stores elevation and ground OAT for that tab only. Default OAT_alt = OAT_ground − 1.98 °C per 1000 ft × (cruise_PA − elevation). Takeoff, climb, and landing keep their own PA and OAT. Displayed ΔISA: cruise_OAT − (15 − 1.98 × PA/1000).",
+        summary: "On Cruise and Endurance, Ground / Aerodrome is independent per tab: ground elevation and OAT only feed the cruise OAT lapse estimate on the same tab (OAT_alt = OAT_ground − 1.98 °C per 1000 ft × (cruise_PA − elevation)). Takeoff, climb, and landing keep separate PA and OAT. Displayed ΔISA: cruise_OAT − (15 − 1.98 × PA/1000).",
         interpolation: "Standard lapse estimate; the user can override cruise OAT manually and revert to the estimate.",
         limitations: "Real lapse rates vary and inversions are common (e.g. Santiago); the estimate is not a substitute for METAR/soundings. Downstream performance still uses interpolate-only rules and Out of chart from the core.",
     },

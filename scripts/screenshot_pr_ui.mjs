@@ -17,6 +17,7 @@ const themeStorage = {
 const tabs = [
   { key: "takeoff", slug: "takeoff", wait: ".strip-svg", btn: "Despegue" },
   { key: "cruise", slug: "cruise", wait: ".cruise-table-full, .plot-svg", btn: "Crucero" },
+  { key: "endurance", slug: "endurance", wait: ".cruise-table-full, .plot-svg", btn: "Autonomía" },
   { key: "landing", slug: "landing", wait: ".plot-svg", btn: "Aterrizaje" },
   { key: "method", slug: "method", wait: ".method-list", btn: "Método" },
 ];
@@ -61,18 +62,20 @@ async function scrollMethodToNewCopy(page) {
   await list.waitFor({ state: "visible", timeout: 30_000 });
   const entry = page
     .locator(".method-list li")
-    .filter({ hasText: /MT 175|Tabla 3|Table 3/i })
+    .filter({ hasText: /Crucero \(Tabla 3\)|Cruise \(Table 3\)/i })
     .first();
   await entry.waitFor({ state: "attached", timeout: 30_000 });
-  await entry.evaluate((el) => {
-    el.scrollIntoView({ block: "center", behavior: "instant" });
+  const interp = entry.locator("em").first();
+  await interp.waitFor({ state: "attached", timeout: 30_000 });
+  await interp.evaluate((el) => {
     const root = el.closest(".method-list");
     if (root) {
-      const top = el.offsetTop - root.clientHeight / 3;
+      const top = el.offsetTop - root.clientHeight / 4;
       root.scrollTop = Math.max(0, top);
     }
+    el.scrollIntoView({ block: "start", behavior: "instant" });
   });
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(800);
 }
 
 await mkdir(outDir, { recursive: true });

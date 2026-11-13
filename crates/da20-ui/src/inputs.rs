@@ -15,9 +15,11 @@ use leptos::prelude::*;
 
 use crate::ground_oat::display_disa_c;
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
-use crate::phase_state::{apply_cruise_ground_elevation, apply_cruise_ground_oat};
+use crate::phase_state::{apply_cruise_ground_elevation, apply_cruise_ground_oat, cruise_tab_mut};
+use crate::phases::Phase;
 use crate::prefs::{
-    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, persist_manual_cruise_oat,
+    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, persist_climb_tab_from_inputs,
+    persist_landing_tab_from_inputs, persist_manual_cruise_oat, persist_takeoff_tab_from_inputs,
     snapshot_and_save_flight_prefs, FlightPrefs,
 };
 
@@ -36,6 +38,51 @@ pub fn shared_airfield_writes_tab_prefs(mode: AirfieldInputsMode) -> bool {
         mode,
         AirfieldInputsMode::Takeoff | AirfieldInputsMode::Climb | AirfieldInputsMode::Landing
     )
+}
+
+/// Strip chart + SharedAirfieldInputs use the same mode/phase pairing.
+pub fn strip_airfield_target(phase: Phase) -> (AirfieldInputsMode, Option<ChartPhase>) {
+    match phase {
+        Phase::Takeoff => (AirfieldInputsMode::Takeoff, Some(ChartPhase::Takeoff)),
+        Phase::Climb => (AirfieldInputsMode::Climb, Some(ChartPhase::Climb)),
+        Phase::Landing => (AirfieldInputsMode::Landing, Some(ChartPhase::Landing)),
+        _ => (AirfieldInputsMode::Full, None),
+    }
+}
+
+/// Same path as the takeoff weight NumField after chart drag.
+pub fn takeoff_set_weight_lb(prefs: &mut FlightPrefs, inputs: &mut FlightInputs, lb: f64) {
+    let (kg_min, kg_max) = limits::FIG54_WEIGHT_KG;
+    let lb_min = kg_min / 0.45359237;
+    let lb_max = kg_max / 0.45359237;
+    inputs.weight_lb = lb.clamp(lb_min, lb_max);
+    prefs.takeoff.weight_lb = inputs.weight_lb;
+}
+
+/// Same path as the takeoff obstacle NumField after chart drag.
+pub fn takeoff_set_obstacle_height_m(
+    prefs: &mut FlightPrefs,
+    inputs: &mut FlightInputs,
+    height_m: f64,
+) {
+    inputs.obstacle_height_m = height_m.clamp(0.0, da20_core::types::defaults::OBSTACLE_HEIGHT_MAX_M);
+    prefs.takeoff.obstacle_height_m = inputs.obstacle_height_m;
+}
+
+/// Wind strip drag — mirrors post-drag wind correction on takeoff inputs.
+pub fn takeoff_apply_wind_from_strip(
+    prefs: &mut FlightPrefs,
+    inputs: &mut FlightInputs,
+    wind_dir_deg: f64,
+    wind_speed_kt: f64,
+    crosswind_clamped: bool,
+) {
+    inputs.wind_dir_deg = wind_dir_deg;
+    inputs.wind_speed_kt = wind_speed_kt;
+    inputs.wind_strip_crosswind_clamped = crosswind_clamped;
+    clamp_along_runway_wind(inputs);
+    prefs.takeoff.wind_dir_deg = inputs.wind_dir_deg;
+    prefs.takeoff.wind_speed_kt = inputs.wind_speed_kt;
 }
 
 pub fn shared_airfield_pressure_altitude_display(
@@ -170,6 +217,7 @@ pub fn NumField(
 
 #[component]
 pub fn CruiseGroundInputs(
+    editor_phase: Phase,
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     flight_prefs: RwSignal<FlightPrefs>,
@@ -177,25 +225,36 @@ pub fn CruiseGroundInputs(
     view! {
         {move || {
             let c = copy(locale.get());
+            let phase = editor_phase;
+            let ground_elev = move || match phase {
+                Phase::Cruise => flight_prefs.get().cruise.ground_elevation_ft,
+                Phase::Endurance => flight_prefs.get().endurance.cruise.ground_elevation_ft,
+                _ => flight_prefs.get().cruise.ground_elevation_ft,
+            };
+            let ground_oat = move || match phase {
+                Phase::Cruise => flight_prefs.get().cruise.ground_oat_c,
+                Phase::Endurance => flight_prefs.get().endurance.cruise.ground_oat_c,
+                _ => flight_prefs.get().cruise.ground_oat_c,
+            };
             view! {
                 <p class="lab"><strong>{c.ground_section_title}</strong></p>
                 <NumField label=move || c.ground_elevation_ft.to_string()
                     min=limits::FIG52_PA_FT.0
                     max=limits::FIG52_PA_FT.1
-                    get=move || flight_prefs.get().cruise_planning.ground_elevation_ft
+                    get=ground_elev
                     set=move |v| {
                         flight_prefs.update(|p| {
-                            inputs.update(|i| apply_cruise_ground_elevation(p, i, v));
+                            inputs.update(|i| apply_cruise_ground_elevation(phase, p, i, v));
                         });
                     }/>
                 <NumField label=move || c.ground_oat_c.to_string()
                     display_fraction_digits=Some(1)
                     min=limits::FIG52_OAT_C.0
                     max=limits::FIG52_OAT_C.1
-                    get=move || flight_prefs.get().cruise_planning.ground_oat_c
+                    get=ground_oat
                     set=move |v| {
                         flight_prefs.update(|p| {
-                            inputs.update(|i| apply_cruise_ground_oat(p, i, v));
+                            inputs.update(|i| apply_cruise_ground_oat(phase, p, i, v));
                         });
                     }/>
             }
@@ -297,7 +356,15 @@ pub fn SharedAirfieldInputs(
                             <label>{c.runway}</label>
                             <input class="mono" maxlength="3"
                                 prop:value=move || inputs.get().runway.clone()
-                                on:input=move |ev| inputs.update(|i| i.runway = input_value(&ev))/>
+                                on:input=move |ev| {
+                                    let raw = input_value(&ev);
+                                    flight_prefs.update(|p| {
+                                        inputs.update(|i| {
+                                            i.runway = raw;
+                                            persist_takeoff_tab_from_inputs(p, i);
+                                        });
+                                    });
+                                }/>
                             {move || {
                                 let c = copy(locale.get());
                                 match runway_heading_status(&inputs.get().runway) {
@@ -311,7 +378,7 @@ pub fn SharedAirfieldInputs(
                                 }
                             }}
                         </div>
-                        <WindField locale=locale inputs=inputs/>
+                        <WindField locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     }
                 })}
                 {(!override_active).then(|| view! {
@@ -327,7 +394,22 @@ pub fn SharedAirfieldInputs(
                         <span class="chip pa-override">
                             {c.pa_override_chip}" "{pa_ov}" ft"
                             <button type="button" class="btn g chip-reset"
-                                on:click=move |_| inputs.update(clear_pa_override)>
+                                on:click=move |_| {
+                                    flight_prefs.update(|p| {
+                                        inputs.update(|i| {
+                                            clear_pa_override(i);
+                                            match mode {
+                                                AirfieldInputsMode::Climb => {
+                                                    persist_climb_tab_from_inputs(p, i);
+                                                }
+                                                AirfieldInputsMode::Landing => {
+                                                    persist_landing_tab_from_inputs(p, i);
+                                                }
+                                                _ => {}
+                                            }
+                                        });
+                                    });
+                                }>
                                 {c.pa_override_reset}
                             </button>
                         </span>
@@ -394,7 +476,7 @@ pub fn SharedLandingGroundIdleToggle(
                                 flight_prefs.update(|p| {
                                     inputs.update(|i| {
                                         i.landing_ground_idle_1000_rpm = false;
-                                        snapshot_and_save_flight_prefs(i, p);
+                                        persist_landing_tab_from_inputs(p, i);
                                     });
                                 });
                             }>
@@ -406,7 +488,7 @@ pub fn SharedLandingGroundIdleToggle(
                                 flight_prefs.update(|p| {
                                     inputs.update(|i| {
                                         i.landing_ground_idle_1000_rpm = true;
-                                        snapshot_and_save_flight_prefs(i, p);
+                                        persist_landing_tab_from_inputs(p, i);
                                     });
                                 });
                             }>
@@ -458,18 +540,21 @@ pub fn SharedWheelFairingToggle(
 
 #[component]
 pub fn CruiseInputs(
+    editor_phase: Phase,
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
+    let phase = editor_phase;
     let set_cruise_oat_from_isa = move |deviation: f64| {
         flight_prefs.update(|p| {
-            p.cruise_oat_manual = true;
+            let tab = cruise_tab_mut(p, phase);
+            tab.cruise_oat_manual = true;
             inputs.update(|i| {
                 let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
                 i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, isa + deviation);
             });
-            persist_manual_cruise_oat(p, &inputs.get_untracked());
+            persist_manual_cruise_oat(tab, &inputs.get_untracked());
             p.save();
         });
     };
@@ -477,7 +562,11 @@ pub fn CruiseInputs(
         {move || {
             let c = copy(locale.get());
             let mt = inputs.get().propeller == PropellerKind::Mt175R;
-            let manual_oat = flight_prefs.get().cruise_oat_manual;
+            let manual_oat = match phase {
+                Phase::Cruise => flight_prefs.get().cruise.cruise_oat_manual,
+                Phase::Endurance => flight_prefs.get().endurance.cruise.cruise_oat_manual,
+                _ => false,
+            };
             let disa = display_disa_c(
                 inputs.get().cruise_oat_c,
                 inputs.get().cruise_pressure_alt_ft,
@@ -489,11 +578,12 @@ pub fn CruiseInputs(
                     get=move || inputs.get().cruise_pressure_alt_ft
                     set=move |v| {
                         flight_prefs.update(|p| {
+                            let tab = cruise_tab_mut(p, phase);
                             inputs.update(|i| {
                                 i.cruise_pressure_alt_ft = v;
-                                p.cruise_planning.cruise_pressure_alt_ft = v;
-                                if !p.cruise_oat_manual {
-                                    apply_estimated_cruise_oat(i, p);
+                                tab.cruise_pressure_alt_ft = v;
+                                if !tab.cruise_oat_manual {
+                                    apply_estimated_cruise_oat(tab, i);
                                 } else if i.propeller == PropellerKind::Sensenich {
                                     let isa = isa_temp_c_at_pa(v);
                                     let (dmin, dmax) = limits::TABLE3_DISA_C;
@@ -517,11 +607,12 @@ pub fn CruiseInputs(
                     get=move || inputs.get().cruise_oat_c
                     set=move |v| {
                         flight_prefs.update(|p| {
-                            p.cruise_oat_manual = true;
+                            let tab = cruise_tab_mut(p, phase);
+                            tab.cruise_oat_manual = true;
                             inputs.update(|i| {
                                 i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, v);
                             });
-                            persist_manual_cruise_oat(p, &inputs.get_untracked());
+                            persist_manual_cruise_oat(tab, &inputs.get_untracked());
                             p.save();
                         });
                     }/>
@@ -532,9 +623,10 @@ pub fn CruiseInputs(
                     <button type="button" class="btn g"
                         on:click=move |_| {
                             flight_prefs.update(|p| {
-                                p.cruise_oat_manual = false;
-                                p.cruise_oat_c_saved = None;
-                                inputs.update(|i| apply_estimated_cruise_oat(i, p));
+                                let tab = cruise_tab_mut(p, phase);
+                                tab.cruise_oat_manual = false;
+                                tab.cruise_oat_c_saved = None;
+                                inputs.update(|i| apply_estimated_cruise_oat(tab, i));
                                 p.save();
                             });
                         }>
@@ -562,7 +654,8 @@ pub fn CruiseInputs(
                         on:click=move |_| {
                             flight_prefs.update(|p| {
                                 inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetRpm);
-                                p.mark_cruise_solve_saved(CruiseSolveMode::SetRpm);
+                                cruise_tab_mut(p, phase)
+                                    .mark_cruise_solve_saved(CruiseSolveMode::SetRpm);
                                 p.save();
                             });
                         }>
@@ -575,7 +668,8 @@ pub fn CruiseInputs(
                                 inputs.update(|i| {
                                     i.cruise_solve_mode = CruiseSolveMode::SetPercentBhp
                                 });
-                                p.mark_cruise_solve_saved(CruiseSolveMode::SetPercentBhp);
+                                cruise_tab_mut(p, phase)
+                                    .mark_cruise_solve_saved(CruiseSolveMode::SetPercentBhp);
                                 p.save();
                             });
                         }>
@@ -591,7 +685,7 @@ pub fn CruiseInputs(
                                     flight_prefs.update(|p| {
                                         inputs.update(|i| {
                                             i.cruise_rpm = v;
-                                            p.cruise_planning.cruise_rpm = v;
+                                            cruise_tab_mut(p, phase).cruise_rpm = v;
                                         });
                                         p.save();
                                     });
@@ -604,7 +698,7 @@ pub fn CruiseInputs(
                                 set=move |v| {
                                     flight_prefs.update(|p| {
                                         inputs.update(|i| i.cruise_percent_bhp = v);
-                                        p.mark_cruise_percent_saved(v);
+                                        cruise_tab_mut(p, phase).mark_cruise_percent_saved(v);
                                         p.save();
                                     });
                                 }/>
@@ -640,7 +734,11 @@ pub fn CruiseInputs(
 }
 
 #[component]
-pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> impl IntoView {
+pub fn WindField(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    #[prop(optional)] flight_prefs: Option<RwSignal<FlightPrefs>>,
+) -> impl IntoView {
     view! {
         <div class="f">
             <label>{move || copy(locale.get()).wind}</label>
@@ -652,23 +750,47 @@ pub fn WindField(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> im
                 on:change=move |ev| {
                     let raw = input_value(&ev);
                     if let Some((d, s)) = parse_wind(&raw) {
-                        inputs.update(|i| {
-                            i.wind_dir_deg = d;
-                            i.wind_speed_kt = s;
-                            i.wind_strip_crosswind_clamped = false;
-                            clamp_along_runway_wind(i);
-                        });
+                        if let Some(fp) = flight_prefs {
+                            fp.update(|p| {
+                                inputs.update(|i| {
+                                    i.wind_dir_deg = d;
+                                    i.wind_speed_kt = s;
+                                    i.wind_strip_crosswind_clamped = false;
+                                    clamp_along_runway_wind(i);
+                                    persist_takeoff_tab_from_inputs(p, i);
+                                });
+                            });
+                        } else {
+                            inputs.update(|i| {
+                                i.wind_dir_deg = d;
+                                i.wind_speed_kt = s;
+                                i.wind_strip_crosswind_clamped = false;
+                                clamp_along_runway_wind(i);
+                            });
+                        }
                     }
                 }
                 on:blur=move |ev| {
                     let raw = input_value(&ev);
                     if let Some((d, s)) = parse_wind(&raw) {
-                        inputs.update(|i| {
-                            i.wind_dir_deg = d;
-                            i.wind_speed_kt = s;
-                            i.wind_strip_crosswind_clamped = false;
-                            clamp_along_runway_wind(i);
-                        });
+                        if let Some(fp) = flight_prefs {
+                            fp.update(|p| {
+                                inputs.update(|i| {
+                                    i.wind_dir_deg = d;
+                                    i.wind_speed_kt = s;
+                                    i.wind_strip_crosswind_clamped = false;
+                                    clamp_along_runway_wind(i);
+                                    persist_takeoff_tab_from_inputs(p, i);
+                                });
+                            });
+                        } else {
+                            inputs.update(|i| {
+                                i.wind_dir_deg = d;
+                                i.wind_speed_kt = s;
+                                i.wind_strip_crosswind_clamped = false;
+                                clamp_along_runway_wind(i);
+                            });
+                        }
                     }
                 }
             />
@@ -705,6 +827,7 @@ pub fn ClimbFlapToggle(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     data: RwSignal<PerformanceData>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     view! {
         <div class="toggle-row">
@@ -720,13 +843,27 @@ pub fn ClimbFlapToggle(
                     <button type="button"
                         class="btn g"
                         class:on=move || inputs.get().climb_figure == ClimbFigure::Fig56TakeoffFlaps
-                        on:click=move |_| inputs.update(|i| i.climb_figure = ClimbFigure::Fig56TakeoffFlaps)>
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| {
+                                    i.climb_figure = ClimbFigure::Fig56TakeoffFlaps;
+                                    persist_climb_tab_from_inputs(p, i);
+                                });
+                            });
+                        }>
                         {c.climb_flaps_to}
                     </button>
                     <button type="button"
                         class="btn g"
                         class:on=move || inputs.get().climb_figure == ClimbFigure::Fig55CruiseFlaps
-                        on:click=move |_| inputs.update(|i| i.climb_figure = ClimbFigure::Fig55CruiseFlaps)>
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| {
+                                    i.climb_figure = ClimbFigure::Fig55CruiseFlaps;
+                                    persist_climb_tab_from_inputs(p, i);
+                                });
+                            });
+                        }>
                         {c.climb_flaps_up}
                     </button>
                     <button type="button"
@@ -742,7 +879,12 @@ pub fn ClimbFlapToggle(
                         }
                         on:click=move |_| {
                             if has_balked {
-                                inputs.update(|i| i.climb_figure = ClimbFigure::Fig58BalkedLanding);
+                                flight_prefs.update(|p| {
+                                    inputs.update(|i| {
+                                        i.climb_figure = ClimbFigure::Fig58BalkedLanding;
+                                        persist_climb_tab_from_inputs(p, i);
+                                    });
+                                });
                             }
                         }>
                         {c.climb_flaps_ldg}
@@ -779,8 +921,8 @@ mod airfield_setter_tests {
         let mut prefs = FlightPrefs::default();
         prefs.takeoff.pressure_altitude_ft = 2130.0;
         prefs.takeoff.oat_c = 20.0;
-        prefs.cruise_planning.ground_elevation_ft = 2130.0;
-        prefs.cruise_planning.ground_oat_c = 20.0;
+        prefs.cruise.ground_elevation_ft = 2130.0;
+        prefs.cruise.ground_oat_c = 20.0;
         let data = PerformanceData::production();
         let mut inputs = FlightInputs::default();
         hydrate_tab_inputs(Phase::Climb, &prefs, &data, &mut inputs);
