@@ -376,7 +376,7 @@ const ES: Copy = Copy {
     derived_time: "Tiempo estimado (sin carta AFM): ",
     plot_hint: "Arrastre el cursor sobre las curvas digitalizadas (no son copias del AFM). Compatible con puntero y táctil.",
     plot_readout_chart: "Lectura carta",
-    plot_readout_core: "Resultado núcleo",
+    plot_readout_core: "Núcleo",
     pa_override_chip: "PA carta",
     pa_override_reset: "Restablecer PA",
     axis_hw_kt: "HW kt",
@@ -568,7 +568,7 @@ const EN: Copy = Copy {
     derived_time: "Derived time (no AFM chart): ",
     plot_hint: "Drag the cursor on digitized curves (not AFM scans). Pointer and touch supported.",
     plot_readout_chart: "Chart read",
-    plot_readout_core: "Core result",
+    plot_readout_core: "Core",
     pa_override_chip: "Chart PA",
     pa_override_reset: "Reset PA",
     axis_hw_kt: "HW kt",
@@ -788,10 +788,8 @@ pub fn format_obstacle_over(locale: Locale, height_m: f64) -> String {
 pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> String {
     let ft_i = ft.round() as i64;
     let m_i = m.round() as i64;
-    match locale {
-        Locale::Es => format!("Resultado: {ft_i} ft / {m_i} m"),
-        Locale::En => format!("Result: {ft_i} ft / {m_i} m"),
-    }
+    let _ = locale;
+    format!("{ft_i} ft / {m_i} m")
 }
 
 pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> String {

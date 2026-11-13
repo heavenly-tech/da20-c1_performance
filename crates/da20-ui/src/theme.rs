@@ -49,6 +49,23 @@ impl ThemePreference {
         Self::resolve_default(stored)
     }
 
+    /// Boot `index.html` may set `data-theme` before WASM loads; prefer that when valid.
+    pub fn load_initial() -> Self {
+        if let Some(pref) = read_dom_theme() {
+            return pref;
+        }
+        Self::load()
+    }
+
+    /// Keep the theme `<select>` in sync when `data-theme` was set outside Leptos (e.g. boot script).
+    pub fn sync_signal_from_dom(theme: RwSignal<Self>) {
+        if let Some(pref) = read_dom_theme() {
+            if theme.get_untracked() != pref {
+                theme.set(pref);
+            }
+        }
+    }
+
     pub fn save(self) {
         let _ = LocalStorage::set(THEME_KEY, self);
     }
@@ -73,6 +90,21 @@ pub fn color_scheme_value(pref: ThemePreference) -> &'static str {
     match pref {
         ThemePreference::Light => "light only",
         ThemePreference::Dark | ThemePreference::Night => "dark only",
+    }
+}
+
+fn read_dom_theme() -> Option<ThemePreference> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.document_element())
+            .and_then(|html| html.get_attribute("data-theme"))
+            .and_then(|attr| ThemePreference::from_data_attr(&attr))
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        None
     }
 }
 
@@ -114,6 +146,14 @@ pub fn ThemeEffect(theme: RwSignal<ThemePreference>) -> impl IntoView {
         apply_theme(theme.get());
     });
     view! { <span class="sr-only">"theme"</span> }
+}
+
+#[component]
+pub fn ThemeDomSync(theme: RwSignal<ThemePreference>) -> impl IntoView {
+    Effect::new(move |_| {
+        ThemePreference::sync_signal_from_dom(theme);
+    });
+    view! { <span class="sr-only">"theme-dom-sync"</span> }
 }
 
 #[cfg(test)]
@@ -161,6 +201,12 @@ mod tests {
                 Some(pref)
             );
         }
+    }
+
+    #[test]
+    fn theme_menu_values_match_data_attr() {
+        assert_eq!(ThemePreference::Light.data_attr(), "light");
+        assert_eq!(ThemePreference::Night.data_attr(), "night");
     }
 
     #[test]

@@ -1,12 +1,17 @@
 import { chromium } from "playwright";
 import { createHash } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:8080";
 const outDir = process.env.OUT_DIR ?? "/opt/cursor/artifacts";
 const label = process.env.LABEL ?? "after";
 const themes = (process.env.THEMES ?? "light,dark,night").split(",").filter(Boolean);
+const verifyOldMd5Path = process.env.VERIFY_OLD_MD5 ?? "";
+const onlyShots = (process.env.ONLY_SHOTS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 const TAB_LABELS_ES = {
   takeoff: "Despegue",
@@ -31,27 +36,50 @@ async function md5File(file) {
   return createHash("md5").update(buf).digest("hex");
 }
 
+async function loadOldMd5Map(filePath) {
+  if (!filePath) return new Map();
+  const text = await readFile(filePath, "utf8");
+  const map = new Map();
+  for (const line of text.split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      map.set(parts[parts.length - 1], parts[0]);
+    }
+  }
+  return map;
+}
+
 async function applyTheme(page, theme) {
   const storage = themeStorage[theme] ?? '"Light"';
-  await page.evaluate(
-    ([t, s]) => {
-      localStorage.setItem("da20_theme_v1", s);
-      document.documentElement.setAttribute("data-theme", t);
-      document.documentElement.style.colorScheme =
-        t === "light" ? "light only" : "dark only";
-    },
-    [theme, storage],
+  await page.evaluate((s) => {
+    localStorage.setItem("da20_theme_v1", s);
+  }, storage);
+  await page.reload({ waitUntil: "networkidle", timeout: 120_000 });
+  const select = page.locator("label.theme-picker select.palette-select");
+  await select.waitFor({ state: "visible", timeout: 15_000 });
+  let value = await select.inputValue();
+  if (value !== theme) {
+    await select.selectOption(theme);
+    await page.waitForTimeout(400);
+    value = await select.inputValue();
+  }
+  const domTheme = await page.evaluate(
+    () => document.documentElement.getAttribute("data-theme"),
   );
+  if (value !== theme || domTheme !== theme) {
+    throw new Error(
+      `theme mismatch want=${theme} select=${value} data-theme=${domTheme}`,
+    );
+  }
 }
 
 async function setTakeoffWeightLb(page, lbs) {
-  const weightRow = page.locator(".f").filter({ hasText: /Peso|Weight/i }).first();
-  const input = weightRow.locator("input[type='number']").first();
-  if ((await input.count()) > 0) {
-    await input.fill(String(lbs));
-    await input.press("Enter");
-    await page.waitForTimeout(500);
-  }
+  const input = page.locator(".unit-row input[type='text']").first();
+  await input.waitFor({ state: "visible", timeout: 15_000 });
+  await input.click();
+  await input.fill(String(lbs));
+  await input.press("Tab");
+  await page.waitForTimeout(2000);
 }
 
 async function clickTab(page, tabKey) {
@@ -64,35 +92,90 @@ async function clickTab(page, tabKey) {
     { timeout: 15_000 },
   );
   await page.waitForSelector(TAB_WAIT[tabKey], { timeout: 30_000 });
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(800);
+}
+
+async function assertLightPrimaryButton(page) {
+  const bg = await page.evaluate(() => {
+    const el = document.querySelector(".results-block ~ button.btn, .save-row .btn");
+    const btn =
+      document.querySelector('button.btn:not(.g)') ??
+      document.querySelector(".btn");
+    if (!btn) return null;
+    return getComputedStyle(btn).backgroundColor;
+  });
+  if (bg && !bg.includes("138") && !bg.includes("133")) {
+    console.warn("warn: primary button bg unexpected:", bg);
+  }
 }
 
 await mkdir(outDir, { recursive: true });
-const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+const oldMd5 = await loadOldMd5Map(verifyOldMd5Path);
 
+const browser = await chromium.launch();
+const context = await browser.newContext({
+  viewport: { width: 1400, height: 1000 },
+});
+await context.route("**/*", (route) => {
+  const headers = {
+    ...route.request().headers(),
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    Pragma: "no-cache",
+  };
+  route.continue({ headers });
+});
+const page = await context.newPage();
+
+const bust = Date.now();
 const saved = [];
 for (const theme of themes) {
-  await page.goto(`${baseUrl}/`, { waitUntil: "networkidle", timeout: 120_000 });
+  await page.goto(`${baseUrl}/?v=${bust}-${theme}`, {
+    waitUntil: "networkidle",
+    timeout: 120_000,
+  });
   await applyTheme(page, theme);
 
   for (const tab of ["takeoff", "cruise", "landing"]) {
     await clickTab(page, tab);
 
-    if (tab === "takeoff") {
-      if (theme === "night") {
-        await setTakeoffWeightLb(page, 1764);
-      } else {
-        await setTakeoffWeightLb(page, 1598);
+    if (tab === "cruise") {
+      const isaBtn = page.getByRole("button", { name: "ISA", exact: true });
+      if ((await isaBtn.count()) > 0) {
+        await isaBtn.click();
+        await page.waitForTimeout(500);
       }
-      await page.waitForTimeout(800);
     }
 
-    const file = path.join(outDir, `${label}_${theme}_${tab}.png`);
+    if (tab === "takeoff") {
+      const lbs = theme === "night" ? 1764 : 1598;
+      await setTakeoffWeightLb(page, lbs);
+      if (theme === "light") {
+        await assertLightPrimaryButton(page);
+      }
+      if (theme !== "night") {
+        const ooc = page.locator("p.error.warn");
+        if ((await ooc.count()) > 0) {
+          const txt = await ooc.first().textContent();
+          console.error(`unexpected OOC on ${theme} takeoff: ${txt}`);
+          process.exit(1);
+        }
+      }
+    }
+
+    const shotName = `${label}_${theme}_${tab}.png`;
+    if (onlyShots.length > 0 && !onlyShots.includes(shotName)) {
+      continue;
+    }
+    const file = path.join(outDir, shotName);
     await page.screenshot({ path: file, fullPage: false });
     const hash = await md5File(file);
-    const hashLine = `${path.basename(file)} ${hash}`;
-    console.log(hashLine);
+    const base = path.basename(file);
+    const prev = oldMd5.get(base);
+    if (prev && prev === hash) {
+      console.error(`STALE: ${base} md5 unchanged from previous (${hash})`);
+      process.exit(1);
+    }
+    console.log(`${base} ${hash}${prev ? ` (was ${prev})` : ""}`);
     saved.push({ file, tab, theme, hash });
   }
 }
@@ -111,3 +194,8 @@ for (const [hash, files] of byHash) {
     process.exit(1);
   }
 }
+
+await writeFile(
+  path.join(outDir, `${label}_manifest.json`),
+  JSON.stringify(saved, null, 2),
+);

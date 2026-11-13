@@ -61,6 +61,9 @@ pub fn NumField(
     set: impl Fn(f64) + Send + Copy + 'static,
     #[prop(default = CHART_CLAMP_UNSET)] min: f64,
     #[prop(default = CHART_CLAMP_UNSET)] max: f64,
+    /// Display formatting only; stored value keeps full precision.
+    #[prop(default = None)]
+    display_fraction_digits: Option<u32>,
 ) -> impl IntoView {
     view! {
         <div class="f">
@@ -68,7 +71,10 @@ pub fn NumField(
             <input type="number" step="any" class="mono"
                 min=min.is_finite().then_some(min)
                 max=max.is_finite().then_some(max)
-                prop:value=move || format!("{}", get())
+                prop:value=move || match display_fraction_digits {
+                    Some(d) => format!("{:.*}", d as usize, get()),
+                    None => format!("{}", get()),
+                }
                 on:input=move |ev| {
                     if let Ok(v) = input_value(&ev).parse() {
                         set(clamp_chart(v, min, max));
@@ -287,6 +293,7 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                         }
                     })/>
                 <NumField label=move || c.cruise_oat.to_string()
+                    display_fraction_digits=Some(1)
                     min=limits::FIG52_OAT_C.0
                     max=limits::FIG52_OAT_C.1
                     get=move || inputs.get().cruise_oat_c
