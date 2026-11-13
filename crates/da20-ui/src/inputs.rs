@@ -137,7 +137,8 @@ pub fn SharedAirfieldInputs(
     #[prop(default = AirfieldInputsMode::Full)] mode: AirfieldInputsMode,
     #[prop(default = false)] hide_pa_oat: bool,
 ) -> impl IntoView {
-    let write_ground_prefs = mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full;
+    let write_ground_prefs =
+        mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full;
     view! {
         {move || {
             let c = copy(locale.get());
