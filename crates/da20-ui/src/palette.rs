@@ -259,4 +259,21 @@ mod tests {
             "vfr_chart"
         );
     }
+
+    /// Night chart colours come only from `style.css` (red/amber), not VFR/Okabe JSON backgrounds.
+    #[test]
+    fn palette_json_light_background_is_not_night_chart_surface() {
+        const NIGHT_CHART_SURFACE: &str = "#0a0404";
+        for id in PALETTE_ORDER {
+            let entry = file().get(*id).expect("palette");
+            assert_ne!(
+                entry.light.background.to_ascii_lowercase(),
+                NIGHT_CHART_SURFACE
+            );
+            assert_ne!(
+                entry.dark.background.to_ascii_lowercase(),
+                NIGHT_CHART_SURFACE
+            );
+        }
+    }
 }

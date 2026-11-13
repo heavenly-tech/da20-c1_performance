@@ -139,6 +139,12 @@ pub fn overlay_trace_var(index: usize) -> &'static str {
     VARS[index % VARS.len()]
 }
 
+/// Overlay saved readings: distinct dash patterns (not hue alone) for colour-vision accessibility.
+pub fn overlay_trace_dash(index: usize) -> &'static str {
+    const DASHES: [&str; 5] = ["7 4", "3 3", "1 6", "8 3 2 3", "2 2"];
+    DASHES[index % DASHES.len()]
+}
+
 #[allow(dead_code)]
 #[component]
 pub fn ThemeEffect(theme: RwSignal<ThemePreference>) -> impl IntoView {
@@ -212,5 +218,12 @@ mod tests {
     #[test]
     fn overlay_vars_use_css_tokens() {
         assert!(overlay_trace_var(0).starts_with("var(--trace-"));
+    }
+
+    #[test]
+    fn overlay_trace_dashes_differ() {
+        let a = overlay_trace_dash(0);
+        let b = overlay_trace_dash(1);
+        assert_ne!(a, b);
     }
 }

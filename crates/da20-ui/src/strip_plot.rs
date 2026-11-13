@@ -807,6 +807,7 @@ fn saved_path_overlays(
                         .collect::<Vec<_>>()
                         .join(" ");
                     let color = overlay_trace_var(idx);
+                    let dash = crate::theme::overlay_trace_dash(idx);
                     let pa_guide = match kind {
                         StripKind::Takeoff => {
                             let label = format_takeoff_strip_pa_trace_label(locale, pa);
@@ -840,7 +841,7 @@ fn saved_path_overlays(
                                 stroke=color
                                 stroke-width="2.5"
                                 opacity="0.88"
-                                stroke-dasharray="7 4"
+                                stroke-dasharray=dash
                             />
                         </>
                     })

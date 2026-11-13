@@ -142,6 +142,63 @@ fn is_chart_var(name: &str) -> bool {
     name.starts_with("--chart-") || name.starts_with("--trace-")
 }
 
+const CHART_NON_TEXT: &[ContrastCheck] = &[
+    ContrastCheck {
+        fg: "chart-guide",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "chart guide",
+    },
+    ContrastCheck {
+        fg: "chart-guide-active",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "chart guide active",
+    },
+    ContrastCheck {
+        fg: "chart-marker",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "chart marker",
+    },
+    ContrastCheck {
+        fg: "chart-border",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "chart border",
+    },
+    ContrastCheck {
+        fg: "trace-1",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "overlay trace 1",
+    },
+    ContrastCheck {
+        fg: "trace-2",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "overlay trace 2",
+    },
+    ContrastCheck {
+        fg: "trace-3",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "overlay trace 3",
+    },
+    ContrastCheck {
+        fg: "trace-4",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "overlay trace 4",
+    },
+    ContrastCheck {
+        fg: "trace-5",
+        bg: "chart-surface-bg",
+        min: AA_UI_NON_TEXT,
+        label: "overlay trace 5",
+    },
+];
+
 fn contrast_checks(theme: &str) -> &'static [ContrastCheck] {
     match theme {
         "light" => &[
@@ -412,6 +469,20 @@ fn contrast_checks(theme: &str) -> &'static [ContrastCheck] {
     }
 }
 
+const NIGHT_SCROLLBAR: ContrastCheck = ContrastCheck {
+    fg: "ui-scrollbar-thumb",
+    bg: "ui-scrollbar-track",
+    min: AA_UI_NON_TEXT,
+    label: "scrollbar thumb",
+};
+
+fn iter_checks(theme: &str) -> impl Iterator<Item = ContrastCheck> {
+    let base = contrast_checks(theme).iter().copied();
+    let chart = CHART_NON_TEXT.iter().copied();
+    let night = (theme == "night").then_some(std::iter::once(NIGHT_SCROLLBAR));
+    base.chain(chart).chain(night.into_iter().flatten())
+}
+
 fn themes() -> [&'static str; 3] {
     ["light", "dark", "night"]
 }
@@ -449,7 +520,7 @@ fn wcag_contrast_from_style_css() {
     for theme in themes() {
         let block = extract_theme_block(STYLE_CSS, theme);
         let map = parse_variables(&block);
-        for check in contrast_checks(theme) {
+        for check in iter_checks(theme) {
             let fg = resolve_key(&map, check.fg)
                 .unwrap_or_else(|| panic!("theme {theme}: could not resolve --{}", check.fg));
             let bg = resolve_key(&map, check.bg)

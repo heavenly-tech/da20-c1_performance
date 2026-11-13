@@ -32,7 +32,7 @@
   --chart-trace-line: #1a5694;
   --chart-trace-highlight: #6b2fa0;
   --chart-guide: #c56a08;
-  --chart-guide-active: #d9820a;
+  --chart-guide-active: #9a5a00;
   --chart-user-path: #0a6b7c;
   --chart-marker: #5b21b6;
   --chart-result: #14532d;
@@ -109,7 +109,7 @@
   --ui-scrollbar-track: #1c2128;
 
   --chart-surface-bg: #222830;
-  --chart-border: #4a5668;
+  --chart-border: #6d7f96;
   --chart-grid: #7a8798;
   --chart-axis-label: #b8c8d8;
   --chart-trace-line: #5f9fd8;
@@ -188,26 +188,26 @@
   --ui-disc-bg: #140606;
   --ui-disc-fg: #f08080;
   --ui-disc-border: #b8650a;
-  --ui-scrollbar-thumb: #5c1818;
+  --ui-scrollbar-thumb: #b83838;
   --ui-scrollbar-track: #060303;
 
   --chart-surface-bg: #0a0404;
-  --chart-border: #701818;
+  --chart-border: #b03030;
   --chart-grid: #a04040;
   --chart-axis-label: #ca6060;
   --chart-trace-line: #b83818;
   --chart-trace-highlight: #cc5018;
-  --chart-guide: #904018;
-  --chart-guide-active: #a84820;
+  --chart-guide: #c06020;
+  --chart-guide-active: #d07028;
   --chart-user-path: #c85820;
-  --chart-marker: #802020;
+  --chart-marker: #c04040;
   --chart-result: #ae5858;
   --chart-warning: #c87878;
-  --trace-1: #a84848;
-  --trace-2: #682828;
-  --trace-3: #783018;
-  --trace-4: #903838;
-  --trace-5: #984020;
+  --trace-1: #c85858;
+  --trace-2: #d07070;
+  --trace-3: #d87838;
+  --trace-4: #e86868;
+  --trace-5: #e87830;
 
   --bg: var(--ui-page-bg);
   --surface: var(--ui-surface-bg);
