@@ -410,7 +410,7 @@ mod tests {
             runway: "190".into(),
             wind_dir_deg: 200.0,
             wind_speed_kt: 6.0,
-            pa_override: pa.clone(),
+            pa_override: pa,
             oat_c: 21.0,
             ..Default::default()
         };
