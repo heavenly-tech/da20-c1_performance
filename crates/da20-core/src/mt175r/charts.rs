@@ -304,6 +304,62 @@ fn fig2_printed_endpoint(pct_bhp: i32) -> Option<(f64, f64)> {
     }
 }
 
+/// Digitized Fig 2 samples only (no printed-endpoint extension) for the %BHP family overlay.
+pub fn fig2_family_chart_points(data: &Mt175rData, pct_bhp: i32) -> Vec<(f64, f64)> {
+    let Some(curve) = fig2_curve(data, pct_bhp) else {
+        return vec![];
+    };
+    let mut pts: Vec<(f64, f64)> = curve
+        .samples
+        .iter()
+        .filter_map(|s| Some((s.da_ft, s.rpm?)))
+        .collect();
+    pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    if pct_bhp == 75 {
+        pts.retain(|p| p.0 <= FIG2_PCT75_DA_MAX_FT + 1.0);
+    }
+    pts
+}
+
+/// Points along the selected %BHP trace (interpolated between printed curves when needed).
+pub fn fig2_pct_bhp_chart_points(data: &Mt175rData, target_pct_bhp: f64) -> Vec<(f64, f64)> {
+    if pct_brackets(target_pct_bhp).is_none() {
+        return vec![];
+    }
+    let mut das: Vec<f64> = Vec::new();
+    for &p in &PRINTED_PCT_CURVES {
+        for (da, _) in fig2_family_chart_points(data, p) {
+            das.push(da);
+        }
+    }
+    das.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    das.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+    das.into_iter()
+        .filter_map(|da| lookup_fig2_rpm_at_pct(data, da, target_pct_bhp).map(|hit| (da, hit.rpm)))
+        .collect()
+}
+
+/// Map vertical chart drag (RPM at fixed DA) to %BHP, clamped to the printed 45–75 % band.
+pub fn pct_bhp_from_fig2_drag_rpm(data: &Mt175rData, da_ft: f64, rpm: f64) -> Option<f64> {
+    if let Some(inv) = lookup_fig2_pct_at_rpm(data, da_ft, rpm) {
+        return Some(inv.percent_bhp.clamp(MT_PCT_BHP_MIN, MT_PCT_BHP_MAX));
+    }
+    let rpm_45 = fig2_rpm_at_da(data, 45, da_ft)?;
+    let mut rpm_top = rpm_45;
+    for &p in &PRINTED_PCT_CURVES {
+        if let Some(r) = fig2_rpm_at_da(data, p, da_ft) {
+            rpm_top = rpm_top.max(r);
+        }
+    }
+    if rpm <= rpm_45 + CHART_EDGE_TOL {
+        return Some(MT_PCT_BHP_MIN);
+    }
+    if rpm >= rpm_top - CHART_EDGE_TOL {
+        return Some(MT_PCT_BHP_MAX);
+    }
+    None
+}
+
 /// Points along a Fig 2 curve for plotting (sorted by DA ascending).
 pub fn fig2_curve_chart_points(data: &Mt175rData, pct_bhp: i32) -> Vec<(f64, f64)> {
     let Some(curve) = fig2_curve(data, pct_bhp) else {
@@ -370,6 +426,46 @@ mod tests {
         let tas = fig3_tas_at_da(&data, 65, 6000.0).unwrap();
         assert!((rpm - 2438.7).abs() < 2.0, "rpm={rpm}");
         assert!((tas - 122.12).abs() < 0.5, "tas={tas}");
+    }
+
+    #[test]
+    fn fig2_family_points_are_digitized_samples_only() {
+        let data = Mt175rData::production();
+        let family_75 = fig2_family_chart_points(&data, 75);
+        let with_end_75 = fig2_curve_chart_points(&data, 75);
+        assert!(family_75.iter().all(|p| p.0 <= FIG2_PCT75_DA_MAX_FT + 1.0));
+        assert!(with_end_75
+            .last()
+            .map(|p| (p.0 - FIG2_PCT75_DA_MAX_FT).abs() < 1.0)
+            .unwrap_or(false));
+        for &p in &PRINTED_PCT_CURVES {
+            let family = fig2_family_chart_points(&data, p);
+            let curve = data.fig2_curves().get(&format!("{p}%")).expect("curve");
+            let sample_pts = curve.samples.iter().filter(|s| s.rpm.is_some()).count();
+            assert_eq!(family.len(), sample_pts, "%{p} family length");
+        }
+    }
+
+    #[test]
+    fn pct_bhp_from_fig2_drag_clamps_and_round_trips() {
+        let data = Mt175rData::production();
+        let da = 6000.0;
+        let at_65 = lookup_fig2_rpm_at_pct(&data, da, 65.0).unwrap().rpm;
+        let inv = pct_bhp_from_fig2_drag_rpm(&data, da, at_65).unwrap();
+        assert!((inv - 65.0).abs() < 0.05);
+        let r45 = fig2_rpm_at_da(&data, 45, da).unwrap();
+        assert_eq!(
+            pct_bhp_from_fig2_drag_rpm(&data, da, r45 - 50.0).unwrap(),
+            MT_PCT_BHP_MIN
+        );
+        let r75 = fig2_rpm_at_da(&data, 75, da).unwrap();
+        assert_eq!(
+            pct_bhp_from_fig2_drag_rpm(&data, da, r75 + 50.0).unwrap(),
+            MT_PCT_BHP_MAX
+        );
+        let mid_rpm = lookup_fig2_rpm_at_pct(&data, da, 60.0).unwrap().rpm;
+        let mid_pct = pct_bhp_from_fig2_drag_rpm(&data, da, mid_rpm).unwrap();
+        assert!((mid_pct - 60.0).abs() < 0.05);
     }
 
     #[test]

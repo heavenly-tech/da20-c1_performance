@@ -347,17 +347,20 @@ fn phase_chart(
             }
             .into_any()
         }
-        Phase::Cruise => view! {
-            {move || match inputs.get().propeller {
-                PropellerKind::Mt175R => view! {
-                    <MtCruisePanel locale=locale data=data inputs=inputs/>
-                }.into_any(),
-                PropellerKind::Sensenich => view! {
-                    <CruiseTableView locale=locale data=data inputs=inputs/>
-                }.into_any(),
-            }}
+        Phase::Cruise => {
+            let fp = flight_prefs.expect("cruise chart needs flight_prefs");
+            view! {
+                {move || match inputs.get().propeller {
+                    PropellerKind::Mt175R => view! {
+                        <MtCruisePanel locale=locale data=data inputs=inputs flight_prefs=fp/>
+                    }.into_any(),
+                    PropellerKind::Sensenich => view! {
+                        <CruiseTableView locale=locale data=data inputs=inputs/>
+                    }.into_any(),
+                }}
+            }
+            .into_any()
         }
-        .into_any(),
         Phase::Endurance => view! {
             <p class="chip">{move || copy(locale.get()).derived_not_afm}</p>
         }
