@@ -116,6 +116,8 @@ pub struct Copy {
     pub landing_tbl_roll_ft: &'static str,
     pub landing_tbl_50ft_ft: &'static str,
     pub mt_fig4_da_weight_lbl: &'static str,
+    pub mt_pct_bhp_weight_lbl: &'static str,
+    pub mt_fig4_ktas_compare: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
     pub climb_fig_55: &'static str,
@@ -340,6 +342,8 @@ const ES: Copy = Copy {
     landing_tbl_roll_ft: "Rodaje ft",
     landing_tbl_50ft_ft: "50 ft ft",
     mt_fig4_da_weight_lbl: "Peso DA",
+    mt_pct_bhp_weight_lbl: "Peso %BHP",
+    mt_fig4_ktas_compare: "Fig 4 KTAS (solo comparación)",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
     climb_fig_55: "Fig 5.5 — flaps crucero",
@@ -532,6 +536,8 @@ const EN: Copy = Copy {
     landing_tbl_roll_ft: "Roll ft",
     landing_tbl_50ft_ft: "50 ft ft",
     mt_fig4_da_weight_lbl: "DA weight",
+    mt_pct_bhp_weight_lbl: "%BHP weight",
+    mt_fig4_ktas_compare: "Fig 4 KTAS (comparison only)",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
     climb_fig_55: "Fig 5.5 — cruise flaps",
@@ -656,7 +662,7 @@ const EN: Copy = Copy {
     methods: &EN_METHODS,
 };
 
-const ES_METHODS: [MethodCopy; 8] = [
+const ES_METHODS: [MethodCopy; 9] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
         afm: "AFM DA202-C1 Rev 29 — entradas de performance",
@@ -693,6 +699,13 @@ const ES_METHODS: [MethodCopy; 8] = [
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
     },
     MethodCopy {
+        title: "Crucero MT 175 R (AFMS E-1487)",
+        afm: "AFMS E-1487 Fig 1–4",
+        summary: "PA + OAT → altitud de densidad (fórmula ISA troposférica elegida; el ejemplo de la Fig 1 da ≈7374 ft frente a 7391 ft impreso por aproximación NWS). Cadena: Fig 2 (RPM / %BHP) → Fig 3 TAS (peso máximo bruto, mezcla a máxima potencia, sin corrección por peso; TAS limitada por Full Throttle) → Fig 4 solo GPH. El KTAS de la Fig 4 es solo comparación, nunca se promedia con la Fig 3. Carenados: ~−5% TAS; GPH sin escalar (pendiente de confirmación AFMS).",
+        interpolation: "Solo interpolación. Etiquetas Tabla o Interpolado. Fuera de carta bajo 45 % BHP, más allá del extremo del 75 %, a la derecha de Full Throttle/2800 RPM, RPM Fig 2 < 2200 o DA < 2000 ft (GPH/autonomía/alcance).",
+        limitations: "Fig 4 GPH transcrito tal como impreso (dos celdas dudosas a DA 10000/12000 y RPM 2200).",
+    },
+    MethodCopy {
         title: "Aterrizaje (Tabla 4)",
         afm: "AFM p. 5-17, Tabla 4",
         summary: "Consulta por altitud de presión únicamente (ft).",
@@ -715,7 +728,7 @@ const ES_METHODS: [MethodCopy; 8] = [
     },
 ];
 
-const EN_METHODS: [MethodCopy; 8] = [
+const EN_METHODS: [MethodCopy; 9] = [
     MethodCopy {
         title: "Pressure & density altitude",
         afm: "AFM DA202-C1 Rev 29 — performance inputs",
@@ -751,6 +764,13 @@ const EN_METHODS: [MethodCopy; 8] = [
         summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled.",
         interpolation: "Table or Interpolated tags only. Off chart when PA, ΔISA, or RPM leave the hull (e.g. 6500 ft: RPM < 2512.5).",
         limitations: "GPH as printed (known oddities).",
+    },
+    MethodCopy {
+        title: "MT 175 R cruise (AFMS E-1487)",
+        afm: "AFMS E-1487 Figs 1–4",
+        summary: "PA + OAT → density altitude (chosen ISA troposphere formula; Fig 1 example computes ≈7374 ft vs 7391 ft printed NWS approximation). Chain: Fig 2 (RPM / %BHP) → Fig 3 TAS (max gross weight, best-power mixture, no weight correction; TAS capped at Full Throttle) → Fig 4 GPH only. Fig 4 KTAS is comparison only, never averaged with Fig 3. Wheel fairings: ~−5% TAS; GPH not scaled (AFMS confirmation pending).",
+        interpolation: "Interpolate only. Tags Table or Interpolated. Off chart below 45% BHP, past the 75% endpoint, right of Full Throttle/2800 RPM, Fig 2 RPM < 2200 or DA < 2000 ft (GPH/endurance/range).",
+        limitations: "Fig 4 GPH transcribed as printed (two doubtful cells at DA 10000/12000 and RPM 2200).",
     },
     MethodCopy {
         title: "Landing (Table 4)",

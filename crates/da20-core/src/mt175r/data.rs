@@ -202,7 +202,7 @@ impl Mt175rData {
             afm_date: s.issue.clone(),
             data_status: s.approval_note.clone(),
             citation: crate::types::Citation {
-                figure_or_table: "Figure 4 (MT AFMS E-1487)".into(),
+                figure_or_table: "AFMS E-1487 Figs 2–3 + Fig 4 GPH".into(),
                 page: Some(7),
                 afm_revision: None,
                 notes: Some(s.propeller.clone()),

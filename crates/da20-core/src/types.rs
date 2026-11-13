@@ -358,6 +358,31 @@ pub struct MtFig4SourceTrace {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MtCurveHighlight {
+    pub pct_bhp: i32,
+    pub weight: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct MtFig2SourceTrace {
+    pub query_da_ft: f64,
+    pub query_pct_bhp: Option<f64>,
+    pub query_rpm: Option<f64>,
+    pub rpm_result: f64,
+    pub curve_brackets: Vec<MtCurveHighlight>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct MtFig3SourceTrace {
+    pub query_da_ft: f64,
+    pub query_pct_bhp: f64,
+    pub tas_result_kt: f64,
+    pub curve_brackets: Vec<MtCurveHighlight>,
+    #[serde(default)]
+    pub capped_at_full_throttle: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Table4PaBracketRow {
     pub pa_ft: f64,
     pub pa_weight: f64,
@@ -394,6 +419,13 @@ pub struct CruiseResult {
     pub table3_source: Option<Table3SourceTrace>,
     #[serde(default)]
     pub mt_fig4_source: Option<MtFig4SourceTrace>,
+    #[serde(default)]
+    pub mt_fig2_source: Option<MtFig2SourceTrace>,
+    #[serde(default)]
+    pub mt_fig3_source: Option<MtFig3SourceTrace>,
+    /// Fig 4 KTAS from the table for MT comparison only (never blended into `tas_*`).
+    #[serde(default)]
+    pub mt_fig4_ktas_kt: Option<f64>,
     /// ISA troposphere density altitude used for MT Fig 4 (Sensenich cruise leaves this unset).
     #[serde(default)]
     pub density_altitude_ft: Option<f64>,

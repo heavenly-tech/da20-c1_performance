@@ -20,7 +20,9 @@ use crate::phase_readouts::PhaseReadoutsPanel;
 use crate::prefs::TakeoffPrefs;
 use crate::storage::{compute_all, ReadingsStore, SavedBundle};
 use crate::strip_plot::{StripHandPlot, StripKind};
-use crate::table_source_panel::{MtFig4SourcePanel, Table3SourcePanel, Table4SourcePanel};
+use crate::table_source_panel::{
+    MtFig2Fig3SourcePanel, MtFig4SourcePanel, Table3SourcePanel, Table4SourcePanel,
+};
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
 use da20_core::altitude::isa_troposphere_density_altitude_ft;
 use da20_core::mt175r::cruise::{rmax_at_da, rmin_at_da};
@@ -485,7 +487,21 @@ fn phase_results(
                                 </>
                             }.into_any()
                         }}
+                        {mt_prop.then(|| cr.mt_fig4_ktas_kt.map(|kt| view! {
+                            <p class="readout-text mono">{format!("{}: {:.0} kt", c_loc.mt_fig4_ktas_compare, kt)}</p>
+                        }))}
                         <WarningsList locale=locale warnings=cr.warnings.clone()/>
+                        {if mt_prop {
+                            view! {
+                                <MtFig2Fig3SourcePanel
+                                    locale=locale
+                                    fig2=cr.mt_fig2_source.clone()
+                                    fig3=cr.mt_fig3_source.clone()
+                                />
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }}
                         {if mt_prop {
                             cr.mt_fig4_source.clone().map(|trace| {
                                 view! { <MtFig4SourcePanel locale=locale trace=trace /> }
