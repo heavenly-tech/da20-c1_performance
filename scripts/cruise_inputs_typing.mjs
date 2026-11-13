@@ -20,6 +20,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const manageServer = process.env.MANAGE_SERVER !== "0";
 
 const TAB = {
+  takeoff: { es: "Despegue", en: "Takeoff" },
   climb: { es: "Ascenso", en: "Climb" },
   cruise: { es: "Crucero y potencia", en: "Cruise & power" },
   endurance: { es: "Autonomía y alcance", en: "Endurance & range" },
