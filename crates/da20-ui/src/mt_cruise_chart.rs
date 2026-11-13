@@ -16,8 +16,8 @@ use crate::chart_guides::LabelAnchor;
 pub const MT_MARGIN_L: f64 = 56.0;
 pub const MT_MARGIN_B: f64 = 64.0;
 pub const MT_MARGIN_T: f64 = 14.0;
-/// Right gutter: %BHP family labels.
-pub const MT_MARGIN_R: f64 = 52.0;
+/// Right gutter: %BHP family labels (wide enough for "Full Throttle").
+pub const MT_MARGIN_R: f64 = 76.0;
 pub const MT_W: f64 = 320.0;
 pub const MT_H: f64 = 200.0;
 
@@ -201,12 +201,34 @@ pub fn plot_left_x() -> f64 {
     MT_MARGIN_L
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn plot_right_x() -> f64 {
     MT_MARGIN_L + MT_W
 }
 
 pub fn plot_top_y() -> f64 {
     MT_MARGIN_T
+}
+
+pub fn viewbox_w() -> f64 {
+    MT_MARGIN_L + MT_W + MT_MARGIN_R
+}
+
+pub fn clamp_start_label_x(text: &str, preferred_x: f64) -> f64 {
+    let w = estimate_text_width(text) + 2.0;
+    let pad = 2.0;
+    let max_x = (viewbox_w() - pad - w).max(MT_MARGIN_L + pad);
+    preferred_x.min(max_x)
+}
+
+fn end_label_x_at_curve(da: f64, y: f64, y_min: f64, y_max: f64, text: &str) -> f64 {
+    let (sx, _) = map_mt_chart_xy(da, y, FIG2_DA_MIN, FIG2_DA_MAX, y_min, y_max);
+    let w = estimate_text_width(text) + 2.0;
+    let after = clamp_start_label_x(text, sx + 10.0);
+    if after + w <= viewbox_w() - 2.0 {
+        return after;
+    }
+    clamp_start_label_x(text, sx - w - 4.0)
 }
 
 pub fn fig2_marker_guides(
@@ -375,11 +397,6 @@ pub fn fig3_selected_polyline(mt: &Mt175rData, pct: f64) -> Vec<(f64, f64)> {
     fig3_pct_bhp_chart_points(mt, pct)
 }
 
-fn end_label_x(da: f64, y: f64, y_min: f64, y_max: f64) -> f64 {
-    let (sx, _) = map_mt_chart_xy(da, y, FIG2_DA_MIN, FIG2_DA_MAX, y_min, y_max);
-    (sx + 10.0).min(plot_right_x() + 8.0)
-}
-
 /// Curve-end labels for Fig 2 (`text`, `x`, `y`, `highlight`).
 pub fn fig2_curve_end_label_positions(
     mt: &Mt175rData,
@@ -395,16 +412,18 @@ pub fn fig2_curve_end_label_positions(
         let Some((da, rpm)) = pts.last().copied() else {
             continue;
         };
-        let (sx, sy) = map_mt_chart_xy(
+        let sy = map_mt_chart_xy(
             da,
             rpm,
             FIG2_DA_MIN,
             FIG2_DA_MAX,
             FIG2_RPM_MIN,
             FIG2_RPM_MAX,
-        );
-        let x = (sx + 10.0).min(plot_right_x() + 8.0);
-        specs.push((format!("{p}%"), x, sy, false));
+        )
+        .1;
+        let text = format!("{p}%");
+        let x = end_label_x_at_curve(da, rpm, FIG2_RPM_MIN, FIG2_RPM_MAX, &text);
+        specs.push((text, x, sy, false));
     }
     let selected_pts = fig2_pct_bhp_chart_points(mt, selected_pct);
     if !selected_pts.is_empty() {
@@ -416,22 +435,24 @@ pub fn fig2_curve_end_label_positions(
             .find(|(d, _)| (*d - da_max).abs() < 1.0)
             .map(|(_, r)| *r)
             .unwrap_or_else(|| selected_pts.last().unwrap().1);
-        let (sx, sy) = map_mt_chart_xy(
+        let sy = map_mt_chart_xy(
             da_max,
             rpm,
             FIG2_DA_MIN,
             FIG2_DA_MAX,
             FIG2_RPM_MIN,
             FIG2_RPM_MAX,
-        );
-        let x = (sx + 10.0).min(plot_right_x() + 8.0);
+        )
+        .1;
+        let text = format_pct_bhp_label(selected_pct);
+        let x = end_label_x_at_curve(da_max, rpm, FIG2_RPM_MIN, FIG2_RPM_MAX, &text);
         let y = (sy - 12.0).max(plot_top_y() + 8.0);
         let on_printed = PRINTED_PCT_CURVES
             .iter()
             .any(|p| (selected_pct - *p as f64).abs() < 0.01);
         let show_selected = skip_matching_printed_label || !on_printed || selected_pts.len() > 1;
         if show_selected {
-            specs.push((format_pct_bhp_label(selected_pct), x, y, true));
+            specs.push((text, x, y, true));
         }
     }
     let svg_ys: Vec<f64> = specs.iter().map(|(_, _, y, _)| *y).collect();
@@ -458,7 +479,8 @@ pub fn fig3_curve_end_label_positions(
         let Some((da, tas)) = pts.last().copied() else {
             continue;
         };
-        let x = end_label_x(da, tas, FIG3_TAS_MIN, FIG3_TAS_MAX);
+        let text = format!("{p}%");
+        let x = end_label_x_at_curve(da, tas, FIG3_TAS_MIN, FIG3_TAS_MAX, &text);
         let sy = map_mt_chart_xy(
             da,
             tas,
@@ -468,11 +490,13 @@ pub fn fig3_curve_end_label_positions(
             FIG3_TAS_MAX,
         )
         .1;
-        specs.push((format!("{p}%"), x, sy, false));
+        specs.push((text, x, sy, false));
     }
     let ft_pts = fig3_full_throttle_chart_points(mt);
     if let Some((da, tas)) = ft_pts.last().copied() {
-        let x = end_label_x(da, tas, FIG3_TAS_MIN, FIG3_TAS_MAX);
+        let text = "Full Throttle".to_string();
+        let w = estimate_text_width(&text) + 2.0;
+        let x = (viewbox_w() - 4.0 - w).max(MT_MARGIN_L + 2.0);
         let sy = map_mt_chart_xy(
             da,
             tas,
@@ -482,7 +506,7 @@ pub fn fig3_curve_end_label_positions(
             FIG3_TAS_MAX,
         )
         .1;
-        specs.push(("Full Throttle".into(), x, sy, false));
+        specs.push((text, x, sy, false));
     }
     let selected_pts = fig3_pct_bhp_chart_points(mt, selected_pct);
     if !selected_pts.is_empty() {
@@ -494,7 +518,8 @@ pub fn fig3_curve_end_label_positions(
             .find(|(d, _)| (*d - da_max).abs() < 1.0)
             .map(|(_, t)| *t)
             .unwrap_or_else(|| selected_pts.last().unwrap().1);
-        let x = end_label_x(da_max, tas, FIG3_TAS_MIN, FIG3_TAS_MAX);
+        let text = format_pct_bhp_label(selected_pct);
+        let x = end_label_x_at_curve(da_max, tas, FIG3_TAS_MIN, FIG3_TAS_MAX, &text);
         let sy = map_mt_chart_xy(
             da_max,
             tas,
@@ -510,7 +535,7 @@ pub fn fig3_curve_end_label_positions(
             .any(|p| (selected_pct - *p as f64).abs() < 0.01);
         let show_selected = skip_matching_printed_label || !on_printed || selected_pts.len() > 1;
         if show_selected {
-            specs.push((format_pct_bhp_label(selected_pct), x, y, true));
+            specs.push((text, x, y, true));
         }
     }
     let svg_ys: Vec<f64> = specs.iter().map(|(_, _, y, _)| *y).collect();
@@ -703,6 +728,35 @@ mod tests {
                         "overlap pct={pct} labels={labels:?}"
                     );
                 }
+            }
+            for (text, x, y, _) in &labels {
+                assert!(
+                    label_box_fits_viewbox(*x, *y, text, LabelAnchor::Start),
+                    "label \"{text}\" outside viewBox pct={pct} x={x} y={y}"
+                );
+            }
+            let ft = labels
+                .iter()
+                .find(|(t, _, _, _)| t == "Full Throttle")
+                .expect("Full Throttle label");
+            assert!(
+                label_box_fits_viewbox(ft.1, ft.2, &ft.0, LabelAnchor::Start),
+                "Full Throttle clipped: {:?}",
+                ft
+            );
+        }
+    }
+
+    #[test]
+    fn fig2_curve_end_labels_fit_viewbox_at_60_and_65_pct() {
+        let mt = Mt175rData::production();
+        for pct in [60.0, 65.0] {
+            let labels = fig2_curve_end_label_positions(&mt, pct, false);
+            for (text, x, y, _) in &labels {
+                assert!(
+                    label_box_fits_viewbox(*x, *y, text, LabelAnchor::Start),
+                    "label \"{text}\" outside viewBox pct={pct}"
+                );
             }
         }
     }

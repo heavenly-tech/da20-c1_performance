@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:18085";
+const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:18086";
 const outDir = process.env.OUT_DIR ?? "/opt/cursor/artifacts";
 
 const themeStorage = {
@@ -64,20 +64,46 @@ async function setPaOat(page, pa, oat) {
   if (oat !== null) await setOatManual(page, oat);
 }
 
+async function measureReviewClip(page) {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(300);
+  const mtProp = page.getByRole("button", { name: "MT 175 R 150-2Ca", exact: true });
+  const fig2Title = page.locator("p.lab.mono").filter({ hasText: "Fig 2" }).first();
+  const fig2 = page.locator(".mt-fig-svg").first();
+  const fig3 = page.locator(".mt-fig-svg").nth(1);
+  const mtBb = await mtProp.boundingBox();
+  const t2bb = await fig2Title.boundingBox();
+  const bb2 = await fig2.boundingBox();
+  const bb3 = await fig3.boundingBox();
+  if (!t2bb || !bb2 || !bb3) throw new Error("review clip bbox missing");
+  const y = Math.max(0, Math.min(mtBb?.y ?? t2bb.y, t2bb.y) - 12);
+  const bottom = bb3.y + bb3.height + 28;
+  const height = bottom - y;
+  if (bb2.y < y - 4) {
+    throw new Error(`Fig 2 clipped: svgTop=${bb2.y} clipY=${y}`);
+  }
+  return { y, height };
+}
+
 async function shotCharts(page, file) {
-  const titles = page.locator("p.lab.mono").filter({ hasText: "Fig 2" });
-  await page.locator(".mt-fig-svg").nth(1).scrollIntoViewIfNeeded();
-  const titleBb = (await titles.count()) > 0 ? await titles.first().boundingBox() : null;
-  const bb = await page.locator(".mt-fig-svg").first().boundingBox();
-  const bb2 = await page.locator(".mt-fig-svg").nth(1).boundingBox();
-  if (!bb || !bb2) throw new Error("chart bbox missing");
-  const y = Math.max(0, (titleBb?.y ?? bb.y) - 8);
-  const h = bb2.y + bb2.height - y + 36;
+  let { y, height } = await measureReviewClip(page);
+  let vp = page.viewportSize() ?? { width: 1400, height: 2200 };
+  if (height > vp.height - 8) {
+    const newH = Math.min(Math.ceil(height + y + 40), 3000);
+    await page.setViewportSize({ width: vp.width, height: newH });
+    await page.waitForTimeout(200);
+    ({ y, height } = await measureReviewClip(page));
+    vp = page.viewportSize() ?? { width: 1400, height: newH };
+  }
+  const clipH = Math.min(height, vp.height - y);
+  if (clipH < height - 2) {
+    throw new Error(`clip height ${clipH} shorter than content ${height} for ${file}`);
+  }
   await page.screenshot({
     path: file,
-    clip: { x: 0, y, width: 1400, height: Math.min(h, 1500) },
+    clip: { x: 0, y, width: 1400, height: clipH },
   });
-  console.log(file);
+  console.log(`${file} (clip y=${y.toFixed(0)} h=${clipH.toFixed(0)})`);
 }
 
 /** Drag Fig 2 vertically ~8 px above current marker (stay on 65% above local 65% curve). */
@@ -114,31 +140,31 @@ const browser = await chromium.launch();
 
 for (const scenario of scenarios) {
   for (const theme of ["light", "dark", "night"]) {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
+    const page = await browser.newPage({ viewport: { width: 1400, height: 2400 } });
     await page.goto(`${baseUrl}/#/cruise`, { waitUntil: "networkidle", timeout: 120_000 });
     await applyTheme(page, theme);
     await openMtCruise(page);
     const oat = scenario.oat ?? isaOatAtPa(scenario.pa);
     await setPaOat(page, scenario.pa, oat);
     await setPctBhp(page, scenario.pct);
-    await shotCharts(
-      page,
-      path.join(outDir, `mt175_review_${scenario.id}_${theme}.png`),
-    );
+    await shotCharts(page, path.join(outDir, `mt175_review_${scenario.id}_${theme}.png`));
     await page.close();
   }
 }
 
-{
-  const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
+for (const theme of ["light", "dark", "night"]) {
+  const page = await browser.newPage({ viewport: { width: 1400, height: 2400 } });
   await page.goto(`${baseUrl}/#/cruise`, { waitUntil: "networkidle", timeout: 120_000 });
-  await applyTheme(page, "light");
+  await applyTheme(page, theme);
   await openMtCruise(page);
   const pa = 10_000;
   await setPaOat(page, pa, isaOatAtPa(pa));
   await setPctBhp(page, 65);
   await dragFig2SlightlyAboveCurve(page);
-  await shotCharts(page, path.join(outDir, "mt175_review_da10000_drag_above_65pct_light.png"));
+  await shotCharts(
+    page,
+    path.join(outDir, `mt175_review_da10000_drag_above_65pct_${theme}.png`),
+  );
   await page.close();
 }
 
