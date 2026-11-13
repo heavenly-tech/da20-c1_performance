@@ -429,6 +429,9 @@ pub struct CruiseResult {
     /// ISA troposphere density altitude used for MT Fig 4 (Sensenich cruise leaves this unset).
     #[serde(default)]
     pub density_altitude_ft: Option<f64>,
+    /// Fig 4 GPH unavailable (DA below 2000 ft or RPM below 2200) while Fig 2/3 remain valid.
+    #[serde(default)]
+    pub mt_gph_out_of_chart: bool,
     pub warnings: Vec<CalculationWarning>,
 }
 

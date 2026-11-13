@@ -25,7 +25,7 @@ fn highlighted_curves(
     inputs: &FlightInputs,
     solved_pct: Option<f64>,
 ) -> Vec<(i32, f64)> {
-  if let Some(f2) = cr.and_then(|c| c.mt_fig2_source.as_ref()) {
+    if let Some(f2) = cr.and_then(|c| c.mt_fig2_source.as_ref()) {
         return f2
             .curve_brackets
             .iter()
@@ -214,8 +214,8 @@ pub fn MtCruisePanel(
 
             view! {
                 <p class="lab mono">{format!(
-                    "{}{}",
-                    format!("{} · {pct}% BHP", c.mt_fig2_title),
+                    "{} · {pct}% BHP{}",
+                    c.mt_fig2_title,
                     bracket_caption(loc, &fig2_brackets, c.mt_pct_bhp_weight_lbl),
                 )}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>
@@ -226,8 +226,8 @@ pub fn MtCruisePanel(
                     {fig2_cursor}
                 </svg>
                 <p class="lab mono">{format!(
-                    "{}{}",
-                    format!("{} · {pct}% BHP", c.mt_fig3_title),
+                    "{} · {pct}% BHP{}",
+                    c.mt_fig3_title,
                     bracket_caption(loc, &fig3_brackets, c.mt_pct_bhp_weight_lbl),
                 )}</p>
                 <svg class="plot-svg strip-svg mt-fig-svg" viewBox=format!("0 0 {vb_w} {vb_h}")>

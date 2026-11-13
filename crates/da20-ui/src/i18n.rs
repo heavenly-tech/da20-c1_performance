@@ -253,15 +253,16 @@ pub fn copy(locale: Locale) -> &'static Copy {
 pub fn format_mt_cruise_bhp_not_achievable(
     locale: Locale,
     pct_bhp: f64,
-    rmin: f64,
-    rmax: f64,
+    min_pct: f64,
+    max_pct: f64,
 ) -> String {
+    let _ = pct_bhp;
     match locale {
         Locale::Es => format!(
-            "No alcanzable — %BHP {pct_bhp:.2}% fuera de [{rmin:.0}, {rmax:.0}] RPM a esta AD (Fig 4)."
+            "Fuera de carta — %BHP válido {min_pct:.0}–{max_pct:.0} % en Fig 2/3 (solo interpolación)."
         ),
         Locale::En => format!(
-            "Not achievable — %BHP {pct_bhp:.2}% outside [{rmin:.0}, {rmax:.0}] RPM at this DA (Fig 4)."
+            "Off chart — valid %BHP is {min_pct:.0}–{max_pct:.0}% on Fig 2/3 (interpolate only)."
         ),
     }
 }

@@ -24,9 +24,6 @@ use crate::table_source_panel::{
     MtFig2Fig3SourcePanel, MtFig4SourcePanel, Table3SourcePanel, Table4SourcePanel,
 };
 use crate::takeoff_panel::{format_takeoff_distances_pair, TakeoffNumericBlock, TakeoffSweepPanel};
-use da20_core::altitude::isa_troposphere_density_altitude_ft;
-use da20_core::mt175r::cruise::{rmax_at_da, rmin_at_da};
-use da20_core::mt175r::Mt175rData;
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
 use da20_core::types::{ChartPhase, CruiseSolveMode, PropellerKind};
 use da20_core::wind::{runway_heading_status, RunwayHeadingStatus};
@@ -418,7 +415,12 @@ fn phase_results(
                     let c_loc = copy(locale);
                     let tas_c = cr.tas_chart_kt;
                     let pen = cr.tas_kt;
-                    let ff = cr.fuel_flow_us_gal_h;
+                    let ff = if cr.mt_gph_out_of_chart {
+                        None
+                    } else {
+                        Some(cr.fuel_flow_us_gal_h)
+                    };
+                    let gph_ooc = cr.mt_gph_out_of_chart;
                     let fair_on = inputs.wheel_fairings_installed;
                     let t_chart = tas_c.map(|x| x.round() as i64).unwrap_or(pen.round() as i64);
                     let t_pen = pen.round() as i64;
@@ -443,7 +445,7 @@ fn phase_results(
                                     <>
                                         <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
                                         <p class="big mono">{rpm_out}" RPM · "{t_chart}<span class="u">" kt TAS"</span></p>
-                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"</p>
+                                        <p class="mono">{if let Some(ff) = ff { format!("{ff:.1} US gal/h") } else { "— US gal/h".into() }}</p>
                                     </>
                                 }.into_any()
                             } else if tas_c.is_some() {
@@ -452,7 +454,7 @@ fn phase_results(
                                         <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
                                         <p class="big mono">{rpm_out}" RPM · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
                                         <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
-                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"</p>
+                                        <p class="mono">{if let Some(ff) = ff { format!("{ff:.1} US gal/h") } else { "— US gal/h".into() }}</p>
                                     </>
                                 }.into_any()
                             } else {
@@ -460,7 +462,7 @@ fn phase_results(
                                     <>
                                         <p class="big mono">{format!("{requested_bhp:.2}")}" % BHP"</p>
                                         <p class="big mono">{rpm_out}" RPM · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
-                                        <p class="mono">{format!("{ff:.1}")}" US gal/h"</p>
+                                        <p class="mono">{if let Some(ff) = ff { format!("{ff:.1} US gal/h") } else { "— US gal/h".into() }}</p>
                                     </>
                                 }.into_any()
                             }
@@ -468,7 +470,7 @@ fn phase_results(
                             view! {
                                 <>
                                     <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_chart}<span class="u">" kt TAS"</span></p>
-                                    <p>{format!("{ff:.1}")}" US gal/h"</p>
+                                    <p>{if let Some(ff) = ff { format!("{ff:.1} US gal/h") } else { "— US gal/h".into() }}</p>
                                 </>
                             }.into_any()
                         } else if tas_c.is_some() {
@@ -476,19 +478,22 @@ fn phase_results(
                                 <>
                                     <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_chart}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
                                     <p class="big mono">{c_loc.cruise_tas_adjusted_label}": "{t_pen}<span class="u">" kt TAS"</span></p>
-                                    <p>{format!("{ff:.1}")}" US gal/h"</p>
+                                    <p>{if let Some(ff) = ff { format!("{ff:.1} US gal/h") } else { "— US gal/h".into() }}</p>
                                 </>
                             }.into_any()
                         } else {
                             view! {
                                 <>
                                     <p class="big mono">{format!("{bhp:.2}")}" % BHP · "{t_pen}" kt TAS "{c_loc.cruise_tas_fairing_penalty_suffix}</p>
-                                    <p>{format!("{ff:.1}")}" US gal/h"</p>
+                                    <p>{if let Some(ff) = ff { format!("{ff:.1} US gal/h") } else { "— US gal/h".into() }}</p>
                                 </>
                             }.into_any()
                         }}
                         {mt_prop.then(|| cr.mt_fig4_ktas_kt.map(|kt| view! {
                             <p class="readout-text mono">{format!("{}: {:.0} kt", c_loc.mt_fig4_ktas_compare, kt)}</p>
+                        }))}
+                        {gph_ooc.then(|| b.cruise_ooc.as_ref().map(|ooc| view! {
+                            <p class="error warn">{format_out_of_chart(locale, ooc)}</p>
                         }))}
                         <WarningsList locale=locale warnings=cr.warnings.clone()/>
                         {if mt_prop {
@@ -516,39 +521,42 @@ fn phase_results(
                 },
                 None => {
                     let c_loc = copy(locale);
+                    let mt_prop = inputs.propeller == PropellerKind::Mt175R;
                     if let Some(ooc) = &b.cruise_ooc {
+                        let msg = if mt_prop
+                            && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
+                            && ooc.label == "Fig 2 %BHP"
+                        {
+                            format_mt_cruise_bhp_not_achievable(
+                                locale,
+                                inputs.cruise_percent_bhp,
+                                45.0,
+                                75.0,
+                            )
+                        } else {
+                            format_out_of_chart(locale, ooc)
+                        };
+                        let bhp_line = (inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp)
+                            .then(|| {
+                                view! {
+                                    <p class="big mono">{format!("{:.2}", inputs.cruise_percent_bhp)}" % BHP"</p>
+                                }
+                            });
                         view! {
                             <div class="results-block">
-                                <p class="error warn">{format_out_of_chart(locale, ooc)}</p>
+                                {bhp_line}
+                                <p class="error warn">{msg}</p>
                             </div>
                         }
                         .into_any()
                     } else if b.cruise_bhp_not_achievable
                         && inputs.cruise_solve_mode == CruiseSolveMode::SetPercentBhp
+                        && !mt_prop
                     {
-                        let bhp_msg = if inputs.propeller == PropellerKind::Mt175R {
-                            let da = isa_troposphere_density_altitude_ft(
-                                inputs.cruise_pressure_alt_ft,
-                                inputs.cruise_oat_c,
-                            );
-                            let mt = Mt175rData::production();
-                            let rows = mt.fig4_rows();
-                            match (rmin_at_da(rows, da), rmax_at_da(rows, da)) {
-                                (Ok(rmin), Ok(rmax)) => format_mt_cruise_bhp_not_achievable(
-                                    locale,
-                                    inputs.cruise_percent_bhp,
-                                    rmin,
-                                    rmax,
-                                ),
-                                _ => c_loc.cruise_bhp_not_achievable.to_string(),
-                            }
-                        } else {
-                            c_loc.cruise_bhp_not_achievable.to_string()
-                        };
                         view! {
                             <div class="results-block">
                                 <p class="big mono">{format!("{:.2}", inputs.cruise_percent_bhp)}" % BHP"</p>
-                                <p class="error warn">{bhp_msg}</p>
+                                <p class="error warn">{c_loc.cruise_bhp_not_achievable}</p>
                             </div>
                         }
                         .into_any()

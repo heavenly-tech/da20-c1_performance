@@ -14,6 +14,9 @@ pub fn compute_endurance(
     inputs: &FlightInputs,
 ) -> Result<EnduranceResult, EnduranceError> {
     let cruise = compute_cruise(data, inputs).map_err(|_| EnduranceError::CruiseFailed)?;
+    if cruise.mt_gph_out_of_chart {
+        return Err(EnduranceError::CruiseFailed);
+    }
     let tas_chart = cruise.tas_chart_kt.unwrap_or(cruise.tas_kt);
     let usable = inputs.fuel_usable_us_gal;
     let reserve = inputs.fuel_reserve_us_gal;

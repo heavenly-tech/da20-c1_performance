@@ -43,17 +43,17 @@ pub struct Fig3TasLookup {
 
 fn fig2_curve_valid_at_da(pct_bhp: i32, da_ft: f64) -> bool {
     if pct_bhp == 75 {
-        da_ft <= FIG2_PCT75_DA_MAX_FT + CHART_EDGE_TOL
+        (-CHART_EDGE_TOL..=FIG2_PCT75_DA_MAX_FT + CHART_EDGE_TOL).contains(&da_ft)
     } else {
-        da_ft >= -CHART_EDGE_TOL && da_ft <= 12_000.0 + CHART_EDGE_TOL
+        (-CHART_EDGE_TOL..=12_000.0 + CHART_EDGE_TOL).contains(&da_ft)
     }
 }
 
 fn fig3_curve_valid_at_da(pct_bhp: i32, da_ft: f64) -> bool {
     if pct_bhp == 75 {
-        da_ft <= FIG3_PCT75_DA_MAX_FT + CHART_EDGE_TOL
+        (-CHART_EDGE_TOL..=FIG3_PCT75_DA_MAX_FT + CHART_EDGE_TOL).contains(&da_ft)
     } else {
-        da_ft >= -CHART_EDGE_TOL && da_ft <= 12_000.0 + CHART_EDGE_TOL
+        (-CHART_EDGE_TOL..=12_000.0 + CHART_EDGE_TOL).contains(&da_ft)
     }
 }
 
@@ -209,7 +209,7 @@ pub fn lookup_fig2_pct_at_rpm(data: &Mt175rData, da_ft: f64, rpm: f64) -> Option
             pairs.push((p, r));
         }
     }
-  pairs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    pairs.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     if pairs.is_empty() {
         return None;
     }
@@ -287,6 +287,12 @@ pub fn fig3_tas_at_da(data: &Mt175rData, pct_bhp: i32, da_ft: f64) -> Option<f64
         .cloned()
         .collect();
     sample_curve_f64(&samples, da_ft, |s| s.tas_kt.unwrap())
+}
+
+/// Full-throttle sample helper for curves stored under the Fig 3 map.
+pub fn fig3_named_tas_at_da(data: &Mt175rData, name: &str, da_ft: f64) -> Option<f64> {
+    let curve = data.fig3_curves().get(name)?;
+    sample_curve_f64(&curve.samples, da_ft, |s| s.tas_kt.unwrap())
 }
 
 /// Printed endpoints beyond digitized polylines (AFMS fig. 2, read from originals).

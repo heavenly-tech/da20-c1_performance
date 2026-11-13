@@ -672,6 +672,7 @@ fn build_cruise_result(
         mt_fig3_source: None,
         mt_fig4_ktas_kt: None,
         density_altitude_ft: None,
+        mt_gph_out_of_chart: false,
         warnings,
     })
 }

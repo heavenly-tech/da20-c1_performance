@@ -50,20 +50,20 @@ pub fn all_methods() -> Vec<MethodEntry> {
             limitations: CLIMB_DERIVED_ESTIMATE_NOTE,
         },
         MethodEntry {
-            id: "cruise_mt175r",
-            title: "MT 175 R cruise (AFMS E-1487)",
-            afm_reference: "AFMS E-1487 Figures 1–4",
-            summary: "PA + OAT → density altitude (ISA troposphere formula; Fig 1 example ≈7374 ft vs 7391 printed NWS). Chain: Fig 2 RPM/%BHP → Fig 3 TAS (max gross, no weight correction; cap at Full Throttle) → Fig 4 GPH only. Fig 4 KTAS comparison only. Wheel fairings ~−5% TAS; GPH not scaled.",
-            interpolation: "Tabla or Interpolado tags only. Off chart below 45% BHP, past 75% endpoint, right of Full Throttle/2800 RPM, Fig 2 RPM < 2200 or DA < 2000 ft for GPH/endurance/range.",
-            limitations: "Fig 4 GPH transcribed as printed; two doubtful cells at DA 10000/12000 RPM 2200.",
-        },
-        MethodEntry {
             id: "cruise",
             title: "Cruise performance (Table 3)",
             afm_reference: "AFM pages 5-14 / 5-15, Table 3",
             summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) is linear in PA between each row's first tabulated RPM; valid RPM is [rmin(PA), 2800]. Normalize s = (RPM−rmin)/(2800−rmin); on each bracketing row use RPM_row = rmin_row + s(2800−rmin_row), interpolate ΔISA then RPM on that ladder, then blend in PA. Set-%BHP inverts on [rmin(PA), 2800] only. Fairings: ~−5% TAS after lookup; GPH not scaled.",
             interpolation: "Tags: Tabla (printed node) or Interpolado only. Out of chart if PA, ΔISA, or RPM are outside the hull (e.g. 6500 ft: RPM < 2512.5).",
             limitations: CRUISE_TABLE3_GPH_NOTE,
+        },
+        MethodEntry {
+            id: "cruise_mt175r",
+            title: "MT 175 R cruise (AFMS E-1487)",
+            afm_reference: "AFMS E-1487 Figures 1–4",
+            summary: "PA + OAT → density altitude (ISA troposphere formula; Fig 1 example ≈7374 ft vs 7391 printed NWS). Chain: Fig 2 RPM/%BHP → Fig 3 TAS (max gross, no weight correction; cap at Full Throttle) → Fig 4 GPH only. Fig 4 KTAS comparison only. Wheel fairings ~−5% TAS; GPH not scaled.",
+            interpolation: "Tabla or Interpolado tags only. Off chart below 45% BHP, past 75% endpoint, right of Full Throttle/2800 RPM, Fig 2 RPM < 2200 or DA < 2000 ft for GPH/endurance/range.",
+            limitations: "Fig 4 GPH transcribed as printed; two doubtful cells at DA 10000/12000 RPM 2200.",
         },
         MethodEntry {
             id: "landing",

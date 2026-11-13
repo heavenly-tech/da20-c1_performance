@@ -281,7 +281,7 @@ pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle
 
     let takeoff_ooc = takeoff_ooc_from_err(takeoff_res.as_ref().err());
     let climb_ooc = climb_ooc_from_err(climb_res.as_ref().err());
-    let cruise_ooc = cruise_ooc_from_err(cruise_res.as_ref().err());
+    let cruise_ooc = cruise_ooc_from_result(&cruise_res);
     let landing_ooc = landing_ooc_from_err(landing_res.as_ref().err());
     let cruise_bhp_not_achievable = matches!(&cruise_res, Err(CruiseError::BhpNotAchievable));
 
@@ -292,7 +292,7 @@ pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle
         climb: climb_res.ok(),
         climb_out_of_chart: climb_ooc.is_some(),
         climb_ooc,
-        cruise: cruise_res.ok(),
+        cruise: cruise_res.as_ref().ok().cloned(),
         cruise_bhp_not_achievable,
         cruise_out_of_chart: cruise_ooc.is_some(),
         cruise_ooc,
@@ -300,7 +300,12 @@ pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle
         landing_out_of_chart: landing_ooc.is_some(),
         landing_ooc,
         wind: da20_core::wind::compute_wind(data, inputs).ok(),
-        endurance: None,
+        endurance: match &cruise_res {
+            Ok(c) if !c.mt_gph_out_of_chart => {
+                da20_core::endurance::compute_endurance(data, inputs).ok()
+            }
+            _ => None,
+        },
     }
 }
 
@@ -318,12 +323,19 @@ fn climb_ooc_from_err(err: Option<&ClimbError>) -> Option<ChartOutOfRange> {
     }
 }
 
-fn cruise_ooc_from_err(err: Option<&CruiseError>) -> Option<ChartOutOfRange> {
-    match err {
-        Some(CruiseError::OutOfChart { axis, min, max }) => Some(ChartOutOfRange {
+fn cruise_ooc_from_result(
+    res: &Result<da20_core::types::CruiseResult, CruiseError>,
+) -> Option<ChartOutOfRange> {
+    match res {
+        Err(CruiseError::OutOfChart { axis, min, max }) => Some(ChartOutOfRange {
             label: axis,
             min: *min,
             max: *max,
+        }),
+        Ok(c) if c.mt_gph_out_of_chart => Some(ChartOutOfRange {
+            label: "Fig 4 GPH",
+            min: da20_core::chart_bounds::limits::FIG4_DA_FT.0,
+            max: 2200.0,
         }),
         _ => None,
     }
