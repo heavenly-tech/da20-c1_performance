@@ -154,6 +154,9 @@ pub struct FlightInputs {
     pub wind_strip_crosswind_clamped: bool,
     #[serde(default)]
     pub propeller: PropellerKind,
+    /// AFM §5.3.12 NOTE: 1000 RPM ground idle increases landing distance ~5% / ground roll ~7%.
+    #[serde(default)]
+    pub landing_ground_idle_1000_rpm: bool,
 }
 
 fn default_fuel_usable() -> f64 {
@@ -203,6 +206,7 @@ impl Default for FlightInputs {
             fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
             wind_strip_crosswind_clamped: false,
             propeller: PropellerKind::default(),
+            landing_ground_idle_1000_rpm: false,
         }
     }
 }
@@ -405,8 +409,16 @@ pub struct LandingResult {
     pub provenance: ProvenanceBlock,
     #[serde(default)]
     pub afm_lookup_tag: AfmLookupTag,
+    /// Ground roll (ft), including optional ground-idle NOTE factors.
     pub ground_roll_ft: f64,
+    /// Distance over 50 ft (ft), including optional ground-idle NOTE factors.
     pub distance_over_50ft_ft: f64,
+    /// Table 4 interpolated ground roll before ground-idle correction (if applied).
+    #[serde(default)]
+    pub ground_roll_chart_ft: Option<f64>,
+    /// Table 4 interpolated 50 ft distance before ground-idle correction (if applied).
+    #[serde(default)]
+    pub distance_over_50ft_chart_ft: Option<f64>,
     pub wind_correction_ft: f64,
     #[serde(default)]
     pub table4_source: Option<Table4SourceTrace>,

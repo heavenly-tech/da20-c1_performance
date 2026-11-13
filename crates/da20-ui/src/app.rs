@@ -22,11 +22,13 @@ pub fn App() -> impl IntoView {
     let theme = RwSignal::new(ThemePreference::load_initial());
     let palette = RwSignal::new(PaletteChoice::for_theme(theme.get_untracked()));
     let data = RwSignal::new(PerformanceData::production());
-    let flight_prefs = FlightPrefs::load();
-    let inputs = RwSignal::new(FlightInputs {
-        propeller: flight_prefs.propeller,
-        wheel_fairings_installed: flight_prefs.wheel_fairings_installed,
-        ..Default::default()
+    let flight_prefs = RwSignal::new(FlightPrefs::load());
+    let inputs = RwSignal::new({
+        let mut i = FlightInputs::default();
+        flight_prefs
+            .get_untracked()
+            .apply_to_inputs(&data.get_untracked(), &mut i);
+        i
     });
     let store = RwSignal::new(ReadingsStore::load());
     let takeoff_prefs = RwSignal::new(TakeoffPrefs::load());
@@ -74,7 +76,7 @@ pub fn App() -> impl IntoView {
                 <Nav phase=phase locale=locale theme=theme palette=palette/>
             </header>
             <main class="main">
-                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store takeoff_prefs=takeoff_prefs/>
+                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store takeoff_prefs=takeoff_prefs flight_prefs=flight_prefs/>
             </main>
             <footer class="footer">
                 <p>

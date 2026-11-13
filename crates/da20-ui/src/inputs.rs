@@ -13,8 +13,12 @@ use da20_core::wind_format::{format_wind, parse_wind};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 
+use crate::ground_oat::display_disa_c;
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
-use crate::prefs::save_flight_prefs_from_inputs;
+use crate::prefs::{
+    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, snapshot_and_save_flight_prefs,
+    sync_ground_to_takeoff_inputs, FlightPrefs,
+};
 
 /// Takeoff vs climb vs landing (full) airfield blocks.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -86,11 +90,52 @@ pub fn NumField(
 }
 
 #[component]
+pub fn SharedGroundInputs(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
+) -> impl IntoView {
+    view! {
+        {move || {
+            let c = copy(locale.get());
+            view! {
+                <p class="lab"><strong>{c.ground_section_title}</strong></p>
+                <NumField label=move || c.ground_elevation_ft.to_string()
+                    min=limits::FIG52_PA_FT.0
+                    max=limits::FIG52_PA_FT.1
+                    get=move || flight_prefs.get().ground_elevation_ft
+                    set=move |v| {
+                        flight_prefs.update(|p| {
+                            p.ground_elevation_ft = v;
+                            inputs.update(|i| sync_ground_to_takeoff_inputs(i, p));
+                            p.save();
+                        });
+                    }/>
+                <NumField label=move || c.ground_oat_c.to_string()
+                    display_fraction_digits=Some(1)
+                    min=limits::FIG52_OAT_C.0
+                    max=limits::FIG52_OAT_C.1
+                    get=move || flight_prefs.get().ground_oat_c
+                    set=move |v| {
+                        flight_prefs.update(|p| {
+                            p.ground_oat_c = v;
+                            inputs.update(|i| sync_ground_to_takeoff_inputs(i, p));
+                            p.save();
+                        });
+                    }/>
+            }
+        }}
+    }
+}
+
+#[component]
 pub fn SharedAirfieldInputs(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
     chart_phase: Option<ChartPhase>,
     #[prop(default = AirfieldInputsMode::Full)] mode: AirfieldInputsMode,
+    #[prop(default = false)] hide_pa_oat: bool,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -135,21 +180,39 @@ pub fn SharedAirfieldInputs(
                 },
             };
             view! {
-                <NumField label=move || c.pressure_altitude_ft.to_string()
-                    min=pa_min
-                    max=pa_max
-                    get=move || inputs.get().pressure_altitude_input_ft
-                    set=move |v| {
-                        inputs.update(|i| {
-                            i.pressure_altitude_input_ft = v;
-                            clear_pa_override(i);
-                        });
-                    }/>
-                <NumField label=move || c.oat.to_string()
-                    min=oat_min
-                    max=oat_max
-                    get=move || inputs.get().oat_c
-                    set=move |v| inputs.update(|i| i.oat_c = v)/>
+                {(!hide_pa_oat).then(|| view! {
+                    <NumField label=move || c.pressure_altitude_ft.to_string()
+                        min=pa_min
+                        max=pa_max
+                        get=move || inputs.get().pressure_altitude_input_ft
+                        set=move |v| {
+                            inputs.update(|i| {
+                                i.pressure_altitude_input_ft = v;
+                                clear_pa_override(i);
+                            });
+                            flight_prefs.update(|p| {
+                                p.ground_elevation_ft = v;
+                                if !p.cruise_oat_manual {
+                                    inputs.update(|i| apply_estimated_cruise_oat(i, p));
+                                }
+                                p.save();
+                            });
+                        }/>
+                    <NumField label=move || c.oat.to_string()
+                        min=oat_min
+                        max=oat_max
+                        get=move || inputs.get().oat_c
+                        set=move |v| {
+                            inputs.update(|i| i.oat_c = v);
+                            flight_prefs.update(|p| {
+                                p.ground_oat_c = v;
+                                if !p.cruise_oat_manual {
+                                    inputs.update(|i| sync_ground_to_takeoff_inputs(i, p));
+                                }
+                                p.save();
+                            });
+                        }/>
+                })}
                 {(mode == AirfieldInputsMode::Takeoff || mode == AirfieldInputsMode::Full).then(|| {
                     view! {
                         <div class="f">
@@ -201,6 +264,7 @@ pub fn SharedAirfieldInputs(
 pub fn SharedPropellerSelector(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -213,7 +277,7 @@ pub fn SharedPropellerSelector(
                             class:on=move || inputs.get().propeller == PropellerKind::Sensenich
                             on:click=move |_| inputs.update(|i| {
                                 i.propeller = PropellerKind::Sensenich;
-                                save_flight_prefs_from_inputs(i);
+                                flight_prefs.update(|p| snapshot_and_save_flight_prefs(i, p));
                             })>
                             {c.propeller_sensenich}
                         </button>
@@ -221,9 +285,54 @@ pub fn SharedPropellerSelector(
                             class:on=move || inputs.get().propeller == PropellerKind::Mt175R
                             on:click=move |_| inputs.update(|i| {
                                 i.propeller = PropellerKind::Mt175R;
-                                save_flight_prefs_from_inputs(i);
+                                flight_prefs.update(|p| snapshot_and_save_flight_prefs(i, p));
                             })>
                             {c.propeller_mt175r}
+                        </button>
+                    </div>
+                </div>
+            }
+        }}
+    }
+}
+
+#[component]
+pub fn SharedLandingGroundIdleToggle(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
+) -> impl IntoView {
+    view! {
+        {move || {
+            let c = copy(locale.get());
+            let on = inputs.get().landing_ground_idle_1000_rpm;
+            view! {
+                <div class="f">
+                    <label>{c.landing_ground_idle_toggle}</label>
+                    <div class="toggle-row wheel-fairings-row">
+                        <button type="button" class="btn g"
+                            class:on=move || !on
+                            on:click=move |_| {
+                                flight_prefs.update(|p| {
+                                    inputs.update(|i| {
+                                        i.landing_ground_idle_1000_rpm = false;
+                                        snapshot_and_save_flight_prefs(i, p);
+                                    });
+                                });
+                            }>
+                            {c.landing_ground_idle_off}
+                        </button>
+                        <button type="button" class="btn g"
+                            class:on=move || on
+                            on:click=move |_| {
+                                flight_prefs.update(|p| {
+                                    inputs.update(|i| {
+                                        i.landing_ground_idle_1000_rpm = true;
+                                        snapshot_and_save_flight_prefs(i, p);
+                                    });
+                                });
+                            }>
+                            {c.landing_ground_idle_on}
                         </button>
                     </div>
                 </div>
@@ -237,6 +346,7 @@ pub fn SharedPropellerSelector(
 pub fn SharedWheelFairingToggle(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -249,7 +359,7 @@ pub fn SharedWheelFairingToggle(
                             class:on=move || inputs.get().wheel_fairings_installed
                             on:click=move |_| inputs.update(|i| {
                                 i.wheel_fairings_installed = true;
-                                save_flight_prefs_from_inputs(i);
+                                flight_prefs.update(|p| snapshot_and_save_flight_prefs(i, p));
                             })>
                             {c.wheel_fairings_installed_yes}
                         </button>
@@ -257,7 +367,7 @@ pub fn SharedWheelFairingToggle(
                             class:on=move || !inputs.get().wheel_fairings_installed
                             on:click=move |_| inputs.update(|i| {
                                 i.wheel_fairings_installed = false;
-                                save_flight_prefs_from_inputs(i);
+                                flight_prefs.update(|p| snapshot_and_save_flight_prefs(i, p));
                             })>
                             {c.wheel_fairings_installed_no}
                         </button>
@@ -269,43 +379,86 @@ pub fn SharedWheelFairingToggle(
 }
 
 #[component]
-pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) -> impl IntoView {
+pub fn CruiseInputs(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
+) -> impl IntoView {
     let set_cruise_oat_from_isa = move |deviation: f64| {
-        inputs.update(|i| {
-            i.cruise_oat_c = isa_temp_c_at_pa(i.cruise_pressure_alt_ft) + deviation;
+        flight_prefs.update(|p| {
+            p.cruise_oat_manual = true;
+            inputs.update(|i| {
+                let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
+                i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, isa + deviation);
+            });
+            p.save();
         });
     };
     view! {
         {move || {
             let c = copy(locale.get());
             let mt = inputs.get().propeller == PropellerKind::Mt175R;
+            let manual_oat = flight_prefs.get().cruise_oat_manual;
+            let disa = display_disa_c(
+                inputs.get().cruise_oat_c,
+                inputs.get().cruise_pressure_alt_ft,
+            );
             view! {
                 <NumField label=move || c.cruise_pa.to_string()
                     min=limits::TABLE3_PA_FT.0
                     max=limits::TABLE3_PA_FT.1
                     get=move || inputs.get().cruise_pressure_alt_ft
-                    set=move |v| inputs.update(|i| {
-                        i.cruise_pressure_alt_ft = v;
-                        if i.propeller == PropellerKind::Sensenich {
-                            let isa = isa_temp_c_at_pa(v);
-                            let (dmin, dmax) = limits::TABLE3_DISA_C;
-                            i.cruise_oat_c = i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
-                        }
-                    })/>
-                <NumField label=move || c.cruise_oat.to_string()
+                    set=move |v| {
+                        flight_prefs.update(|p| {
+                            inputs.update(|i| {
+                                i.cruise_pressure_alt_ft = v;
+                                if !p.cruise_oat_manual {
+                                    apply_estimated_cruise_oat(i, p);
+                                } else if i.propeller == PropellerKind::Sensenich {
+                                    let isa = isa_temp_c_at_pa(v);
+                                    let (dmin, dmax) = limits::TABLE3_DISA_C;
+                                    i.cruise_oat_c =
+                                        i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
+                                }
+                            });
+                            p.save();
+                        });
+                    }/>
+                <NumField label=move || {
+                    if manual_oat {
+                        c.cruise_oat.to_string()
+                    } else {
+                        c.cruise_oat_estimated_label.to_string()
+                    }
+                }
                     display_fraction_digits=Some(1)
                     min=limits::FIG52_OAT_C.0
                     max=limits::FIG52_OAT_C.1
                     get=move || inputs.get().cruise_oat_c
-                    set=move |v| inputs.update(|i| {
-                        if i.propeller == PropellerKind::Mt175R {
-                            i.cruise_oat_c = v.clamp(limits::FIG52_OAT_C.0, limits::FIG52_OAT_C.1);
-                        } else {
-                            let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
-                            let (dmin, dmax) = limits::TABLE3_DISA_C;
-                            i.cruise_oat_c = v.clamp(isa + dmin, isa + dmax);
-                        }
-                    })/>
+                    set=move |v| {
+                        flight_prefs.update(|p| {
+                            p.cruise_oat_manual = true;
+                            inputs.update(|i| {
+                                i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, v);
+                            });
+                            p.save();
+                        });
+                    }/>
+                <p class="lab readout-text">
+                    {c.cruise_disa_readout}": "{format!("{:.1}", disa)}" °C"
+                </p>
+                {manual_oat.then(|| view! {
+                    <button type="button" class="btn g"
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                p.cruise_oat_manual = false;
+                                inputs.update(|i| apply_estimated_cruise_oat(i, p));
+                                p.save();
+                            });
+                        }>
+                        {c.cruise_oat_use_estimate}
+                    </button>
+                })}
                 {mt.then(|| {
                     let da = isa_troposphere_density_altitude_ft(
                         inputs.get().cruise_pressure_alt_ft,
@@ -324,12 +477,26 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                 <div class="toggle-row">
                     <button type="button" class="btn g"
                         class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm
-                        on:click=move |_| inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetRpm)>
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetRpm);
+                                p.mark_cruise_solve_saved(CruiseSolveMode::SetRpm);
+                                p.save();
+                            });
+                        }>
                         {c.cruise_mode_set_rpm}
                     </button>
                     <button type="button" class="btn g"
                         class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetPercentBhp
-                        on:click=move |_| inputs.update(|i| i.cruise_solve_mode = CruiseSolveMode::SetPercentBhp)>
+                        on:click=move |_| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| {
+                                    i.cruise_solve_mode = CruiseSolveMode::SetPercentBhp
+                                });
+                                p.mark_cruise_solve_saved(CruiseSolveMode::SetPercentBhp);
+                                p.save();
+                            });
+                        }>
                         {c.cruise_mode_set_bhp}
                     </button>
                 </div>
@@ -344,7 +511,13 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                         view! {
                             <NumField label=move || c.cruise_pct_bhp.to_string()
                                 get=move || inputs.get().cruise_percent_bhp
-                                set=move |v| inputs.update(|i| i.cruise_percent_bhp = v)/>
+                                set=move |v| {
+                                    flight_prefs.update(|p| {
+                                        inputs.update(|i| i.cruise_percent_bhp = v);
+                                        p.mark_cruise_percent_saved(v);
+                                        p.save();
+                                    });
+                                }/>
                         }.into_any()
                     }
                 }}
