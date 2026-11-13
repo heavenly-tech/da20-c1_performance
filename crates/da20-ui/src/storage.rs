@@ -273,6 +273,53 @@ pub struct SavedBundle {
     pub endurance: Option<da20_core::types::EnduranceResult>,
 }
 
+pub fn compute_all_isolated(
+    data: &PerformanceData,
+    prefs: &crate::prefs::FlightPrefs,
+) -> SavedBundle {
+    use crate::phase_state::{
+        assemble_climb_inputs, assemble_cruise_inputs, assemble_endurance_inputs,
+        assemble_landing_inputs, assemble_takeoff_inputs,
+    };
+    use da20_core::endurance::compute_endurance;
+
+    let takeoff_in = assemble_takeoff_inputs(prefs);
+    let climb_in = assemble_climb_inputs(prefs);
+    let cruise_in = assemble_cruise_inputs(prefs, data);
+    let landing_in = assemble_landing_inputs(prefs);
+    let endurance_in = assemble_endurance_inputs(prefs, data);
+
+    let takeoff_res = da20_core::takeoff::compute_takeoff(data, &takeoff_in);
+    let climb_res =
+        da20_core::climb::compute_climb(data, &climb_in, prefs.climb.climb_target_altitude_ft);
+    let cruise_res = da20_core::cruise::compute_cruise(data, &cruise_in);
+    let landing_res = da20_core::landing::compute_landing(data, &landing_in);
+
+    let takeoff_ooc = takeoff_ooc_from_err(takeoff_res.as_ref().err());
+    let climb_ooc = climb_ooc_from_err(climb_res.as_ref().err());
+    let cruise_ooc = cruise_ooc_from_err(cruise_res.as_ref().err());
+    let landing_ooc = landing_ooc_from_err(landing_res.as_ref().err());
+    let cruise_bhp_not_achievable = matches!(&cruise_res, Err(CruiseError::BhpNotAchievable));
+
+    SavedBundle {
+        takeoff: takeoff_res.ok(),
+        takeoff_out_of_chart: takeoff_ooc.is_some(),
+        takeoff_ooc,
+        climb: climb_res.ok(),
+        climb_out_of_chart: climb_ooc.is_some(),
+        climb_ooc,
+        cruise: cruise_res.ok(),
+        cruise_bhp_not_achievable,
+        cruise_out_of_chart: cruise_ooc.is_some(),
+        cruise_ooc,
+        landing: landing_res.ok(),
+        landing_out_of_chart: landing_ooc.is_some(),
+        landing_ooc,
+        wind: da20_core::wind::compute_wind(data, &takeoff_in).ok(),
+        endurance: compute_endurance(data, &endurance_in).ok(),
+    }
+}
+
 pub fn compute_all(data: &PerformanceData, inputs: &FlightInputs) -> SavedBundle {
     let takeoff_res = da20_core::takeoff::compute_takeoff(data, inputs);
     let climb_res = da20_core::climb::compute_climb(data, inputs, inputs.cruise_pressure_alt_ft);
@@ -570,5 +617,48 @@ mod tests {
         let s = format_readout_timestamp("2026-01-01T12:30:00.000Z", Locale::En);
         assert!(!s.ends_with('Z'));
         assert!(s.contains("2026"));
+    }
+
+    #[test]
+    fn tab_prefs_edit_reload_matches_compute_all_isolated() {
+        use crate::inputs::{
+            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude, AirfieldInputsMode,
+        };
+        use crate::phase_state::{assemble_takeoff_inputs, hydrate_tab_inputs};
+        use crate::phases::Phase;
+        use crate::prefs::FlightPrefs;
+        use da20_core::takeoff::compute_takeoff;
+        use da20_core::types::ChartPhase;
+
+        let data = PerformanceData::production();
+        let mut prefs = FlightPrefs::default();
+        let mut inputs = FlightInputs::default();
+        hydrate_tab_inputs(Phase::Takeoff, &prefs, &data, &mut inputs);
+        shared_airfield_set_pressure_altitude(
+            AirfieldInputsMode::Takeoff,
+            Some(ChartPhase::Takeoff),
+            &mut prefs,
+            &mut inputs,
+            4200.0,
+        );
+        shared_airfield_set_oat_c(AirfieldInputsMode::Takeoff, &mut prefs, &mut inputs, 12.0);
+        crate::prefs::persist_takeoff_tab_from_inputs(&mut prefs, &inputs);
+
+        let roll_direct = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs))
+            .unwrap()
+            .ground_roll_ft;
+        let bundle_live = compute_all_isolated(&data, &prefs);
+        assert!(
+            (bundle_live.takeoff.as_ref().unwrap().ground_roll_ft - roll_direct).abs()
+                < f64::EPSILON
+        );
+
+        let json = serde_json::to_string(&prefs).expect("serialize prefs");
+        let loaded: FlightPrefs = serde_json::from_str(&json).expect("deserialize prefs");
+        let bundle_reload = compute_all_isolated(&data, &loaded);
+        assert_eq!(
+            bundle_live.takeoff.as_ref().unwrap().ground_roll_ft,
+            bundle_reload.takeoff.as_ref().unwrap().ground_roll_ft
+        );
     }
 }

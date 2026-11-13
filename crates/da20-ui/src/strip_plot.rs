@@ -2,7 +2,8 @@
 
 use std::collections::HashSet;
 
-use da20_core::altitude::{effective_pressure_altitude_ft, set_pa_override};
+use da20_core::altitude::effective_pressure_altitude_ft;
+use da20_core::chart_bounds::limits;
 use da20_core::climb::compute_climb;
 use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
 use da20_core::rev29::engine::lb_to_kg;
@@ -35,7 +36,13 @@ use crate::i18n::{
     format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
     format_takeoff_strip_pa_trace_label, Locale,
 };
+use crate::inputs::{
+    shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
+    takeoff_apply_wind_from_strip, takeoff_set_obstacle_height_m, takeoff_set_weight_lb,
+    AirfieldInputsMode,
+};
 use crate::phase_readouts::overlay_trace_var;
+use crate::prefs::FlightPrefs;
 use crate::storage::compute_all;
 use crate::storage::ReadingsStore;
 
@@ -267,22 +274,46 @@ pub fn StripHandPlot(
     kind: StripKind,
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
+    #[prop(optional)] flight_prefs: Option<RwSignal<crate::prefs::FlightPrefs>>,
+    #[prop(optional)] sync_phase: Option<crate::phases::Phase>,
     #[prop(optional)] store: Option<RwSignal<ReadingsStore>>,
     #[prop(optional)] phase_key: Option<String>,
     #[prop(optional)] overlay_ids: Option<RwSignal<HashSet<String>>>,
 ) -> impl IntoView {
     let dragging = RwSignal::new(false);
 
+    let apply_strip_pointer = move |sx: f64, sy: f64| {
+        let perf = data.get();
+        if let (Some(fp), Some(phase)) = (flight_prefs, sync_phase) {
+            let (mode, chart_phase) = crate::inputs::strip_airfield_target(phase);
+            fp.update(|p| {
+                inputs.update(|i| {
+                    apply_strip_hit(kind, sx, sy, &perf, mode, chart_phase, i, p);
+                });
+            });
+        } else {
+            inputs.update(|i| {
+                apply_strip_hit_nprefs(kind, sx, sy, &perf, i);
+            });
+        }
+    };
+
     let on_pointer_down = move |ev: web_sys::PointerEvent| {
         dragging.set(true);
         if let Some((sx, sy)) = svg_coords(&ev) {
-            apply_hit(kind, sx, sy, data.get(), inputs);
+            apply_strip_pointer(sx, sy);
         }
         capture_pointer(&ev);
     };
     let on_pointer_up = move |ev: web_sys::PointerEvent| {
         if dragging.get() {
             inputs.update(round_after_chart_drag);
+            if let (Some(fp), Some(phase)) = (flight_prefs, sync_phase) {
+                fp.update(|p| {
+                    crate::phase_state::persist_tab_inputs(phase, p, &inputs.get_untracked());
+                    p.save();
+                });
+            }
         }
         dragging.set(false);
         release_pointer(&ev);
@@ -292,7 +323,7 @@ pub fn StripHandPlot(
             return;
         }
         if let Some((sx, sy)) = svg_coords(&ev) {
-            apply_hit(kind, sx, sy, data.get(), inputs);
+            apply_strip_pointer(sx, sy);
         }
     };
 
@@ -307,6 +338,16 @@ pub fn StripHandPlot(
                 on:pointerleave=move |_| {
                     if dragging.get() {
                         inputs.update(round_after_chart_drag);
+                        if let (Some(fp), Some(phase)) = (flight_prefs, sync_phase) {
+                            fp.update(|p| {
+                                crate::phase_state::persist_tab_inputs(
+                                    phase,
+                                    p,
+                                    &inputs.get_untracked(),
+                                );
+                                p.save();
+                            });
+                        }
                     }
                     dragging.set(false);
                 }
@@ -863,62 +904,77 @@ fn panel_backgrounds(locale: Locale) -> impl IntoView {
     }
 }
 
-fn apply_hit(
+/// Strip drag with tab prefs — same setters as the numeric fields (live `compute_all_isolated`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_strip_hit(
     kind: StripKind,
     sx: f64,
     sy: f64,
-    data: PerformanceData,
-    inputs: RwSignal<FlightInputs>,
+    data: &PerformanceData,
+    mode: AirfieldInputsMode,
+    chart_phase: Option<ChartPhase>,
+    inputs: &mut FlightInputs,
+    prefs: &mut FlightPrefs,
 ) {
     let inner = data.inner();
     match kind {
         StripKind::Takeoff => {
             if (TAKEOFF_OAT.x..TAKEOFF_OAT.x + TAKEOFF_OAT.w).contains(&sx) {
-                let oat = (sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0;
+                let oat = ((sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0)
+                    .clamp(limits::FIG54_OAT_C.0, limits::FIG54_OAT_C.1);
                 let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
-                let pa = lerp_axis(&inner.to_pa.value, ny);
-                inputs.update(|i| {
-                    i.oat_c = oat;
-                    set_pa_override(i, pa, ChartPhase::Takeoff);
-                });
+                let pa = lerp_axis(&inner.to_pa.value, ny)
+                    .clamp(limits::FIG54_PA_FT.0, limits::FIG54_PA_FT.1);
+                shared_airfield_set_pressure_altitude(mode, chart_phase, prefs, inputs, pa);
+                shared_airfield_set_oat_c(mode, prefs, inputs, oat);
             } else if (TAKEOFF_WEIGHT.x..TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w).contains(&sx) {
                 let kg = defaults::TAKEOFF_CHART_WEIGHT_KG
                     - (sx - TAKEOFF_WEIGHT.x) / TAKEOFF_WEIGHT.w
                         * (defaults::TAKEOFF_CHART_WEIGHT_KG - 600.0);
-                inputs.update(|i| i.weight_lb = kg / 0.45359237);
+                takeoff_set_weight_lb(prefs, inputs, kg / 0.45359237);
             } else if (TAKEOFF_WIND.x..=TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx) {
-                inputs.update(|i| {
-                    let Some(rwy) = da20_core::wind::runway_heading_deg(&i.runway) else {
-                        return;
-                    };
-                    let Some((dir, speed, clamp)) =
-                        back_solve_takeoff_wind_from_strip_x(sx, i.wind_dir_deg, rwy)
-                    else {
-                        return;
-                    };
-                    i.wind_dir_deg = dir;
-                    i.wind_speed_kt = speed;
-                    i.wind_strip_crosswind_clamped = clamp;
-                });
+                let Some(rwy) = da20_core::wind::runway_heading_deg(&inputs.runway) else {
+                    return;
+                };
+                let Some((dir, speed, clamp)) =
+                    back_solve_takeoff_wind_from_strip_x(sx, inputs.wind_dir_deg, rwy)
+                else {
+                    return;
+                };
+                takeoff_apply_wind_from_strip(prefs, inputs, dir, speed, clamp);
             } else if (TAKEOFF_OBS.x..TAKEOFF_OBS.x + TAKEOFF_OBS.w).contains(&sx) {
                 let obs = (sx - TAKEOFF_OBS.x) / TAKEOFF_OBS.w * defaults::OBSTACLE_HEIGHT_MAX_M;
-                inputs.update(|i| {
-                    i.obstacle_height_m = obs.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
-                });
+                takeoff_set_obstacle_height_m(prefs, inputs, obs);
             }
         }
         StripKind::Climb => {
             if (CLIMB_EQ.x..CLIMB_EQ.x + CLIMB_EQ.w).contains(&sx) {
-                let oat = (sx - CLIMB_EQ.x) / CLIMB_EQ.w * 75.0 - 20.0;
+                let oat = ((sx - CLIMB_EQ.x) / CLIMB_EQ.w * 75.0 - 20.0)
+                    .clamp(limits::FIG52_OAT_C.0, limits::FIG52_OAT_C.1);
                 let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
-                let pa = lerp_axis(&inner.fan_pa.value, ny);
-                inputs.update(|i| {
-                    i.oat_c = oat;
-                    set_pa_override(i, pa, ChartPhase::Climb);
-                });
+                let pa = lerp_axis(&inner.fan_pa.value, ny)
+                    .clamp(limits::FIG52_PA_FT.0, limits::FIG52_PA_FT.1);
+                shared_airfield_set_pressure_altitude(mode, chart_phase, prefs, inputs, pa);
+                shared_airfield_set_oat_c(mode, prefs, inputs, oat);
             }
         }
     }
+}
+
+/// Tests and legacy paths without tab prefs (inputs signal only).
+fn apply_strip_hit_nprefs(
+    kind: StripKind,
+    sx: f64,
+    sy: f64,
+    data: &PerformanceData,
+    inputs: &mut FlightInputs,
+) {
+    let mut prefs = FlightPrefs::default();
+    let (mode, chart_phase) = match kind {
+        StripKind::Takeoff => (AirfieldInputsMode::Takeoff, Some(ChartPhase::Takeoff)),
+        StripKind::Climb => (AirfieldInputsMode::Climb, Some(ChartPhase::Climb)),
+    };
+    apply_strip_hit(kind, sx, sy, data, mode, chart_phase, inputs, &mut prefs);
 }
 
 fn lerp_axis(axis: &[f64], n: f64) -> f64 {
@@ -1149,6 +1205,103 @@ mod strip_drag_tests {
         let comp = da20_core::wind::wind_components(d, s, rwy);
         let (_, tw_out) = da20_core::wind::headwind_tailwind_kt(&comp);
         assert!((tw_out - tw).abs() < 0.15, "tw_out={tw_out} target={tw}");
+    }
+
+    #[test]
+    fn takeoff_strip_pa_drag_matches_typed_setter_and_compute() {
+        use crate::inputs::{
+            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude, AirfieldInputsMode,
+        };
+        use crate::phase_state::{assemble_takeoff_inputs, hydrate_tab_inputs};
+        use crate::phases::Phase;
+        use crate::prefs::FlightPrefs;
+        use da20_core::takeoff::compute_takeoff;
+        use da20_core::types::ChartPhase;
+
+        let data = PerformanceData::production();
+        let inner = data.inner();
+        let sx = TAKEOFF_OAT.x + TAKEOFF_OAT.w * 0.4;
+        let sy = STRIP_TOP + (STRIP_BOTTOM - STRIP_TOP) * 0.35;
+        let oat = ((sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0)
+            .clamp(limits::FIG54_OAT_C.0, limits::FIG54_OAT_C.1);
+        let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
+        let pa = super::lerp_axis(&inner.to_pa.value, ny)
+            .clamp(limits::FIG54_PA_FT.0, limits::FIG54_PA_FT.1);
+
+        let mut prefs_drag = FlightPrefs::default();
+        let mut inputs_drag = FlightInputs::default();
+        hydrate_tab_inputs(Phase::Takeoff, &prefs_drag, &data, &mut inputs_drag);
+        apply_strip_hit(
+            StripKind::Takeoff,
+            sx,
+            sy,
+            &data,
+            AirfieldInputsMode::Takeoff,
+            Some(ChartPhase::Takeoff),
+            &mut inputs_drag,
+            &mut prefs_drag,
+        );
+
+        let mut prefs_type = FlightPrefs::default();
+        let mut inputs_type = FlightInputs::default();
+        hydrate_tab_inputs(Phase::Takeoff, &prefs_type, &data, &mut inputs_type);
+        shared_airfield_set_pressure_altitude(
+            AirfieldInputsMode::Takeoff,
+            Some(ChartPhase::Takeoff),
+            &mut prefs_type,
+            &mut inputs_type,
+            pa,
+        );
+        shared_airfield_set_oat_c(
+            AirfieldInputsMode::Takeoff,
+            &mut prefs_type,
+            &mut inputs_type,
+            oat,
+        );
+
+        assert_eq!(
+            prefs_drag.takeoff.pressure_altitude_ft,
+            prefs_type.takeoff.pressure_altitude_ft
+        );
+        assert!((prefs_drag.takeoff.oat_c - prefs_type.takeoff.oat_c).abs() < f64::EPSILON);
+
+        let roll_drag = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs_drag))
+            .unwrap()
+            .ground_roll_ft;
+        let roll_type = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs_type))
+            .unwrap()
+            .ground_roll_ft;
+        assert!((roll_drag - roll_type).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn climb_strip_pa_drag_leaves_takeoff_tab_unchanged() {
+        use crate::phase_state::hydrate_tab_inputs;
+        use crate::phases::Phase;
+        use crate::prefs::FlightPrefs;
+
+        let data = PerformanceData::production();
+        let mut prefs = FlightPrefs::default();
+        prefs.takeoff.pressure_altitude_ft = 2130.0;
+        prefs.takeoff.oat_c = 20.0;
+        let mut inputs = FlightInputs::default();
+        hydrate_tab_inputs(Phase::Climb, &prefs, &data, &mut inputs);
+        let sx = CLIMB_EQ.x + CLIMB_EQ.w * 0.5;
+        let sy = STRIP_TOP + (STRIP_BOTTOM - STRIP_TOP) * 0.2;
+        apply_strip_hit(
+            StripKind::Climb,
+            sx,
+            sy,
+            &data,
+            AirfieldInputsMode::Climb,
+            Some(ChartPhase::Climb),
+            &mut inputs,
+            &mut prefs,
+        );
+        assert_eq!(prefs.takeoff.pressure_altitude_ft, 2130.0);
+        assert_eq!(prefs.takeoff.oat_c, 20.0);
+        assert!(prefs.climb.pa_override.is_some());
+        assert!((prefs.climb.pa_override.as_ref().unwrap().pa_ft - 2130.0).abs() > 100.0);
     }
 
     #[test]

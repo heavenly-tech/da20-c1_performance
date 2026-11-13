@@ -16,6 +16,12 @@ pub const LANDING_TABLE_50FT_M_NOTE: &str =
 pub const LANDING_NO_CORRECTIONS_NOTE: &str =
     "Table 4 has no wind, temperature, or weight corrections — values are pressure-altitude lookup only.";
 
+pub const LANDING_GROUND_IDLE_1000_NOTE: &str =
+    "AFM DA202-C1 §5.3.12 Landing Distance, p. 5-17 NOTE: Aircraft with ground idle speed set to 1000 RPM, landing distance increased approx. 5% and ground roll increased approx. 7%.";
+
+pub const GROUND_IDLE_1000_GROUND_ROLL_FACTOR: f64 = 1.07;
+pub const GROUND_IDLE_1000_50FT_FACTOR: f64 = 1.05;
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum LandingError {
     #[error(transparent)]
@@ -121,7 +127,7 @@ pub fn compute_landing(
     inputs: &FlightInputs,
 ) -> Result<LandingResult, LandingError> {
     let pa = effective_pressure_altitude_ft(inputs, Some(crate::types::ChartPhase::Landing));
-    let (roll_ft, over_50_ft, mut warnings) =
+    let (roll_chart_ft, over_chart_ft, mut warnings) =
         landing_lookup_ft(data.inner(), pa).map_err(LandingError::OutOfChart)?;
     let table4_source = table4_source_trace(data.inner(), pa).ok();
 
@@ -129,11 +135,25 @@ pub fn compute_landing(
     warnings.push(CalculationWarning::code_only("LANDING_NO_WIND"));
     let afm_lookup_tag = landing_tag_from_pa(pa, &data.inner().land_alt.value);
 
+    let (roll_ft, over_50_ft, roll_chart, over_chart) = if inputs.landing_ground_idle_1000_rpm {
+        warnings.push(CalculationWarning::code_only("LANDING_GROUND_IDLE_1000"));
+        (
+            roll_chart_ft * GROUND_IDLE_1000_GROUND_ROLL_FACTOR,
+            over_chart_ft * GROUND_IDLE_1000_50FT_FACTOR,
+            Some(roll_chart_ft),
+            Some(over_chart_ft),
+        )
+    } else {
+        (roll_chart_ft, over_chart_ft, None, None)
+    };
+
     Ok(LandingResult {
         provenance: provenance_for(data.inner(), data.landing_source()),
         afm_lookup_tag,
         ground_roll_ft: roll_ft,
         distance_over_50ft_ft: over_50_ft,
+        ground_roll_chart_ft: roll_chart,
+        distance_over_50ft_chart_ft: over_chart,
         wind_correction_ft: 0.0,
         table4_source,
         warnings,
@@ -166,8 +186,12 @@ mod tests {
         let trace = r.table4_source.as_ref().unwrap();
         assert_eq!(trace.pa_rows.len(), 2);
         let (roll, over) = recompute_landing_from_table4_source(trace);
-        assert!((roll - r.ground_roll_ft).abs() < 1e-9);
-        assert!((over - r.distance_over_50ft_ft).abs() < 1e-9);
+        let roll_expected = r.ground_roll_chart_ft.unwrap_or(r.ground_roll_ft);
+        let over_expected = r
+            .distance_over_50ft_chart_ft
+            .unwrap_or(r.distance_over_50ft_ft);
+        assert!((roll - roll_expected).abs() < 1e-9);
+        assert!((over - over_expected).abs() < 1e-9);
     }
 
     #[test]
@@ -176,5 +200,63 @@ mod tests {
         assert_eq!(table_landing_50ft_ft(&data, 0.0), 1360.0);
         let m = 1360.0 * 0.3048;
         assert!((m - 414.528_f64).abs() < 0.01);
+    }
+
+    #[test]
+    fn ground_idle_1000_rpm_multipliers_sea_level() {
+        let data = PerformanceData::production();
+        let base = FlightInputs {
+            pressure_altitude_input_ft: 0.0,
+            landing_ground_idle_1000_rpm: true,
+            ..Default::default()
+        };
+        let r = compute_landing(&data, &base).unwrap();
+        assert_eq!(r.ground_roll_chart_ft, Some(661.0));
+        assert_eq!(r.distance_over_50ft_chart_ft, Some(1360.0));
+        assert_eq!(r.ground_roll_ft.round() as i64, 707);
+        assert_eq!(r.distance_over_50ft_ft.round() as i64, 1428);
+        let r_default = compute_landing(
+            &data,
+            &FlightInputs {
+                pressure_altitude_input_ft: 0.0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(r_default.ground_roll_ft.round() as i64, 707);
+        assert_eq!(r_default.distance_over_50ft_ft.round() as i64, 1428);
+        let table4_only = compute_landing(
+            &data,
+            &FlightInputs {
+                pressure_altitude_input_ft: 0.0,
+                landing_ground_idle_1000_rpm: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(table4_only.ground_roll_ft.round() as i64, 661);
+        assert_eq!(table4_only.distance_over_50ft_ft.round() as i64, 1360);
+        assert!(table4_only.ground_roll_chart_ft.is_none());
+    }
+
+    #[test]
+    fn wheel_fairings_do_not_change_landing() {
+        let data = PerformanceData::production();
+        let base = FlightInputs {
+            pressure_altitude_input_ft: 2130.0,
+            ..Default::default()
+        };
+        let with_fairings = FlightInputs {
+            wheel_fairings_installed: true,
+            ..base.clone()
+        };
+        let without_fairings = FlightInputs {
+            wheel_fairings_installed: false,
+            ..base
+        };
+        let a = compute_landing(&data, &with_fairings).unwrap();
+        let b = compute_landing(&data, &without_fairings).unwrap();
+        assert_eq!(a.ground_roll_ft, b.ground_roll_ft);
+        assert_eq!(a.distance_over_50ft_ft, b.distance_over_50ft_ft);
     }
 }

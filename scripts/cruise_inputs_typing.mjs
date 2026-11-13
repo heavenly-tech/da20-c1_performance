@@ -15,11 +15,12 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:8080";
+const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:18081";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manageServer = process.env.MANAGE_SERVER !== "0";
 
 const TAB = {
+  takeoff: { es: "Despegue", en: "Takeoff" },
   climb: { es: "Ascenso", en: "Climb" },
   cruise: { es: "Crucero y potencia", en: "Cruise & power" },
   endurance: { es: "Autonomía y alcance", en: "Endurance & range" },
@@ -52,6 +53,13 @@ function fieldByLabel(page, labelText) {
   const box = page
     .locator(".card .f")
     .filter({ has: page.locator("label", { hasText: labelText }) });
+  return box.locator("input.mono").first();
+}
+
+function fieldByLabelPattern(page, pattern) {
+  const box = page
+    .locator(".card .f")
+    .filter({ has: page.locator("label", { hasText: pattern }) });
   return box.locator("input.mono").first();
 }
 
@@ -96,12 +104,14 @@ async function runCruiseChecks(page, en) {
   await page.waitForSelector(".cruise-table-full, .plot-svg", { timeout: 30_000 });
 
   const paLabel = en ? "Cruise PA (ft)" : "PA crucero (ft)";
-  const oatLabel = en ? "Cruise OAT (°C)" : "OAT crucero (°C)";
+  const oatPattern = en
+    ? /Cruise OAT|Estimated OAT/i
+    : /OAT crucero|OAT estimada/i;
   const rpmLabel = en ? "Cruise RPM" : "RPM crucero";
   const bhpLabel = en ? "Cruise % BHP" : "% BHP crucero";
 
   await assertStableTyping(page, fieldByLabel(page, paLabel), "5000", "5000");
-  await assertStableTyping(page, fieldByLabel(page, oatLabel), "15", "15.0");
+  await assertStableTyping(page, fieldByLabelPattern(page, oatPattern), "15", "15.0");
 
   const bhpMode = page.getByRole("button", {
     name: en ? "Set %BHP" : "Fijar %BHP",
@@ -120,12 +130,24 @@ async function runCruiseChecks(page, en) {
   await assertStableTyping(page, fieldByLabel(page, rpmLabel), "2450", "2450");
 }
 
+async function runTakeoffAirfieldChecks(page, en) {
+  await clickTab(page, "takeoff");
+  const paLabel = en ? "Pressure altitude (ft)" : "Altitud de presión (ft)";
+  const oatLabel = "OAT (°C)";
+  await assertStableTyping(page, fieldByLabel(page, paLabel), "3100", "3100");
+  await assertStableTyping(page, fieldByLabel(page, oatLabel), "18", "18.0");
+}
+
 async function runClimbChecks(page, en) {
   await clickTab(page, "climb");
   const paLabel = en ? "Pressure altitude (ft)" : "Altitud de presión (ft)";
   const oatLabel = "OAT (°C)";
+  const targetLabel = en
+    ? "Climb target PA (ft)"
+    : "Altitud objetivo de trepada (ft)";
   await assertStableTyping(page, fieldByLabel(page, paLabel), "3500", "3500");
-  await assertStableTyping(page, fieldByLabel(page, oatLabel), "12", "12");
+  await assertStableTyping(page, fieldByLabel(page, oatLabel), "12", "12.0");
+  await assertStableTyping(page, fieldByLabel(page, targetLabel), "4500", "4500");
 }
 
 async function runLandingChecks(page, en) {
@@ -134,10 +156,27 @@ async function runLandingChecks(page, en) {
   await assertStableTyping(page, fieldByLabel(page, paLabel), "2500", "2500");
 }
 
-async function runFuelChecks(page, en) {
+async function runEnduranceChecks(page, en) {
   await clickTab(page, "endurance");
+  await page.waitForSelector(".results-block .big, .cruise-table-full", {
+    timeout: 60_000,
+  });
+
+  const paLabel = en ? "Cruise PA (ft)" : "PA crucero (ft)";
+  const oatPattern = en
+    ? /Cruise OAT|Estimated OAT/i
+    : /OAT crucero|OAT estimada/i;
+  const groundElev = en
+    ? "Aerodrome elevation (ft)"
+    : "Elevación del aeródromo (ft)";
   const fuelLabel = en ? "Usable fuel (US gal)" : "Combustible utilizable (US gal)";
+  const reserveLabel = en ? "Reserve (US gal)" : "Reserva (US gal)";
+
+  await assertStableTyping(page, fieldByLabel(page, paLabel), "5000", "5000");
+  await assertStableTyping(page, fieldByLabelPattern(page, oatPattern), "15", "15.0");
+  await assertStableTyping(page, fieldByLabel(page, groundElev), "2200", "2200");
   await assertStableTyping(page, fieldByLabel(page, fuelLabel), "24", "24");
+  await assertStableTyping(page, fieldByLabel(page, reserveLabel), "5", "5");
 }
 
 function startServer() {
@@ -160,9 +199,10 @@ async function main() {
     await openApp(page);
     const en = await localeIsEn(page);
     await runCruiseChecks(page, en);
+    await runTakeoffAirfieldChecks(page, en);
     await runClimbChecks(page, en);
     await runLandingChecks(page, en);
-    await runFuelChecks(page, en);
+    await runEnduranceChecks(page, en);
     console.log("numeric_inputs_typing: OK");
   } finally {
     await browser.close();

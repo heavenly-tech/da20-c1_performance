@@ -84,6 +84,9 @@ pub struct Copy {
     pub export_json: &'static str,
     /// Primary chart PA input (standard pressure); same string in ES/EN per placard.
     pub pressure_altitude_ft: &'static str,
+    pub ground_section_title: &'static str,
+    pub ground_elevation_ft: &'static str,
+    pub ground_oat_c: &'static str,
     pub oat: &'static str,
     pub runway: &'static str,
     pub runway_heading_ambiguous: &'static str,
@@ -118,6 +121,8 @@ pub struct Copy {
     pub mt_fig4_da_weight_lbl: &'static str,
     pub obstacle_m: &'static str,
     pub climb_figure: &'static str,
+    /// Target PA for climb time-to-altitude (Climb tab; not cruise-tab PA).
+    pub climb_target_altitude_ft: &'static str,
     pub climb_fig_55: &'static str,
     pub climb_fig_56: &'static str,
     pub climb_fig_58: &'static str,
@@ -141,6 +146,10 @@ pub struct Copy {
     pub fuel_reserve: &'static str,
     pub derived_not_afm: &'static str,
     pub landing_no_corr: &'static str,
+    pub landing_ground_idle_toggle: &'static str,
+    pub landing_ground_idle_factor_prefix: &'static str,
+    pub landing_ground_idle_off: &'static str,
+    pub landing_ground_idle_on: &'static str,
     pub takeoff: &'static str,
     pub climb: &'static str,
     pub cruise: &'static str,
@@ -167,6 +176,9 @@ pub struct Copy {
     pub axis_dist_m: &'static str,
     pub provenance_rev: &'static str,
     pub cruise_oat: &'static str,
+    pub cruise_oat_estimated_label: &'static str,
+    pub cruise_oat_use_estimate: &'static str,
+    pub cruise_disa_readout: &'static str,
     pub cruise_isa: &'static str,
     pub cruise_disa_minus20: &'static str,
     pub cruise_disa_plus10: &'static str,
@@ -304,6 +316,9 @@ const ES: Copy = Copy {
     export_csv: "Exportar CSV",
     export_json: "Exportar JSON",
     pressure_altitude_ft: "Altitud de presión (ft)",
+    ground_section_title: "Tierra / Aeródromo",
+    ground_elevation_ft: "Elevación del aeródromo (ft)",
+    ground_oat_c: "OAT en tierra (°C)",
     oat: "OAT (°C)",
     runway: "Orientación pista",
     runway_heading_ambiguous:
@@ -342,6 +357,7 @@ const ES: Copy = Copy {
     mt_fig4_da_weight_lbl: "Peso DA",
     obstacle_m: "Altura obstáculo (m)",
     climb_figure: "Configuración de trepada (AFM)",
+    climb_target_altitude_ft: "Altitud objetivo de trepada (ft)",
     climb_fig_55: "Fig 5.5 — flaps crucero",
     climb_fig_56: "Fig 5.6 — flaps despegue",
     climb_fig_58: "Fig 5.8 — aterrizaje abortado",
@@ -367,6 +383,11 @@ const ES: Copy = Copy {
     fuel_reserve: "Reserva (US gal)",
     derived_not_afm: "Derivado, no es carta AFM",
     landing_no_corr: "Sin corrección por viento, temperatura ni peso (Tabla 4).",
+    landing_ground_idle_toggle: "Ralentí en tierra 1000 RPM",
+    landing_ground_idle_factor_prefix:
+        "NOTA §5.3.12 ralentí 1000 RPM: Tabla 4",
+    landing_ground_idle_off: "No",
+    landing_ground_idle_on: "Sí",
     takeoff: "Despegue (Fig 5.4)",
     climb: "Trepada (via Fig 5.2)",
     cruise: "Crucero",
@@ -393,6 +414,9 @@ const ES: Copy = Copy {
     axis_dist_m: "m",
     provenance_rev: " rev ",
     cruise_oat: "OAT crucero (°C)",
+    cruise_oat_estimated_label: "OAT estimada (gradiente ISA desde tierra) (°C)",
+    cruise_oat_use_estimate: "Volver a OAT estimada desde tierra",
+    cruise_disa_readout: "ΔISA (crucero)",
     cruise_isa: "ISA",
     cruise_disa_minus20: "dISA −20",
     cruise_disa_plus10: "dISA +10",
@@ -496,6 +520,9 @@ const EN: Copy = Copy {
     export_csv: "Export CSV",
     export_json: "Export JSON",
     pressure_altitude_ft: "Pressure altitude (ft)",
+    ground_section_title: "Ground / Aerodrome",
+    ground_elevation_ft: "Aerodrome elevation (ft)",
+    ground_oat_c: "Ground OAT (°C)",
     oat: "OAT (°C)",
     runway: "Runway heading",
     runway_heading_ambiguous:
@@ -534,6 +561,7 @@ const EN: Copy = Copy {
     mt_fig4_da_weight_lbl: "DA weight",
     obstacle_m: "Obstacle height (m)",
     climb_figure: "Climb configuration (AFM)",
+    climb_target_altitude_ft: "Climb target PA (ft)",
     climb_fig_55: "Fig 5.5 — cruise flaps",
     climb_fig_56: "Fig 5.6 — takeoff flaps",
     climb_fig_58: "Fig 5.8 — balked landing",
@@ -559,6 +587,10 @@ const EN: Copy = Copy {
     fuel_reserve: "Reserve (US gal)",
     derived_not_afm: "Derived, not an AFM chart",
     landing_no_corr: "No wind, temperature, or weight correction (Table 4).",
+    landing_ground_idle_toggle: "Ground idle set to 1000 RPM",
+    landing_ground_idle_factor_prefix: "§5.3.12 NOTE ground idle 1000 RPM: Table 4",
+    landing_ground_idle_off: "Off",
+    landing_ground_idle_on: "On",
     takeoff: "Takeoff (Fig 5.4)",
     climb: "Climb (via Fig 5.2)",
     cruise: "Cruise",
@@ -585,6 +617,9 @@ const EN: Copy = Copy {
     axis_dist_m: "m",
     provenance_rev: " rev ",
     cruise_oat: "Cruise OAT (°C)",
+    cruise_oat_estimated_label: "Estimated OAT (ISA lapse from ground) (°C)",
+    cruise_oat_use_estimate: "Use ground lapse estimate again",
+    cruise_disa_readout: "ΔISA (cruise)",
     cruise_isa: "ISA",
     cruise_disa_minus20: "dISA −20",
     cruise_disa_plus10: "dISA +10",
@@ -656,7 +691,7 @@ const EN: Copy = Copy {
     methods: &EN_METHODS,
 };
 
-const ES_METHODS: [MethodCopy; 8] = [
+const ES_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
         afm: "AFM DA202-C1 Rev 29 — entradas de performance",
@@ -688,16 +723,23 @@ const ES_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Crucero (Tabla 3)",
         afm: "AFM p. 5-14 / 5-15, Tabla 3",
-        summary: "ΔISA = OAT − ISA en PA. rmin(PA) lineal; RPM válido [rmin(PA), 2800]. Parámetro s normalizado, RPM_row por fila, mezcla en PA. %BHP: inversión en [rmin(PA), 2800]. Carenados: ~−5% TAS; GPH sin escalar.",
-        interpolation: "Tabla o Interpolado. Fuera de carta si PA, ΔISA o RPM salen del casco (p. ej. 6500 ft: RPM < 2512,5).",
+        summary: "ΔISA = OAT − ISA en PA. rmin(PA) lineal; RPM válido [rmin(PA), 2800]. Parámetro s normalizado, RPM_row por fila, mezcla en PA. %BHP: inversión en [rmin(PA), 2800]. Carenados: ~−5% TAS; GPH sin escalar. Filas usadas: «Peso PA» y «Peso RPM» como arriba; «Peso ΔISA» es el peso de cada columna ΔISA dentro de la fila RPM.",
+        interpolation: "Tabla o Interpolado. Valor = Σ (Peso PA × Peso RPM × Peso ΔISA × celda) sobre las esquinas usadas. Fuera de carta → sin número («Fuera de carta»).\n\n«Peso» es el peso de la interpolación (no el peso del avión). Peso RPM: qué fracción de tu RPM queda entre dos columnas impresas — p. ej. columnas 2400 y 2500 y vuelas 2450 → 0,5 y 0,5; a 2475 → 2500 lleva 0,75 y 2400 0,25; siempre suman 1. Peso PA (y Peso ΔISA en Tabla 3) funciona igual entre las dos filas impresas alrededor de tu valor.\n\nEjemplo: a mitad de camino en RPM y un cuarto del camino en PA: 0,5×0,75×(PA baja, RPM bajo) + 0,5×0,75×(PA baja, RPM alto) + 0,5×0,25×(PA alta, RPM bajo) + 0,5×0,25×(PA alta, RPM alto).\n\nEs interpolación lineal ordinaria en ambas direcciones; la app muestra los pesos para poder repetirlo a mano con las filas impresas resaltadas.",
         limitations: "GPH transcritos tal como impreso (anomalías conocidas).",
+    },
+    MethodCopy {
+        title: "Crucero MT 175 R (AFMS E-1487 Fig 1–4)",
+        afm: "AFMS E-1487 Fig 4 (suplemento MT 175 R)",
+        summary: "Altitud de densidad ISA troposférica exacta: σ = (T_std/T₀)^5.25588 × (T₀/T_real) con T_std = 288,15 K − 0,0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0,0019812 (misma función que da20-core en cruise MT). Consulta Fig 4 en esa DA y RPM.",
+        interpolation: "Tabla o Interpolado. Valor = Σ (Peso DA × Peso RPM × celda) sobre las esquinas usadas (cada par de pesos en DA o RPM suma 1).\n\n«Peso» es el peso de la interpolación. Peso RPM: entre columnas impresas — p. ej. 2400 y 2500 a 2450 → 0,5 y 0,5; a 2475 → 0,75 y 0,25; siempre suman 1. Peso DA igual entre filas impresas alrededor de tu altitud de densidad.\n\nEjemplo: mitad en RPM y un cuarto en DA: 0,5×0,75×(DA baja, RPM bajo) + 0,5×0,75×(DA baja, RPM alto) + 0,5×0,25×(DA alta, RPM bajo) + 0,5×0,25×(DA alta, RPM alto).\n\nInterpolación lineal en ambas direcciones; la app muestra los pesos para repetirlo a mano desde las filas resaltadas.",
+        limitations: "Fuera del casco Fig 4 → «Fuera de carta». Despegue/trepada/aterrizaje sin cambio por hélice MT (AFMS E-1487).",
     },
     MethodCopy {
         title: "Aterrizaje (Tabla 4)",
         afm: "AFM p. 5-17, Tabla 4",
-        summary: "Consulta por altitud de presión únicamente (ft).",
-        interpolation: "Lineal en altitudes de la tabla.",
-        limitations: "Sin corrección por viento, temperatura ni peso. 1360 ft ≈ 415 m; texto AFM cita 414 m.",
+        summary: "Consulta por altitud de presión únicamente (ft). Opcional: NOTA §5.3.12 ralentí en tierra 1000 RPM → rodaje ×1,07 y distancia 50 ft ×1,05 después de la interpolación Tabla 4.",
+        interpolation: "Lineal en altitudes de la tabla. Filas usadas sin factor de ralentí.",
+        limitations: "Sin corrección por viento, temperatura ni peso salvo la NOTA de ralentí 1000 RPM. 1360 ft ≈ 415 m; texto AFM cita 414 m.",
     },
     MethodCopy {
         title: "Componentes de viento (Fig 5.3)",
@@ -705,6 +747,13 @@ const ES_METHODS: [MethodCopy; 8] = [
         summary: "Viento de frente y cruzado por trigonometría; formato 200 / 08 kt.",
         interpolation: "N/A para componentes.",
         limitations: "Rumbo pista = número × 10°; aviso si pista no numérica.",
+    },
+    MethodCopy {
+        title: "OAT de crucero desde tierra",
+        afm: "Planificación UI (no carta AFM)",
+        summary: "En Crucero y Autonomía, «Tierra / Aeródromo» es independiente en cada ficha: elevación y OAT en tierra solo alimentan la estimación de OAT de crucero en esa misma ficha (OAT_alt = OAT_tierra − 1,98 °C/1000 ft × (PA_crucero − elevación)). Despegue, subida y aterrizaje guardan su propia PA y OAT. ΔISA mostrado: OAT_crucero − (15 − 1,98 × PA/1000).",
+        interpolation: "Aproximación de gradiente estándar; el usuario puede fijar OAT de crucero manualmente y volver a la estimación.",
+        limitations: "En la vida real el gradiente varía e inversiones térmicas son frecuentes (p. ej. Santiago); la estimación no sustituye METAR/sondas. El cálculo de performance sigue las reglas interpolate-only y «Fuera de carta» del núcleo.",
     },
     MethodCopy {
         title: "Autonomía y alcance (derivado)",
@@ -715,7 +764,7 @@ const ES_METHODS: [MethodCopy; 8] = [
     },
 ];
 
-const EN_METHODS: [MethodCopy; 8] = [
+const EN_METHODS: [MethodCopy; 10] = [
     MethodCopy {
         title: "Pressure & density altitude",
         afm: "AFM DA202-C1 Rev 29 — performance inputs",
@@ -748,17 +797,24 @@ const EN_METHODS: [MethodCopy; 8] = [
     MethodCopy {
         title: "Cruise (Table 3)",
         afm: "AFM p. 5-14 / 5-15, Table 3",
-        summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled.",
-        interpolation: "Table or Interpolated tags only. Off chart when PA, ΔISA, or RPM leave the hull (e.g. 6500 ft: RPM < 2512.5).",
+        summary: "ΔISA = OAT − ISA at PA. Interpolation only: rmin(PA) linear between each row's first RPM; valid RPM is [rmin(PA), 2800]. Normalize s, interpolate each row at RPM_row, blend in PA. Set %BHP inverts on [rmin(PA), 2800]. Wheel fairings: ~−5% TAS; GPH not scaled. Row weights: «PA weight» and «RPM weight» as above; «ΔISA weight» is the blend weight for each ΔISA column within the RPM row.",
+        interpolation: "Table or Interpolated only. Result = Σ (PA weight × RPM weight × ΔISA weight × cell) over used corners. Off chart → no numeric result.\n\n\"Weight\" means the interpolation weight (not aircraft weight). RPM weight: how far your RPM sits between two printed RPM columns — e.g. columns 2400 and 2500 and you fly 2450, each gets 0.5; at 2475, 2500 gets 0.75 and 2400 gets 0.25; the two always sum to 1. PA weight (and ΔISA weight on Table 3) works the same for the two printed rows around your value.\n\nExample halfway in RPM and a quarter of the way in PA: 0.5×0.75×(low PA, low RPM) + 0.5×0.75×(low PA, high RPM) + 0.5×0.25×(high PA, low RPM) + 0.5×0.25×(high PA, high RPM).\n\nThis is ordinary linear interpolation in both directions; the app shows the weights so you can redo it by hand from the highlighted printed rows.",
         limitations: "GPH as printed (known oddities).",
+    },
+    MethodCopy {
+        title: "Cruise MT 175 R (AFMS E-1487 Fig 1–4)",
+        afm: "AFMS E-1487 Fig 4 (MT 175 R supplement)",
+        summary: "Exact ISA troposphere density altitude: σ = (T_std/T₀)^5.25588 × (T₀/T_actual) with T_std = 288.15 K − 0.0019812 °C/ft × PA; DA = (1 − σ^(1/4.25588)) × T₀ / 0.0019812 (same as da20-core MT cruise). Fig 4 lookup at that DA and RPM.",
+        interpolation: "Table or Interpolated only. Result = Σ (DA weight × RPM weight × cell) over used corners (each bracketing weight pair sums to 1).\n\n\"Weight\" means the interpolation weight. RPM weight: between printed columns — e.g. 2400 and 2500 at 2450, each gets 0.5; at 2475, 0.75 and 0.25; always sum to 1. DA weight works the same between printed rows around your density altitude.\n\nExample halfway in RPM and a quarter of the way in DA: 0.5×0.75×(low DA, low RPM) + 0.5×0.75×(low DA, high RPM) + 0.5×0.25×(high DA, low RPM) + 0.5×0.25×(high DA, high RPM).\n\nOrdinary linear interpolation in both directions; the app shows the weights so you can redo it by hand from the highlighted rows.",
+        limitations: "Outside Fig 4 hull → Out of chart. Takeoff/climb/landing unchanged by MT propeller (AFMS E-1487).",
     },
     MethodCopy {
         title: "Landing (Table 4)",
         afm: "AFM p. 5-17, Table 4",
-        summary: "Pressure-altitude lookup only (ft).",
-        interpolation: "Linear on table altitudes.",
+        summary: "Pressure-altitude lookup only (ft). Optional: §5.3.12 NOTE ground idle 1000 RPM → ground roll ×1.07 and 50 ft distance ×1.05 after Table 4 interpolation.",
+        interpolation: "Linear on table altitudes. Source rows show uncorrected table values.",
         limitations:
-            "No wind, temperature, or weight correction. 1360 ft ≈ 415 m; AFM text cites 414 m.",
+            "No wind, temperature, or weight correction except the 1000 RPM ground-idle NOTE. 1360 ft ≈ 415 m; AFM text cites 414 m.",
     },
     MethodCopy {
         title: "Wind components (Fig 5.3)",
@@ -766,6 +822,13 @@ const EN_METHODS: [MethodCopy; 8] = [
         summary: "Headwind/crosswind by trigonometry; display 200 / 08 kt.",
         interpolation: "N/A for components.",
         limitations: "Runway heading: three-digit magnetic 001–360 only; 1–2 digits flagged as ambiguous.",
+    },
+    MethodCopy {
+        title: "Cruise OAT from ground",
+        afm: "UI planning layer (not an AFM chart)",
+        summary: "On Cruise and Endurance, Ground / Aerodrome is independent per tab: ground elevation and OAT only feed the cruise OAT lapse estimate on the same tab (OAT_alt = OAT_ground − 1.98 °C per 1000 ft × (cruise_PA − elevation)). Takeoff, climb, and landing keep separate PA and OAT. Displayed ΔISA: cruise_OAT − (15 − 1.98 × PA/1000).",
+        interpolation: "Standard lapse estimate; the user can override cruise OAT manually and revert to the estimate.",
+        limitations: "Real lapse rates vary and inversions are common (e.g. Santiago); the estimate is not a substitute for METAR/soundings. Downstream performance still uses interpolate-only rules and Out of chart from the core.",
     },
     MethodCopy {
         title: "Endurance & range (derived)",
@@ -782,6 +845,24 @@ pub fn format_obstacle_over(locale: Locale, height_m: f64) -> String {
     format!(
         "{} {:.1} m / {:.0} ft",
         c.takeoff_over_obstacle, height_m, ft
+    )
+}
+
+pub fn format_landing_ground_idle_breakdown(
+    locale: Locale,
+    roll_chart_ft: i64,
+    over_chart_ft: i64,
+    roll_ft: i64,
+    over_ft: i64,
+) -> String {
+    let c = copy(locale);
+    let factors = match locale {
+        Locale::Es => "×1,07 / ×1,05",
+        Locale::En => "×1.07 / ×1.05",
+    };
+    format!(
+        "{} {roll_chart_ft}/{over_chart_ft} ft → {factors} → {roll_ft}/{over_ft} ft",
+        c.landing_ground_idle_factor_prefix,
     )
 }
 
@@ -1028,6 +1109,15 @@ pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> St
             Locale::En => "Table 4: 1360 ft (≈415 m); AFM narrative cites 414 m.".into(),
         },
         "LANDING_NO_WIND" => c.landing_no_corr.to_string(),
+        "LANDING_GROUND_IDLE_1000" => match locale {
+            Locale::Es => {
+                "AFM §5.3.12: ralentí 1000 RPM — rodaje ×1,07, distancia 50 ft ×1,05.".into()
+            }
+            Locale::En => {
+                "AFM §5.3.12: 1000 RPM ground idle — ground roll ×1.07, 50 ft distance ×1.05."
+                    .into()
+            }
+        },
         "DERIVED_ESTIMATE" => match locale {
             Locale::Es => "Estimación derivada de trepada (sin carta AFM).".into(),
             Locale::En => "Derived climb estimate (no AFM chart).".into(),
@@ -1236,5 +1326,42 @@ mod i18n_display_tests {
         assert_eq!(en.climb_flaps_ldg, LDG);
         assert_ne!(TO, UP);
         assert_ne!(UP, LDG);
+    }
+
+    #[test]
+    fn method_es_table3_interpolation_worked_weights_and_delta_isa_sigma() {
+        let entry = ES_METHODS
+            .iter()
+            .find(|m| m.title.starts_with("Crucero (Tabla 3)"))
+            .expect("Tabla 3");
+        assert!(
+            entry.interpolation.contains("Peso ΔISA"),
+            "must name ΔISA weight inside Σ product"
+        );
+        assert!(entry.interpolation.contains("2400"));
+        assert!(entry.interpolation.contains("0,5"));
+        assert!(entry.interpolation.contains("0,75"));
+        assert!(!entry.interpolation.contains("Σ Peso PA × Σ Peso RPM"));
+    }
+
+    #[test]
+    fn method_es_mt_density_formula_shows_5_25588() {
+        let entry = ES_METHODS
+            .iter()
+            .find(|m| m.title.contains("MT 175"))
+            .expect("MT");
+        assert!(entry.summary.contains("5.25588"));
+        assert!(!entry.summary.contains("5,256"));
+    }
+
+    #[test]
+    fn method_es_cruise_ground_not_shared_with_takeoff_wording() {
+        let entry = ES_METHODS
+            .iter()
+            .find(|m| m.title.contains("OAT de crucero"))
+            .expect("ground OAT");
+        assert!(!entry.summary.contains("Parámetros compartidos"));
+        assert!(!entry.summary.contains("En despegue alimentan"));
+        assert!(entry.summary.contains("independiente en cada ficha"));
     }
 }

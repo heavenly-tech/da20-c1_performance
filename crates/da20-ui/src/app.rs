@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use crate::components::{Disclaimer, Nav};
 use crate::i18n::Locale;
 use crate::palette::{apply_palette, PaletteChoice, PaletteThemeEffect};
+use crate::phase_state::{hydrate_tab_inputs, persist_tab_inputs};
 use crate::phases::{Phase, PhaseShell};
 use crate::prefs::{FlightPrefs, TakeoffPrefs};
 use crate::routing::{
@@ -22,12 +23,14 @@ pub fn App() -> impl IntoView {
     let theme = RwSignal::new(ThemePreference::load_initial());
     let palette = RwSignal::new(PaletteChoice::for_theme(theme.get_untracked()));
     let data = RwSignal::new(PerformanceData::production());
-    let flight_prefs = FlightPrefs::load();
-    let inputs = RwSignal::new(FlightInputs {
-        propeller: flight_prefs.propeller,
-        wheel_fairings_installed: flight_prefs.wheel_fairings_installed,
-        ..Default::default()
+    let flight_prefs = RwSignal::new(FlightPrefs::load());
+    let inputs = RwSignal::new({
+        let prefs = flight_prefs.get_untracked();
+        let mut i = FlightInputs::default();
+        hydrate_tab_inputs(initial_phase, &prefs, &data.get_untracked(), &mut i);
+        i
     });
+    let last_phase = RwSignal::new(initial_phase);
     let store = RwSignal::new(ReadingsStore::load());
     let takeoff_prefs = RwSignal::new(TakeoffPrefs::load());
 
@@ -36,6 +39,23 @@ pub fn App() -> impl IntoView {
 
     Effect::new(move |_| {
         write_phase_to_location(phase.get());
+    });
+
+    Effect::new(move |_| {
+        let new_phase = phase.get();
+        let old_phase = last_phase.get_untracked();
+        if old_phase == new_phase {
+            return;
+        }
+        let d = data.get_untracked();
+        flight_prefs.update(|prefs| {
+            let snap = inputs.get_untracked();
+            persist_tab_inputs(old_phase, prefs, &snap);
+        });
+        flight_prefs.update(|prefs| {
+            inputs.update(|i| hydrate_tab_inputs(new_phase, prefs, &d, i));
+        });
+        last_phase.set(new_phase);
     });
 
     Effect::new(move |_| {
@@ -74,7 +94,7 @@ pub fn App() -> impl IntoView {
                 <Nav phase=phase locale=locale theme=theme palette=palette/>
             </header>
             <main class="main">
-                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store takeoff_prefs=takeoff_prefs/>
+                <PhaseShell locale=locale phase=phase data=data inputs=inputs store=store takeoff_prefs=takeoff_prefs flight_prefs=flight_prefs/>
             </main>
             <footer class="footer">
                 <p>
