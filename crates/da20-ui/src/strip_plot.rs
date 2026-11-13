@@ -31,17 +31,18 @@ use crate::chart_axes::{
 };
 use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
-use crate::inputs::{
-    shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude, takeoff_apply_wind_from_strip,
-    takeoff_set_obstacle_height_m, takeoff_set_weight_lb, AirfieldInputsMode,
-};
-use crate::prefs::FlightPrefs;
 use crate::i18n::{
     copy, format_climb_readout_interactive_pair, format_out_of_chart, format_strip_chart_roll_obs,
     format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
     format_takeoff_strip_pa_trace_label, Locale,
 };
+use crate::inputs::{
+    shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
+    takeoff_apply_wind_from_strip, takeoff_set_obstacle_height_m, takeoff_set_weight_lb,
+    AirfieldInputsMode,
+};
 use crate::phase_readouts::overlay_trace_var;
+use crate::prefs::FlightPrefs;
 use crate::storage::compute_all;
 use crate::storage::ReadingsStore;
 
@@ -1208,8 +1209,7 @@ mod strip_drag_tests {
     #[test]
     fn takeoff_strip_pa_drag_matches_typed_setter_and_compute() {
         use crate::inputs::{
-            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
-            AirfieldInputsMode,
+            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude, AirfieldInputsMode,
         };
         use crate::phase_state::{assemble_takeoff_inputs, hydrate_tab_inputs};
         use crate::phases::Phase;
@@ -1258,7 +1258,10 @@ mod strip_drag_tests {
             oat,
         );
 
-        assert_eq!(prefs_drag.takeoff.pressure_altitude_ft, prefs_type.takeoff.pressure_altitude_ft);
+        assert_eq!(
+            prefs_drag.takeoff.pressure_altitude_ft,
+            prefs_type.takeoff.pressure_altitude_ft
+        );
         assert!((prefs_drag.takeoff.oat_c - prefs_type.takeoff.oat_c).abs() < f64::EPSILON);
 
         let roll_drag = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs_drag))

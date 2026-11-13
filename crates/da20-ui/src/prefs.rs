@@ -369,7 +369,8 @@ impl FlightPrefs {
         let legacy_elev = self.legacy_ground_elevation_ft;
         let legacy_oat = self.legacy_ground_oat_c;
         let takeoff_pristine = self.takeoff == TakeoffTabPrefs::default();
-        let cruise_ground_pristine = self.cruise.ground_elevation_ft == default_ground_elevation_ft()
+        let cruise_ground_pristine = self.cruise.ground_elevation_ft
+            == default_ground_elevation_ft()
             && self.cruise.ground_oat_c == default_ground_oat_c();
         let legacy_differs =
             legacy_elev != default_ground_elevation_ft() || legacy_oat != default_ground_oat_c();
@@ -566,9 +567,7 @@ pub fn persist_climb_tab_from_inputs(prefs: &mut FlightPrefs, inputs: &FlightInp
     prefs.climb.oat_c = inputs.oat_c;
     prefs.climb.weight_lb = inputs.weight_lb;
     prefs.climb.climb_figure = inputs.climb_figure;
-    prefs.climb.pa_override = inputs
-        .pa_override
-        .filter(|o| o.phase == ChartPhase::Climb);
+    prefs.climb.pa_override = inputs.pa_override.filter(|o| o.phase == ChartPhase::Climb);
     prefs.climb.climb_target_altitude_ft = inputs.cruise_pressure_alt_ft;
     prefs.save();
 }
@@ -687,7 +686,12 @@ mod tests {
         prefs.cruise.cruise_oat_c_saved = Some(5.0);
         let mut inputs = FlightInputs::default();
         inputs.cruise_pressure_alt_ft = defaults::CRUISE_PRESSURE_ALT_FT;
-        hydrate_cruise_tab_fields(&prefs.cruise, &PerformanceData::production(), &prefs, &mut inputs);
+        hydrate_cruise_tab_fields(
+            &prefs.cruise,
+            &PerformanceData::production(),
+            &prefs,
+            &mut inputs,
+        );
         assert!((inputs.cruise_oat_c - 5.0).abs() < f64::EPSILON);
     }
 
@@ -753,7 +757,12 @@ mod tests {
         let data = PerformanceData::production();
         let prefs = FlightPrefs::default();
         let mut inputs = FlightInputs::default();
-        crate::phase_state::hydrate_tab_inputs(crate::phases::Phase::Landing, &prefs, &data, &mut inputs);
+        crate::phase_state::hydrate_tab_inputs(
+            crate::phases::Phase::Landing,
+            &prefs,
+            &data,
+            &mut inputs,
+        );
         assert!(inputs.landing_ground_idle_1000_rpm);
         inputs.pressure_altitude_input_ft = 0.0;
         let r = da20_core::landing::compute_landing(&data, &inputs).unwrap();

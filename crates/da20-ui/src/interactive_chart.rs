@@ -26,11 +26,9 @@ use crate::i18n::{
     afm_lookup_tag_label, copy, format_climb_readout_interactive_pair, format_out_of_chart,
     format_takeoff_strip_pa_trace_label, Locale,
 };
-use crate::inputs::{
-    shared_airfield_set_pressure_altitude, set_chart_pa, AirfieldInputsMode,
-};
-use crate::prefs::FlightPrefs;
+use crate::inputs::{set_chart_pa, shared_airfield_set_pressure_altitude, AirfieldInputsMode};
 use crate::phases::Phase;
+use crate::prefs::FlightPrefs;
 use crate::storage::compute_all;
 
 fn chart_phase(kind: ChartKind) -> Option<ChartPhase> {

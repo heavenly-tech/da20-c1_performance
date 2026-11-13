@@ -65,7 +65,8 @@ pub fn takeoff_set_obstacle_height_m(
     inputs: &mut FlightInputs,
     height_m: f64,
 ) {
-    inputs.obstacle_height_m = height_m.clamp(0.0, da20_core::types::defaults::OBSTACLE_HEIGHT_MAX_M);
+    inputs.obstacle_height_m =
+        height_m.clamp(0.0, da20_core::types::defaults::OBSTACLE_HEIGHT_MAX_M);
     prefs.takeoff.obstacle_height_m = inputs.obstacle_height_m;
 }
 

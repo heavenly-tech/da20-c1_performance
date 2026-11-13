@@ -7,12 +7,14 @@ use da20_core::PerformanceData;
 use crate::phases::Phase;
 use crate::prefs::{
     apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, hydrate_cruise_tab_fields,
-    persist_cruise_tab_from_inputs, persist_takeoff_tab_from_inputs, ClimbTabPrefs,
-    CruiseTabPrefs,
+    persist_cruise_tab_from_inputs, persist_takeoff_tab_from_inputs, ClimbTabPrefs, CruiseTabPrefs,
     FlightPrefs, LandingTabPrefs, TakeoffTabPrefs,
 };
 
-pub(crate) fn cruise_tab_mut<'a>(prefs: &'a mut FlightPrefs, phase: Phase) -> &'a mut CruiseTabPrefs {
+pub(crate) fn cruise_tab_mut<'a>(
+    prefs: &'a mut FlightPrefs,
+    phase: Phase,
+) -> &'a mut CruiseTabPrefs {
     match phase {
         Phase::Cruise => &mut prefs.cruise,
         Phase::Endurance => &mut prefs.endurance.cruise,
@@ -47,9 +49,7 @@ pub fn persist_tab_inputs(phase: Phase, prefs: &mut FlightPrefs, inputs: &Flight
                 oat_c: inputs.oat_c,
                 weight_lb: inputs.weight_lb,
                 climb_figure: inputs.climb_figure,
-                pa_override: inputs
-                    .pa_override
-                    .filter(|o| o.phase == ChartPhase::Climb),
+                pa_override: inputs.pa_override.filter(|o| o.phase == ChartPhase::Climb),
                 climb_target_altitude_ft: inputs.cruise_pressure_alt_ft,
             };
         }
@@ -381,8 +381,14 @@ mod tests {
         assert_eq!(back.climb, prefs.climb);
         assert_eq!(back.landing, prefs.landing);
         assert_eq!(back.cruise, prefs.cruise);
-        assert_eq!(back.endurance.fuel_usable_us_gal, prefs.endurance.fuel_usable_us_gal);
-        assert_eq!(back.endurance.cruise.cruise_pressure_alt_ft, prefs.endurance.cruise.cruise_pressure_alt_ft);
+        assert_eq!(
+            back.endurance.fuel_usable_us_gal,
+            prefs.endurance.fuel_usable_us_gal
+        );
+        assert_eq!(
+            back.endurance.cruise.cruise_pressure_alt_ft,
+            prefs.endurance.cruise.cruise_pressure_alt_ft
+        );
     }
 
     #[test]

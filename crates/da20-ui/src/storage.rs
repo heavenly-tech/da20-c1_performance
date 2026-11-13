@@ -290,11 +290,8 @@ pub fn compute_all_isolated(
     let endurance_in = assemble_endurance_inputs(prefs, data);
 
     let takeoff_res = da20_core::takeoff::compute_takeoff(data, &takeoff_in);
-    let climb_res = da20_core::climb::compute_climb(
-        data,
-        &climb_in,
-        prefs.climb.climb_target_altitude_ft,
-    );
+    let climb_res =
+        da20_core::climb::compute_climb(data, &climb_in, prefs.climb.climb_target_altitude_ft);
     let cruise_res = da20_core::cruise::compute_cruise(data, &cruise_in);
     let landing_res = da20_core::landing::compute_landing(data, &landing_in);
 
@@ -625,8 +622,7 @@ mod tests {
     #[test]
     fn tab_prefs_edit_reload_matches_compute_all_isolated() {
         use crate::inputs::{
-            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
-            AirfieldInputsMode,
+            shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude, AirfieldInputsMode,
         };
         use crate::phase_state::{assemble_takeoff_inputs, hydrate_tab_inputs};
         use crate::phases::Phase;
@@ -648,8 +644,9 @@ mod tests {
         shared_airfield_set_oat_c(AirfieldInputsMode::Takeoff, &mut prefs, &mut inputs, 12.0);
         crate::prefs::persist_takeoff_tab_from_inputs(&mut prefs, &inputs);
 
-        let roll_direct =
-            compute_takeoff(&data, &assemble_takeoff_inputs(&prefs)).unwrap().ground_roll_ft;
+        let roll_direct = compute_takeoff(&data, &assemble_takeoff_inputs(&prefs))
+            .unwrap()
+            .ground_roll_ft;
         let bundle_live = compute_all_isolated(&data, &prefs);
         assert!(
             (bundle_live.takeoff.as_ref().unwrap().ground_roll_ft - roll_direct).abs()

@@ -12,7 +12,9 @@ use leptos::prelude::*;
 
 use crate::i18n::{afm_lookup_tag_label, copy, Locale};
 use crate::inputs::{input_value, NumField};
-use crate::prefs::{persist_takeoff_tab_from_inputs, FlightPrefs, ObstacleUnit, TakeoffPrefs, WeightUnit};
+use crate::prefs::{
+    persist_takeoff_tab_from_inputs, FlightPrefs, ObstacleUnit, TakeoffPrefs, WeightUnit,
+};
 
 /// Commit a typed takeoff weight field value (kg or lb display) into `weight_lb`.
 /// Accepts a decimal point or comma. Does not rewrite the in-progress draft.
