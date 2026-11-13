@@ -786,9 +786,9 @@ const ES_METHODS: [MethodCopy; 10] = [
     },
     MethodCopy {
         title: "Autonomía y alcance (derivado)",
-        afm: "AFM §1.8, §5.3.10 (duración máxima) + Tabla 3 GPH",
-        summary: "(Combustible utilizable − reserva) / caudal Tabla 3; alcance = autonomía × TAS.",
-        interpolation: "Hereda el casco Tabla 3; fuera de carta si falla el crucero.",
+        afm: "AFM §1.8, §5.3.10 (duración máxima) + cadena crucero (Tabla 3 o AFMS Fig 4)",
+        summary: "(Combustible utilizable − reserva) / GPH de la cadena de crucero activa (Tabla 3 con Sensenich; Fig 2→3→4 con MT 175 R); alcance = autonomía × TAS.",
+        interpolation: "Hereda el casco del crucero de la misma ficha; con MT, GPH solo Fig 4 y Fuera de carta si falla Fig 4.",
         limitations: "Derivado, no carta AFM. Combustible utilizable 24,0 US gal (total 24,5; AFM §1.8). Placas: 21,3 / 19,8 gal. Ver AFM §5.3.10 duración máxima.",
     },
 ];
@@ -861,9 +861,9 @@ const EN_METHODS: [MethodCopy; 10] = [
     },
     MethodCopy {
         title: "Endurance & range (derived)",
-        afm: "AFM §1.8, §5.3.10 (Maximum Flight Duration) + Table 3 GPH",
-        summary: "(Usable fuel − reserve) / Table 3 flow; range = endurance × TAS.",
-        interpolation: "Inherits Table 3 cruise hull; out of chart if cruise fails.",
+        afm: "AFM §1.8, §5.3.10 (Maximum Flight Duration) + active cruise chain (Table 3 or AFMS Fig 4)",
+        summary: "(Usable fuel − reserve) / GPH from the active cruise chain (Table 3 for Sensenich; Fig 2→3→4 for MT 175 R); range = endurance × TAS.",
+        interpolation: "Inherits the cruise hull from the same tab; with MT, GPH is Fig 4 only and out of chart if Fig 4 fails.",
         limitations: "Derived, not an AFM chart. Usable fuel 24.0 US gal (24.5 total per AFM §1.8). Placards: 21.3 / 19.8 gal. See AFM §5.3.10.",
     },
 ];

@@ -272,7 +272,13 @@ fn phase_title(
                 };
                 format!("{} · {sub}", c.cruise)
             }
-            Phase::Endurance => c.tab_endurance.into(),
+            Phase::Endurance => {
+                let sub = match inputs.get().propeller {
+                    PropellerKind::Mt175R => c.cruise_subtitle_mt,
+                    PropellerKind::Sensenich => c.cruise_subtitle_table3,
+                };
+                format!("{} · {sub}", c.tab_endurance)
+            }
             Phase::Landing => c.landing.into(),
             Phase::Manual => String::new(),
         }
