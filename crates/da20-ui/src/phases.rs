@@ -781,6 +781,7 @@ pub(crate) fn phase_shows_wheel_fairing_toggle(phase: Phase) -> bool {
 }
 
 /// Phases that show runway / wind fields in `SharedAirfieldInputs` (takeoff only).
+#[allow(dead_code)]
 pub(crate) fn phase_shows_airfield_runway_wind(phase: Phase) -> bool {
     matches!(phase, Phase::Takeoff)
 }
@@ -803,6 +804,7 @@ fn WheelFairingToggleWhen(
 }
 
 /// Phases that render `SharedPropellerSelector` (MT supplement applies to cruise/endurance only).
+#[allow(dead_code)]
 pub(crate) fn phase_shows_propeller_selector(phase: Phase) -> bool {
     matches!(phase, Phase::Cruise | Phase::Endurance)
 }

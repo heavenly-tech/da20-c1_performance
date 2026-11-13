@@ -905,6 +905,7 @@ fn panel_backgrounds(locale: Locale) -> impl IntoView {
 }
 
 /// Strip drag with tab prefs — same setters as the numeric fields (live `compute_all_isolated`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_strip_hit(
     kind: StripKind,
     sx: f64,
@@ -1280,7 +1281,6 @@ mod strip_drag_tests {
         use crate::prefs::FlightPrefs;
 
         let data = PerformanceData::production();
-        let inner = data.inner();
         let mut prefs = FlightPrefs::default();
         prefs.takeoff.pressure_altitude_ft = 2130.0;
         prefs.takeoff.oat_c = 20.0;

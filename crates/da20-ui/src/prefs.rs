@@ -684,8 +684,10 @@ mod tests {
         let mut prefs = FlightPrefs::default();
         prefs.cruise.cruise_oat_manual = true;
         prefs.cruise.cruise_oat_c_saved = Some(5.0);
-        let mut inputs = FlightInputs::default();
-        inputs.cruise_pressure_alt_ft = defaults::CRUISE_PRESSURE_ALT_FT;
+        let mut inputs = FlightInputs {
+            cruise_pressure_alt_ft: defaults::CRUISE_PRESSURE_ALT_FT,
+            ..Default::default()
+        };
         hydrate_cruise_tab_fields(
             &prefs.cruise,
             &PerformanceData::production(),

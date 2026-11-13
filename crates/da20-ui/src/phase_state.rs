@@ -7,26 +7,15 @@ use da20_core::PerformanceData;
 use crate::phases::Phase;
 use crate::prefs::{
     apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, hydrate_cruise_tab_fields,
-    persist_cruise_tab_from_inputs, persist_takeoff_tab_from_inputs, ClimbTabPrefs, CruiseTabPrefs,
-    FlightPrefs, LandingTabPrefs, TakeoffTabPrefs,
+    persist_cruise_tab_from_inputs, ClimbTabPrefs, CruiseTabPrefs, FlightPrefs, LandingTabPrefs,
+    TakeoffTabPrefs,
 };
 
-pub(crate) fn cruise_tab_mut<'a>(
-    prefs: &'a mut FlightPrefs,
-    phase: Phase,
-) -> &'a mut CruiseTabPrefs {
+pub(crate) fn cruise_tab_mut(prefs: &mut FlightPrefs, phase: Phase) -> &mut CruiseTabPrefs {
     match phase {
         Phase::Cruise => &mut prefs.cruise,
         Phase::Endurance => &mut prefs.endurance.cruise,
         _ => panic!("cruise_tab_mut called for non-cruise phase"),
-    }
-}
-
-pub(crate) fn cruise_tab_ref<'a>(prefs: &'a FlightPrefs, phase: Phase) -> &'a CruiseTabPrefs {
-    match phase {
-        Phase::Cruise => &prefs.cruise,
-        Phase::Endurance => &prefs.endurance.cruise,
-        _ => panic!("cruise_tab_ref called for non-cruise phase"),
     }
 }
 
@@ -247,6 +236,7 @@ pub fn apply_cruise_ground_elevation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prefs::persist_takeoff_tab_from_inputs;
     use da20_core::takeoff::compute_takeoff;
 
     fn seeded_prefs() -> FlightPrefs {
