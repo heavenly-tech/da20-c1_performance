@@ -397,11 +397,21 @@ mod tests {
 
     #[test]
     fn apply_signed_zero_from_hw_and_tw_same_state() {
-        let rwy = 190.0;
+        use crate::data::PerformanceData;
+        use crate::takeoff::compute_takeoff;
+        use crate::types::{ChartPhase, PaOverride};
+
+        let data = PerformanceData::production();
+        let pa = Some(PaOverride {
+            pa_ft: 1000.0,
+            phase: ChartPhase::Takeoff,
+        });
         let mut from_hw = FlightInputs {
             runway: "190".into(),
             wind_dir_deg: 200.0,
             wind_speed_kt: 6.0,
+            pa_override: pa.clone(),
+            oat_c: 21.0,
             ..Default::default()
         };
         apply_signed_along_runway_wind(&mut from_hw, 0.0);
@@ -409,6 +419,8 @@ mod tests {
             runway: "190".into(),
             wind_dir_deg: 20.0,
             wind_speed_kt: 4.0,
+            pa_override: pa,
+            oat_c: 21.0,
             ..Default::default()
         };
         apply_signed_along_runway_wind(&mut from_tw, 0.0);
@@ -416,6 +428,18 @@ mod tests {
         assert_eq!(from_tw.wind_speed_kt, 0.0);
         assert_eq!(signed_along_runway_kt(&from_hw).unwrap(), 0.0);
         assert_eq!(signed_along_runway_kt(&from_tw).unwrap(), 0.0);
-        let _ = rwy;
+        let t_hw = compute_takeoff(&data, &from_hw).unwrap();
+        let t_tw = compute_takeoff(&data, &from_tw).unwrap();
+        assert!((t_hw.ground_roll_ft - t_tw.ground_roll_ft).abs() < 1e-6);
+        assert!(
+            (t_hw.distance_over_obstacle_raw_ft - t_tw.distance_over_obstacle_raw_ft).abs() < 1e-6
+        );
+    }
+
+    #[test]
+    fn wind_dir_opposite_twice_from_north_is_360_not_000() {
+        let d = wind_dir_opposite(wind_dir_opposite(0.0));
+        assert!((d - 360.0).abs() < 0.01, "dir {d}");
+        assert!(d >= 1.0);
     }
 }

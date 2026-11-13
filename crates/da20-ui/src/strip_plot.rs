@@ -1209,18 +1209,27 @@ mod strip_drag_tests {
 
     #[test]
     fn takeoff_wind_strip_drag_continuous_through_zero() {
-        use da20_core::rev29::hand_plot::TAKEOFF_WIND;
+        use da20_core::rev29::hand_plot::{headwind_kt_from_strip_x, tailwind_kt_from_strip_x};
         use da20_core::types::FlightInputs;
         use da20_core::wind::{apply_signed_along_runway_wind, signed_along_runway_kt};
 
         let rwy = 190.0;
         let mut dir = 200.0;
-        let steps = 40usize;
-        let x0 = TAKEOFF_WIND.x;
-        let x1 = TAKEOFF_WIND.x + TAKEOFF_WIND.w;
+        let sy = (STRIP_TOP + STRIP_BOTTOM) * 0.5;
+        let x_start = x_headwind_kt(8.0);
+        let x_end = x_tailwind_kt(3.0);
+        assert!(x_start > x_end, "drag HW → TW decreases strip x");
+        let steps = 24usize;
         let mut last: Option<f64> = None;
+        let mut saw_positive = false;
+        let mut saw_negative = false;
         for i in 0..=steps {
-            let sx = x0 + (x1 - x0) * (i as f64) / (steps as f64);
+            let t = i as f64 / steps as f64;
+            let sx = x_start + (x_end - x_start) * t;
+            assert!(
+                (TAKEOFF_WIND.x..=TAKEOFF_WIND.x + TAKEOFF_WIND.w).contains(&sx),
+                "sx {sx} outside wind panel"
+            );
             let (d, s, _) =
                 back_solve_takeoff_wind_from_strip_x(sx, dir, rwy).expect("wind strip x");
             assert!(s >= 0.0);
@@ -1232,6 +1241,12 @@ mod strip_drag_tests {
                 ..Default::default()
             })
             .unwrap();
+            if along > 0.2 {
+                saw_positive = true;
+            }
+            if along < -0.2 {
+                saw_negative = true;
+            }
             if let Some(prev) = last {
                 assert!(
                     (along - prev).abs() < 0.85,
@@ -1239,11 +1254,13 @@ mod strip_drag_tests {
                 );
             }
             last = Some(along);
+            let _ = (sy, headwind_kt_from_strip_x, tailwind_kt_from_strip_x);
         }
+        assert!(saw_positive && saw_negative, "HW→TW drag must cross sign");
 
         let mut typed = FlightInputs {
             runway: "190".into(),
-            wind_dir_deg: dir,
+            wind_dir_deg: 200.0,
             wind_speed_kt: 8.0,
             ..Default::default()
         };

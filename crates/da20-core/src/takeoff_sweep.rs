@@ -382,6 +382,15 @@ mod tests {
         assert_eq!(rows.len(), 8);
         for row in &rows {
             assert!(row.result.is_some(), "hw={}", row.signed_headwind_kt);
+            let mut inputs = base.clone();
+            apply_sweep_headwind(&mut inputs, row.signed_headwind_kt);
+            let along = signed_along_runway_kt(&inputs).unwrap();
+            assert!(
+                (along - row.signed_headwind_kt).abs() < 0.15,
+                "requested {} along {}",
+                row.signed_headwind_kt,
+                along
+            );
         }
         assert_eq!(rows.first().unwrap().signed_headwind_kt, -3.0);
         assert_eq!(rows.last().unwrap().signed_headwind_kt, 4.0);
