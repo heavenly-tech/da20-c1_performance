@@ -29,13 +29,17 @@ pub const FIG3_TAS_MIN: f64 = 90.0;
 pub const FIG3_TAS_MAX: f64 = 150.0;
 
 /// Rough single-line label box for viewBox fit tests (9px chart-guide-label).
+#[cfg_attr(not(test), allow(dead_code))]
 pub const LABEL_FONT_PX: f64 = 9.0;
+#[cfg_attr(not(test), allow(dead_code))]
 pub const LABEL_CHAR_PX: f64 = 5.4;
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn estimate_text_width(text: &str) -> f64 {
     text.chars().count() as f64 * LABEL_CHAR_PX
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn label_box_fits_viewbox(x: f64, y: f64, text: &str, anchor: LabelAnchor) -> bool {
     let w = estimate_text_width(text);
     let h = LABEL_FONT_PX;
