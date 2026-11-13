@@ -155,7 +155,7 @@ pub struct FlightInputs {
     #[serde(default)]
     pub propeller: PropellerKind,
     /// AFM §5.3.12 NOTE: 1000 RPM ground idle increases landing distance ~5% / ground roll ~7%.
-    #[serde(default)]
+    #[serde(default = "default_landing_ground_idle_1000_rpm")]
     pub landing_ground_idle_1000_rpm: bool,
 }
 
@@ -183,6 +183,10 @@ fn default_wheel_fairings_installed() -> bool {
     true
 }
 
+fn default_landing_ground_idle_1000_rpm() -> bool {
+    true
+}
+
 impl Default for FlightInputs {
     fn default() -> Self {
         Self {
@@ -206,7 +210,7 @@ impl Default for FlightInputs {
             fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
             wind_strip_crosswind_clamped: false,
             propeller: PropellerKind::default(),
-            landing_ground_idle_1000_rpm: false,
+            landing_ground_idle_1000_rpm: default_landing_ground_idle_1000_rpm(),
         }
     }
 }

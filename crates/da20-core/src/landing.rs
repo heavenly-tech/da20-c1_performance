@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(r.distance_over_50ft_chart_ft, Some(1360.0));
         assert_eq!(r.ground_roll_ft.round() as i64, 707);
         assert_eq!(r.distance_over_50ft_ft.round() as i64, 1428);
-        let table4_only = compute_landing(
+        let r_default = compute_landing(
             &data,
             &FlightInputs {
                 pressure_altitude_input_ft: 0.0,
@@ -219,7 +219,19 @@ mod tests {
             },
         )
         .unwrap();
+        assert_eq!(r_default.ground_roll_ft.round() as i64, 707);
+        assert_eq!(r_default.distance_over_50ft_ft.round() as i64, 1428);
+        let table4_only = compute_landing(
+            &data,
+            &FlightInputs {
+                pressure_altitude_input_ft: 0.0,
+                landing_ground_idle_1000_rpm: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(table4_only.ground_roll_ft.round() as i64, 661);
         assert_eq!(table4_only.distance_over_50ft_ft.round() as i64, 1360);
+        assert!(table4_only.ground_roll_chart_ft.is_none());
     }
 }

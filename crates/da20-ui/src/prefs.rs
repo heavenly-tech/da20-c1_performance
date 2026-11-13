@@ -84,8 +84,12 @@ pub struct FlightPrefs {
     pub cruise_solve_saved: Option<CruiseSolveMode>,
     #[serde(default)]
     pub cruise_percent_bhp_saved: Option<f64>,
-    #[serde(default)]
+    #[serde(default = "default_landing_ground_idle_1000_rpm")]
     pub landing_ground_idle_1000_rpm: bool,
+}
+
+fn default_landing_ground_idle_1000_rpm() -> bool {
+    true
 }
 
 impl Default for FlightPrefs {
@@ -98,7 +102,7 @@ impl Default for FlightPrefs {
             cruise_oat_manual: false,
             cruise_solve_saved: None,
             cruise_percent_bhp_saved: None,
-            landing_ground_idle_1000_rpm: false,
+            landing_ground_idle_1000_rpm: default_landing_ground_idle_1000_rpm(),
         }
     }
 }
@@ -344,6 +348,45 @@ mod tests {
         };
         sync_ground_to_takeoff_inputs(&mut inputs, &prefs);
         assert!((inputs.cruise_oat_c - 5.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn default_landing_ground_idle_on_without_saved_state() {
+        let data = PerformanceData::production();
+        let prefs = FlightPrefs::default();
+        let mut inputs = FlightInputs::default();
+        prefs.apply_to_inputs(&data, &mut inputs);
+        assert!(inputs.landing_ground_idle_1000_rpm);
+        inputs.pressure_altitude_input_ft = 0.0;
+        let r = da20_core::landing::compute_landing(&data, &inputs).unwrap();
+        assert_eq!(r.ground_roll_ft.round() as i64, 707);
+        assert_eq!(r.distance_over_50ft_ft.round() as i64, 1428);
+    }
+
+    #[test]
+    fn saved_landing_ground_idle_off_persists() {
+        let data = PerformanceData::production();
+        let prefs = FlightPrefs {
+            landing_ground_idle_1000_rpm: false,
+            ..FlightPrefs::default()
+        };
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        let back: FlightPrefs = serde_json::from_str(&json).expect("deserialize");
+        assert!(!back.landing_ground_idle_1000_rpm);
+        let mut inputs = FlightInputs::default();
+        back.apply_to_inputs(&data, &mut inputs);
+        assert!(!inputs.landing_ground_idle_1000_rpm);
+        let r = da20_core::landing::compute_landing(
+            &data,
+            &FlightInputs {
+                pressure_altitude_input_ft: 0.0,
+                landing_ground_idle_1000_rpm: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(r.ground_roll_ft.round() as i64, 661);
+        assert_eq!(r.distance_over_50ft_ft.round() as i64, 1360);
     }
 
     #[test]
