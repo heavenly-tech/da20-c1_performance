@@ -36,6 +36,11 @@ fn bracket_pa_index(axis: &[f64], pa_ft: f64) -> usize {
     j.min(axis.len().saturating_sub(2))
 }
 
+/// Printed PA row match (no interpolation to the next row).
+fn exact_pa_row_index(axis: &[f64], pa_ft: f64) -> Option<usize> {
+    axis.iter().position(|&p| (p - pa_ft).abs() <= AXIS_TOL)
+}
+
 /// CL1 + CL2 — Fig 5.2 equivalent altitude (PA and OAT strict).
 pub fn equivalent_altitude_ft(
     data: &Rev29File,
@@ -73,6 +78,9 @@ pub fn equivalent_altitude_ft(
     }
     if n == 1 {
         return Ok((ea_at_row(0)?, vec![]));
+    }
+    if let Some(j) = exact_pa_row_index(fan_pa, pa_ft) {
+        return Ok((ea_at_row(j)?, vec![]));
     }
     let j = bracket_pa_index(fan_pa, pa_ft);
     let v0 = ea_at_row(j)?;
@@ -124,6 +132,9 @@ pub fn takeoff_base_m(
     }
     if n == 1 {
         return Ok((base_at_row(0)?, vec![]));
+    }
+    if let Some(j) = exact_pa_row_index(to_pa, pa_ft) {
+        return Ok((base_at_row(j)?, vec![]));
     }
     let j = bracket_pa_index(to_pa, pa_ft);
     let v0 = base_at_row(j)?;
@@ -457,6 +468,27 @@ mod tests {
         let d = prod();
         assert!(takeoff_base_m(&d, 1000.0, -21.0).is_err());
         assert!(takeoff_base_m(&d, 1000.0, 56.0).is_err());
+    }
+
+    #[test]
+    fn takeoff_base_on_exact_pa_row_uses_row_only() {
+        let d = prod();
+        let (m40, _) = takeoff_base_m(&d, 6000.0, 40.0).unwrap();
+        let (m55, _) = takeoff_base_m(&d, 6000.0, 55.0).unwrap();
+        assert!((m40 - 857.0).abs() < 0.5, "6000 ft / 40 °C: {m40}");
+        assert!((m55 - 970.0).abs() < 0.5, "6000 ft / 55 °C: {m55}");
+        let (m8035, _) = takeoff_base_m(&d, 8000.0, 35.0).unwrap();
+        assert!((m8035 - 981.0).abs() < 0.5, "8000 ft / 35 °C: {m8035}");
+        assert!(takeoff_base_m(&d, 8000.0, 40.0).is_err());
+        assert!(takeoff_base_m(&d, 7000.0, 40.0).is_err());
+    }
+
+    #[test]
+    fn takeoff_base_between_rows_high_oat_stays_out_of_chart() {
+        let d = prod();
+        assert!(takeoff_base_m(&d, 5999.0, 55.0).is_ok());
+        assert!(takeoff_base_m(&d, 5000.0, 55.0).is_ok());
+        assert!(takeoff_base_m(&d, 7000.0, 40.0).is_err());
     }
 
     #[test]

@@ -631,9 +631,10 @@ pub fn takeoff_pa_curve_strip_points(data: &Rev29File, pa_ft: f64) -> Vec<(f64, 
     data.to_t
         .value
         .iter()
-        .map(|&t| {
-            let m = takeoff_base_m(data, pa_ft, t).0;
-            (x_oat(t), y_dist(m))
+        .filter_map(|&t| {
+            engine::takeoff_base_m(data, pa_ft, t)
+                .ok()
+                .map(|(m, _)| (x_oat(t), y_dist(m)))
         })
         .collect()
 }
@@ -719,9 +720,10 @@ pub fn climb_fan_pa_curve_strip_points(data: &Rev29File, pa_ft: f64) -> Vec<(f64
     data.fan_t
         .value
         .iter()
-        .map(|&t| {
-            let (ea, _) = equivalent_altitude_ft(data, pa_ft, t);
-            (x_oat(t), y_ea_ft(ea))
+        .filter_map(|&t| {
+            engine::equivalent_altitude_ft(data, pa_ft, t)
+                .ok()
+                .map(|(ea, _)| (x_oat(t), y_ea_ft(ea)))
         })
         .collect()
 }
@@ -763,9 +765,10 @@ pub fn climb_fan_pa_curve_chart_points(data: &Rev29File, pa_ft: f64) -> Vec<(f64
     data.fan_t
         .value
         .iter()
-        .map(|&t| {
-            let (ea, _) = equivalent_altitude_ft(data, pa_ft, t);
-            (t, ea)
+        .filter_map(|&t| {
+            engine::equivalent_altitude_ft(data, pa_ft, t)
+                .ok()
+                .map(|(ea, _)| (t, ea))
         })
         .collect()
 }
@@ -1923,6 +1926,50 @@ mod tests {
             .windows(2)
             .any(|w| point_near_segment(cursor, w[0], w[1], 0.75));
         assert!(on_curve, "cursor {:?} off PA isoline", cursor);
+    }
+
+    #[test]
+    fn takeoff_pa_curve_strip_finite_at_high_pa_rows() {
+        let data = Rev29File::production();
+        for pa in [5999.0, 6000.0, 7000.0, 8000.0, 10_000.0] {
+            let pts = takeoff_pa_curve_strip_points(&data, pa);
+            assert!(!pts.is_empty(), "PA {pa} ft: no strip points");
+            for (x, y) in &pts {
+                assert!(
+                    x.is_finite() && y.is_finite(),
+                    "PA {pa} ft: non-finite {x},{y}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn takeoff_pa_curve_strip_ends_at_row_oat_envelope() {
+        let data = Rev29File::production();
+        let cases = [
+            (6000.0, 55.0),
+            (7000.0, 35.0),
+            (8000.0, 35.0),
+            (10_000.0, 15.0),
+        ];
+        for (pa, last_oat) in cases {
+            let pts = takeoff_pa_curve_strip_points(&data, pa);
+            let last_x = pts.last().unwrap().0;
+            assert!(
+                (last_x - x_oat(last_oat)).abs() < 0.05,
+                "PA {pa} ft: last x {last_x} vs OAT {last_oat}"
+            );
+        }
+    }
+
+    #[test]
+    fn climb_fan_pa_curve_strip_finite_on_printed_pa_row() {
+        let data = Rev29File::production();
+        let pts = climb_fan_pa_curve_strip_points(&data, 6000.0);
+        assert!(!pts.is_empty());
+        for (x, y) in &pts {
+            assert!(x.is_finite() && y.is_finite());
+        }
     }
 
     #[test]
