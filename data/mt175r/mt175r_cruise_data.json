@@ -963,7 +963,7 @@
           ],
           "rpm_range": [
             2156.7,
-            2387.9
+            2399.3
           ],
           "fit": {
             "a": 491.7982842974355,
@@ -1098,9 +1098,19 @@
               "source": "line_fit"
             },
             {
+              "da_ft": 11800,
+              "rpm": 2399.3,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 11950,
+              "rpm": 2399.0,
+              "source": "peak_scan"
+            },
+            {
               "da_ft": 12000,
-              "rpm": 2391.0,
-              "source": "printed_endpoint"
+              "rpm": 2399.0,
+              "source": "peak_scan"
             }
           ]
         },

@@ -332,11 +332,14 @@ fn cruise_ooc_from_result(
             min: *min,
             max: *max,
         }),
-        Ok(c) if c.mt_gph_out_of_chart => Some(ChartOutOfRange {
-            label: "Fig 4 GPH",
-            min: da20_core::chart_bounds::limits::FIG4_DA_FT.0,
-            max: 2200.0,
-        }),
+        Ok(c) if c.mt_gph_out_of_chart => {
+            let da = c.density_altitude_ft?;
+            let rpm = c.rpm?;
+            let mt = da20_core::mt175r::data::Mt175rData::production();
+            Some(da20_core::mt175r::cruise::fig4_gph_partial_ooc_range(
+                &mt, da, rpm,
+            ))
+        }
         _ => None,
     }
 }
@@ -582,5 +585,32 @@ mod tests {
         let s = format_readout_timestamp("2026-01-01T12:30:00.000Z", Locale::En);
         assert!(!s.ends_with('Z'));
         assert!(s.contains("2026"));
+    }
+
+    #[test]
+    fn endurance_partial_when_mt_fig4_gph_ceiling() {
+        use da20_core::cruise::isa_temp_c_at_pa;
+        use da20_core::types::{CruiseSolveMode, PropellerKind};
+
+        let data = PerformanceData::production();
+        let pa = 12_000.0;
+        let inputs = FlightInputs {
+            propeller: PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: pa,
+            cruise_oat_c: isa_temp_c_at_pa(pa),
+            cruise_percent_bhp: 65.0,
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            ..Default::default()
+        };
+        let b = compute_all(&data, &inputs);
+        assert!(b.endurance.is_none());
+        assert!(b.cruise.is_some());
+        assert!(b.cruise.as_ref().unwrap().mt_gph_out_of_chart);
+        let ooc = b.cruise_ooc.expect("cruise_ooc");
+        assert_eq!(ooc.label, "Fig 4 GPH");
+        let es = crate::i18n::format_out_of_chart(Locale::Es, &ooc);
+        let en = crate::i18n::format_out_of_chart(Locale::En, &ooc);
+        assert!(es.starts_with("Fuera de carta"));
+        assert!(en.starts_with("Out of chart"));
     }
 }

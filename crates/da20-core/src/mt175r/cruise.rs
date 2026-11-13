@@ -1,5 +1,5 @@
 use crate::altitude::isa_troposphere_density_altitude_ft;
-use crate::chart_bounds::{limits, CHART_EDGE_TOL};
+use crate::chart_bounds::{limits, ChartOutOfRange, CHART_EDGE_TOL};
 use crate::cruise::CruiseError;
 use crate::data::PerformanceData;
 use crate::interpolation::lerp;
@@ -522,8 +522,30 @@ struct MtCruiseBuild<'a> {
     fairings: bool,
 }
 
-fn mt_fig4_gph_out_of_chart(da: f64, rpm: f64) -> bool {
-    da < limits::FIG4_DA_FT.0 - CHART_EDGE_TOL || rpm < FIG4_RPM_FLOOR - CHART_EDGE_TOL
+fn mt_fig4_gph_out_of_chart(mt: &Mt175rData, da: f64, rpm: f64) -> bool {
+    if da < limits::FIG4_DA_FT.0 - CHART_EDGE_TOL || rpm < FIG4_RPM_FLOOR - CHART_EDGE_TOL {
+        return true;
+    }
+    lookup_fig4(mt.fig4_rows(), da, rpm).is_err()
+}
+
+/// Valid range string bounds for partial Fig 4 GPH (floor vs RPM ceiling at this DA).
+pub fn fig4_gph_partial_ooc_range(mt: &Mt175rData, da: f64, rpm: f64) -> ChartOutOfRange {
+    if da < limits::FIG4_DA_FT.0 - CHART_EDGE_TOL || rpm < FIG4_RPM_FLOOR - CHART_EDGE_TOL {
+        return ChartOutOfRange {
+            label: "Fig 4 GPH",
+            min: limits::FIG4_DA_FT.0,
+            max: FIG4_RPM_FLOOR,
+        };
+    }
+    let rows = mt.fig4_rows();
+    let min = rmin_at_da(rows, da).unwrap_or(FIG4_RPM_FLOOR);
+    let max = rmax_at_da(rows, da).unwrap_or(mt.rpm_max());
+    ChartOutOfRange {
+        label: "Fig 4 GPH",
+        min,
+        max,
+    }
 }
 
 fn build_mt_cruise_result(ctx: MtCruiseBuild<'_>) -> Result<CruiseResult, CruiseError> {
@@ -531,15 +553,9 @@ fn build_mt_cruise_result(ctx: MtCruiseBuild<'_>) -> Result<CruiseResult, Cruise
     let tas = ctx.tas_fig3_kt * m;
     let mut warnings = ctx.warnings;
 
-    if mt_fig4_gph_out_of_chart(ctx.da, ctx.rpm) {
-        warnings.push(CalculationWarning::with_args(
-            "CHART_OUT_OF_RANGE",
-            vec![
-                "Fig 4 GPH".to_string(),
-                format!("{}", limits::FIG4_DA_FT.0 as i64),
-                format!("{}", FIG4_RPM_FLOOR as i64),
-            ],
-        ));
+    if mt_fig4_gph_out_of_chart(ctx.mt, ctx.da, ctx.rpm) {
+        let ooc = fig4_gph_partial_ooc_range(ctx.mt, ctx.da, ctx.rpm);
+        warnings.push(ooc.warning());
         return Ok(CruiseResult {
             provenance: ctx.mt.provenance(),
             afm_lookup_tag: AfmLookupTag::Interpolated,
@@ -919,7 +935,7 @@ mod tests {
         let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
         assert!(r.mt_gph_out_of_chart);
         assert!((r.rpm.unwrap() - 2188.9).abs() < 1.0);
-        assert!((r.tas_chart_kt.unwrap() - 108.58).abs() < 0.6);
+        assert!((r.tas_chart_kt.unwrap() - 108.58).abs() < 0.4);
         assert!(r.fuel_flow_chart_us_gal_h.is_none());
     }
 
@@ -938,6 +954,54 @@ mod tests {
         assert!(r.mt_gph_out_of_chart);
         assert!((r.rpm.unwrap() - 2025.0).abs() < 1.0);
         assert!((r.tas_chart_kt.unwrap() - 98.2).abs() < 0.3);
+    }
+
+    #[test]
+    fn partial_fig4_gph_rpm_ceiling_da12000_pct65() {
+        let mt = Mt175rData::production();
+        let pa = 12000.0;
+        let inputs = FlightInputs {
+            propeller: crate::types::PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: pa,
+            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(pa),
+            cruise_percent_bhp: 65.0,
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            ..FlightInputs::default()
+        };
+        let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
+        assert!(r.mt_gph_out_of_chart);
+        assert!((r.rpm.unwrap() - 2568.2).abs() < 1.0);
+        assert!((r.tas_chart_kt.unwrap() - 127.50).abs() < 0.4);
+        assert!(r.fuel_flow_chart_us_gal_h.is_none());
+    }
+
+    #[test]
+    fn partial_fig4_gph_rpm_ceiling_da8100_pct75() {
+        let mt = Mt175rData::production();
+        let pa = 8100.0;
+        let inputs = FlightInputs {
+            propeller: crate::types::PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: pa,
+            cruise_oat_c: crate::cruise::isa_temp_c_at_pa(pa),
+            cruise_percent_bhp: 75.0,
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            ..FlightInputs::default()
+        };
+        let r = compute_mt175r_cruise(&mt, &inputs).unwrap();
+        assert!(r.mt_gph_out_of_chart);
+        assert!((r.rpm.unwrap() - 2646.1).abs() < 1.0);
+        assert!((r.tas_chart_kt.unwrap() - 134.22).abs() < 0.4);
+        assert!(r.fuel_flow_chart_us_gal_h.is_none());
+    }
+
+    #[test]
+    fn fig2_55_peak_scan_at_12000_da() {
+        let mt = Mt175rData::production();
+        let rpm = lookup_fig2_rpm_at_pct(&mt, 12_000.0, 55.0).unwrap().rpm;
+        assert!(
+            (rpm - 2399.0).abs() < 0.5,
+            "55% @12000 ft DA should be peak_scan ~2399 RPM, got {rpm}"
+        );
     }
 
     #[test]
@@ -1027,7 +1091,7 @@ mod tests {
             let fig2 = lookup_fig2_rpm_at_pct(&mt, da, pct).expect("fig2");
             assert!((fig2.rpm - exp_rpm).abs() < 2.0, "da={da} pct={pct}");
             let fig3 = lookup_fig3_tas_at_pct(&mt, da, pct).expect("fig3");
-            assert!((fig3.tas_kt - exp_tas).abs() < 0.6, "da={da} pct={pct}");
+            assert!((fig3.tas_kt - exp_tas).abs() < 0.4, "da={da} pct={pct}");
         }
         let full_chain: &[(f64, f64)] = &[
             (4000.0, 65.0),

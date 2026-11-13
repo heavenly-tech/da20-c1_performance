@@ -612,7 +612,18 @@ fn phase_results(
                     </div>
                     }.into_any()
                 },
-                None => view! { <p class="error">"—"</p> }.into_any(),
+                None => {
+                    if b.cruise.as_ref().is_some_and(|c| c.mt_gph_out_of_chart) {
+                        if let Some(ooc) = &b.cruise_ooc {
+                            view! { <p class="error warn">{format_out_of_chart(locale, ooc)}</p> }
+                                .into_any()
+                        } else {
+                            view! { <p class="error">"—"</p> }.into_any()
+                        }
+                    } else {
+                        view! { <p class="error">"—"</p> }.into_any()
+                    }
+                }
             }}
         }.into_any(),
         Phase::Landing => view! {

@@ -299,7 +299,6 @@ pub fn fig3_named_tas_at_da(data: &Mt175rData, name: &str, da_ft: f64) -> Option
 fn fig2_printed_endpoint(pct_bhp: i32) -> Option<(f64, f64)> {
     match pct_bhp {
         45 => Some((12_000.0, 2235.0)),
-        55 => Some((12_000.0, 2391.0)),
         75 => Some((8270.0, 2650.0)),
         _ => None,
     }
