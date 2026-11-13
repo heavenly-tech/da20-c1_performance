@@ -187,7 +187,9 @@ mod tests {
         assert_eq!(trace.pa_rows.len(), 2);
         let (roll, over) = recompute_landing_from_table4_source(trace);
         let roll_expected = r.ground_roll_chart_ft.unwrap_or(r.ground_roll_ft);
-        let over_expected = r.distance_over_50ft_chart_ft.unwrap_or(r.distance_over_50ft_ft);
+        let over_expected = r
+            .distance_over_50ft_chart_ft
+            .unwrap_or(r.distance_over_50ft_ft);
         assert!((roll - roll_expected).abs() < 1e-9);
         assert!((over - over_expected).abs() < 1e-9);
     }
