@@ -77,6 +77,18 @@ pub fn PhaseShell(
                                 p.save();
                             });
                         }/>
+                    <NumField label=move || copy(locale.get()).climb_target_altitude_ft.to_string()
+                        min=da20_core::chart_bounds::limits::FIG52_PA_FT.0
+                        max=da20_core::chart_bounds::limits::FIG52_PA_FT.1
+                        get=move || inputs.get().cruise_pressure_alt_ft
+                        set=move |v| {
+                            flight_prefs.update(|p| {
+                                inputs.update(|i| i.cruise_pressure_alt_ft = v);
+                                p.climb.climb_target_altitude_ft = v;
+                                crate::prefs::persist_climb_tab_from_inputs(p, &inputs.get_untracked());
+                                p.save();
+                            });
+                        }/>
                     <ClimbFlapToggle locale=locale inputs=inputs data=data flight_prefs=flight_prefs/>
                     <WheelFairingToggleWhen phase=Phase::Climb locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     {move || {
