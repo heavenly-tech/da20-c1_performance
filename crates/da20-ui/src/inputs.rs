@@ -313,6 +313,7 @@ pub fn SharedAirfieldInputs(
                     ),
                 },
             };
+            let show_oat = !matches!(mode, AirfieldInputsMode::Landing);
             view! {
                 {(!hide_pa_oat).then(|| view! {
                     <NumField label=move || c.pressure_altitude_ft.to_string()
@@ -337,18 +338,20 @@ pub fn SharedAirfieldInputs(
                                 }
                             });
                         }/>
-                    <NumField label=move || c.oat.to_string()
-                        min=oat_min
-                        max=oat_max
-                        get=move || inputs.get().oat_c
-                        set=move |v| {
-                            flight_prefs.update(|p| {
-                                inputs.update(|i| shared_airfield_set_oat_c(mode, p, i, v));
-                                if shared_airfield_writes_tab_prefs(mode) {
-                                    p.save();
-                                }
-                            });
-                        }/>
+                    {show_oat.then(|| view! {
+                        <NumField label=move || c.oat.to_string()
+                            min=oat_min
+                            max=oat_max
+                            get=move || inputs.get().oat_c
+                            set=move |v| {
+                                flight_prefs.update(|p| {
+                                    inputs.update(|i| shared_airfield_set_oat_c(mode, p, i, v));
+                                    if shared_airfield_writes_tab_prefs(mode) {
+                                        p.save();
+                                    }
+                                });
+                            }/>
+                    })}
                 })}
                 {(mode == AirfieldInputsMode::Takeoff).then(|| {
                     view! {

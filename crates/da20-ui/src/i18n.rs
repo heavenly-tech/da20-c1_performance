@@ -1323,4 +1323,41 @@ mod i18n_display_tests {
         assert_ne!(TO, UP);
         assert_ne!(UP, LDG);
     }
+
+    #[test]
+    fn method_es_table3_interpolation_worked_weights_and_delta_isa_sigma() {
+        let entry = ES_METHODS
+            .iter()
+            .find(|m| m.title.starts_with("Crucero (Tabla 3)"))
+            .expect("Tabla 3");
+        assert!(
+            entry.interpolation.contains("Peso ΔISA"),
+            "must name ΔISA weight inside Σ product"
+        );
+        assert!(entry.interpolation.contains("2400"));
+        assert!(entry.interpolation.contains("0,5"));
+        assert!(entry.interpolation.contains("0,75"));
+        assert!(!entry.interpolation.contains("Σ Peso PA × Σ Peso RPM"));
+    }
+
+    #[test]
+    fn method_es_mt_density_formula_shows_5_25588() {
+        let entry = ES_METHODS
+            .iter()
+            .find(|m| m.title.contains("MT 175"))
+            .expect("MT");
+        assert!(entry.summary.contains("5.25588"));
+        assert!(!entry.summary.contains("5,256"));
+    }
+
+    #[test]
+    fn method_es_cruise_ground_not_shared_with_takeoff_wording() {
+        let entry = ES_METHODS
+            .iter()
+            .find(|m| m.title.contains("OAT de crucero"))
+            .expect("ground OAT");
+        assert!(!entry.summary.contains("Parámetros compartidos"));
+        assert!(!entry.summary.contains("En despegue alimentan"));
+        assert!(entry.summary.contains("independiente en cada ficha"));
+    }
 }

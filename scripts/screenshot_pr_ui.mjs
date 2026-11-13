@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:8080";
+const baseUrl = process.env.BASE_URL ?? "http://127.0.0.1:18081";
 const outDir = process.env.OUT_DIR ?? "docs/pr11-screenshots";
 const label = process.env.LABEL ?? "after";
 const themes = (process.env.THEMES ?? "light,dark,night").split(",").filter(Boolean);
@@ -88,6 +88,29 @@ await page.goto(`${baseUrl}/?v=${Date.now()}`, {
 await clearDa20Storage(page);
 await page.reload({ waitUntil: "networkidle", timeout: 120_000 });
 
+async function assertBuiltAssetsFresh(page) {
+  const wasm = await page.evaluate(async () => {
+    const html = await (await fetch(window.location.href, { cache: "reload" })).text();
+    const m = html.match(/module_or_path:\s*'(\/[^']+_bg\.wasm)'/);
+    const wasmUrl = m ? m[1] : null;
+    if (!wasmUrl) return { ok: false, reason: "no wasm path in boot script" };
+    const r = await fetch(wasmUrl, { cache: "reload" });
+    const buf = await r.arrayBuffer();
+    const text = new TextDecoder("latin1").decode(buf);
+    return {
+      ok:
+        text.includes("2400 y 2500") &&
+        text.includes("5.25588") &&
+        !text.includes("Parámetros compartidos"),
+      url: wasmUrl,
+    };
+  });
+  if (!wasm.ok) {
+    throw new Error(`WASM bundle missing PR #11 strings: ${JSON.stringify(wasm)}`);
+  }
+}
+await assertBuiltAssetsFresh(page);
+
 const md5Changes = [];
 
 for (const theme of themes) {
@@ -117,13 +140,6 @@ for (const theme of themes) {
       }
     }
 
-    if (tab.key === "landing" && label === "after") {
-      const offBtn = page.getByRole("button", { name: "No", exact: true });
-      if ((await offBtn.count()) > 0) {
-        await offBtn.click();
-        await page.waitForTimeout(400);
-      }
-    }
 
     if (tab.key === "cruise" && label === "after") {
       const mt = page.getByRole("button", { name: /MT 175|175 R/i });
@@ -151,6 +167,30 @@ for (const theme of themes) {
       /* no before baseline */
     }
     const prevMd5 = await md5File(file).catch(() => null);
+    if (tab.key === "takeoff" && label === "after") {
+      await page.getByText("Carenados de rueda / Wheel fairings").count().then((n) => {
+        if (n > 0) throw new Error("takeoff screenshot still shows wheel fairing toggle");
+      });
+    }
+    if (tab.key === "landing" && label === "after") {
+      const rwy = await page.getByText("Orientación pista").count();
+      const fair = await page.getByText("Carenados de rueda / Wheel fairings").count();
+      if (rwy > 0 || fair > 0) {
+        throw new Error("landing screenshot shows runway/wind or fairing toggle");
+      }
+    }
+    if (tab.key === "method" && label === "after") {
+      const body = await page.locator(".method-list").innerText();
+      if (!body.includes("2400") || !body.includes("0,5")) {
+        throw new Error("Método missing worked-weight example in DOM");
+      }
+      if (body.includes("Parámetros compartidos")) {
+        throw new Error("Método still shows legacy shared-ground copy");
+      }
+      if (!body.includes("5.25588")) {
+        throw new Error("Método missing exact MT exponent 5.25588");
+      }
+    }
     const fullPage = tab.key === "method" && label === "after";
     await page.screenshot({ path: file, fullPage });
     const afterMd5 = await md5File(file);

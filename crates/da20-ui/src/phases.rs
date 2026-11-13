@@ -78,7 +78,7 @@ pub fn PhaseShell(
                             });
                         }/>
                     <ClimbFlapToggle locale=locale inputs=inputs data=data flight_prefs=flight_prefs/>
-                    <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
+                    <WheelFairingToggleWhen phase=Phase::Climb locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     {move || {
                         let c = copy(locale.get());
                         (!inputs.get().wheel_fairings_installed).then(|| view! {
@@ -90,14 +90,14 @@ pub fn PhaseShell(
             Phase::Cruise => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Cruise airfield=false flight_prefs=flight_prefs ground_inputs=true>
                     <SharedPropellerSelector locale=locale inputs=inputs flight_prefs=flight_prefs/>
-                    <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
+                    <WheelFairingToggleWhen phase=Phase::Cruise locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <CruiseInputs editor_phase=Phase::Cruise locale=locale inputs=inputs flight_prefs=flight_prefs/>
                 </PhaseGrid>
             }.into_any(),
             Phase::Endurance => view! {
                 <PhaseGrid locale=locale inputs=inputs data=data store=store phase=Phase::Endurance airfield=false flight_prefs=flight_prefs ground_inputs=true>
                     <SharedPropellerSelector locale=locale inputs=inputs flight_prefs=flight_prefs/>
-                    <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
+                    <WheelFairingToggleWhen phase=Phase::Endurance locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <CruiseInputs editor_phase=Phase::Endurance locale=locale inputs=inputs flight_prefs=flight_prefs/>
                     <NumField label=move || copy(locale.get()).fuel_usable.to_string()
                         get=move || inputs.get().fuel_usable_us_gal
@@ -768,6 +768,28 @@ pub(crate) fn phase_shows_wheel_fairing_toggle(phase: Phase) -> bool {
     matches!(phase, Phase::Climb | Phase::Cruise | Phase::Endurance)
 }
 
+/// Phases that show runway / wind fields in `SharedAirfieldInputs` (takeoff only).
+pub(crate) fn phase_shows_airfield_runway_wind(phase: Phase) -> bool {
+    matches!(phase, Phase::Takeoff)
+}
+
+#[component]
+fn WheelFairingToggleWhen(
+    phase: Phase,
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
+) -> impl IntoView {
+    if phase_shows_wheel_fairing_toggle(phase) {
+        view! {
+            <SharedWheelFairingToggle locale=locale inputs=inputs flight_prefs=flight_prefs/>
+        }
+        .into_any()
+    } else {
+        ().into_any()
+    }
+}
+
 /// Phases that render `SharedPropellerSelector` (MT supplement applies to cruise/endurance only).
 pub(crate) fn phase_shows_propeller_selector(phase: Phase) -> bool {
     matches!(phase, Phase::Cruise | Phase::Endurance)
@@ -795,5 +817,12 @@ mod phase_chrome_tests {
         assert!(phase_shows_wheel_fairing_toggle(Phase::Endurance));
         assert!(!phase_shows_wheel_fairing_toggle(Phase::Landing));
         assert!(!phase_shows_wheel_fairing_toggle(Phase::Manual));
+    }
+
+    #[test]
+    fn runway_wind_airfield_only_on_takeoff() {
+        assert!(phase_shows_airfield_runway_wind(Phase::Takeoff));
+        assert!(!phase_shows_airfield_runway_wind(Phase::Landing));
+        assert!(!phase_shows_airfield_runway_wind(Phase::Climb));
     }
 }
