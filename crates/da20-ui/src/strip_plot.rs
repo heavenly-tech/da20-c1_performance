@@ -1208,6 +1208,56 @@ mod strip_drag_tests {
     }
 
     #[test]
+    fn takeoff_wind_strip_drag_continuous_through_zero() {
+        use da20_core::rev29::hand_plot::TAKEOFF_WIND;
+        use da20_core::types::FlightInputs;
+        use da20_core::wind::{apply_signed_along_runway_wind, signed_along_runway_kt};
+
+        let rwy = 190.0;
+        let mut dir = 200.0;
+        let steps = 40usize;
+        let x0 = TAKEOFF_WIND.x;
+        let x1 = TAKEOFF_WIND.x + TAKEOFF_WIND.w;
+        let mut last: Option<f64> = None;
+        for i in 0..=steps {
+            let sx = x0 + (x1 - x0) * (i as f64) / (steps as f64);
+            let (d, s, _) =
+                back_solve_takeoff_wind_from_strip_x(sx, dir, rwy).expect("wind strip x");
+            assert!(s >= 0.0);
+            dir = d;
+            let along = signed_along_runway_kt(&FlightInputs {
+                runway: "190".into(),
+                wind_dir_deg: d,
+                wind_speed_kt: s,
+                ..Default::default()
+            })
+            .unwrap();
+            if let Some(prev) = last {
+                assert!(
+                    (along - prev).abs() < 0.85,
+                    "jump {prev} -> {along} at sx={sx}"
+                );
+            }
+            last = Some(along);
+        }
+
+        let mut typed = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: dir,
+            wind_speed_kt: 8.0,
+            ..Default::default()
+        };
+        for target in [4.0, 0.0, -3.0] {
+            apply_signed_along_runway_wind(&mut typed, target);
+            let along = signed_along_runway_kt(&typed).unwrap();
+            assert!(
+                (along - target).abs() < 0.2,
+                "typed target {target} got {along}"
+            );
+        }
+    }
+
+    #[test]
     fn takeoff_strip_pa_drag_matches_typed_setter_and_compute() {
         use crate::inputs::{
             shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude, AirfieldInputsMode,

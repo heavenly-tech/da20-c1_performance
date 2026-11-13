@@ -193,7 +193,7 @@ pub fn headwind_kt_from_strip_x(x: f64) -> f64 {
     (x - TAKEOFF_HW.x) / TAKEOFF_HW.w * 20.0
 }
 
-/// Map strip x in the Fig 5.4 wind panel to a wind speed back-solve (direction fixed).
+/// Map strip x in the Fig 5.4 wind panel to a wind speed/direction back-solve.
 /// TW sub-panel (left) → tailwind; HW sub-panel (right) → headwind; shared edge is 0 kt.
 pub fn back_solve_takeoff_wind_from_strip_x(
     sx: f64,
