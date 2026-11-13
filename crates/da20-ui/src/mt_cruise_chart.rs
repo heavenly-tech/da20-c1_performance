@@ -201,7 +201,7 @@ pub fn plot_left_x() -> f64 {
     MT_MARGIN_L
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[allow(dead_code)]
 pub fn plot_right_x() -> f64 {
     MT_MARGIN_L + MT_W
 }
