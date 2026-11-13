@@ -9,6 +9,8 @@ mod ground_oat;
 mod i18n;
 mod inputs;
 mod interactive_chart;
+mod mt_cruise_axes;
+mod mt_cruise_chart;
 mod mt_cruise_panel;
 mod palette;
 mod phase_readouts;

@@ -155,3 +155,30 @@ pub fn map_to_svg(
         top + (1.0 - ny.clamp(0.0, 1.0)) * height,
     )
 }
+
+/// Inverse of [`map_to_svg`]: viewBox coordinates → chart `(x, y)`.
+#[allow(clippy::too_many_arguments)]
+pub fn map_from_svg(
+    sx: f64,
+    sy: f64,
+    x_min: f64,
+    x_max: f64,
+    y_min: f64,
+    y_max: f64,
+    left: f64,
+    top: f64,
+    width: f64,
+    height: f64,
+) -> (f64, f64) {
+    let nx = if width.abs() < f64::EPSILON {
+        0.5
+    } else {
+        ((sx - left) / width).clamp(0.0, 1.0)
+    };
+    let ny = if height.abs() < f64::EPSILON {
+        0.5
+    } else {
+        1.0 - ((sy - top) / height).clamp(0.0, 1.0)
+    };
+    (x_min + nx * (x_max - x_min), y_min + ny * (y_max - y_min))
+}

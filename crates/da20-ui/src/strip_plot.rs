@@ -1043,6 +1043,10 @@ fn client_to_svg_viewbox_via_ctm(
     Some((f64::from(out.x()), f64::from(out.y())))
 }
 
+pub(crate) fn svg_pointer_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
+    svg_coords(ev)
+}
+
 fn svg_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
     let target = ev.current_target()?.dyn_into::<web_sys::Element>().ok()?;
     let client_x = ev.client_x() as f64;
@@ -1064,7 +1068,7 @@ fn svg_coords(ev: &web_sys::PointerEvent) -> Option<(f64, f64)> {
     ))
 }
 
-fn capture_pointer(ev: &web_sys::PointerEvent) {
+pub(crate) fn capture_pointer(ev: &web_sys::PointerEvent) {
     if let Some(el) = ev
         .current_target()
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
@@ -1073,7 +1077,7 @@ fn capture_pointer(ev: &web_sys::PointerEvent) {
     }
 }
 
-fn release_pointer(ev: &web_sys::PointerEvent) {
+pub(crate) fn release_pointer(ev: &web_sys::PointerEvent) {
     if let Some(el) = ev
         .current_target()
         .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
