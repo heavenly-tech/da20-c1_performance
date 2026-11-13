@@ -259,13 +259,6 @@ pub fn snapshot_and_save_flight_prefs(inputs: &FlightInputs, prefs: &mut FlightP
     prefs.save();
 }
 
-/// Chart-phase PA/OAT edits (climb/landing) must not rewrite aerodrome ground prefs.
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn apply_chart_phase_pa_oat(inputs: &mut FlightInputs, pa_ft: f64, oat_c: f64) {
-    inputs.pressure_altitude_input_ft = pa_ft;
-    inputs.oat_c = oat_c;
-}
-
 impl TakeoffPrefs {
     pub fn load() -> Self {
         if cfg!(target_arch = "wasm32") {
@@ -390,24 +383,6 @@ mod tests {
         assert_eq!(upgraded.cruise_solve_saved, None);
         assert_eq!(upgraded.cruise_percent_bhp_saved, None);
         assert_eq!(upgraded.cruise_oat_c_saved, None);
-    }
-
-    #[test]
-    fn climb_pa_edit_leaves_ground_prefs_and_cruise_estimate() {
-        let prefs = FlightPrefs {
-            ground_elevation_ft: 2130.0,
-            ground_oat_c: 20.0,
-            cruise_oat_manual: false,
-            ..FlightPrefs::default()
-        };
-        let mut inputs = FlightInputs::default();
-        sync_ground_to_takeoff_inputs(&mut inputs, &prefs);
-        let cruise_oat_before = inputs.cruise_oat_c;
-        let climb_oat = inputs.oat_c;
-        apply_chart_phase_pa_oat(&mut inputs, 8000.0, climb_oat);
-        assert_eq!(prefs.ground_elevation_ft, 2130.0);
-        assert_eq!(prefs.ground_oat_c, 20.0);
-        assert!((inputs.cruise_oat_c - cruise_oat_before).abs() < 1e-9);
     }
 
     #[test]

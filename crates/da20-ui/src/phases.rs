@@ -219,6 +219,7 @@ fn airfield_mode_for(phase: Phase) -> AirfieldInputsMode {
     match phase {
         Phase::Takeoff => AirfieldInputsMode::Takeoff,
         Phase::Climb => AirfieldInputsMode::Climb,
+        Phase::Landing => AirfieldInputsMode::Landing,
         _ => AirfieldInputsMode::Full,
     }
 }
