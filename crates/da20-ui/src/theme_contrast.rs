@@ -372,6 +372,18 @@ fn contrast_checks(theme: &str) -> &'static [ContrastCheck] {
                 min: AA_UI_NON_TEXT,
                 label: "chart grid",
             },
+            ContrastCheck {
+                fg: "chart-result",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart result trace",
+            },
+            ContrastCheck {
+                fg: "chart-warning",
+                bg: "chart-surface-bg",
+                min: AA_UI_NON_TEXT,
+                label: "chart warning trace",
+            },
         ],
         "night" => &[
             ContrastCheck {
@@ -540,4 +552,34 @@ fn wcag_contrast_from_style_css() {
 fn contrast_helper_sanity() {
     assert!(contrast_ratio("#000000", "#ffffff") > 20.0);
     assert!(contrast_ratio("#777777", "#ffffff") < 4.5);
+}
+
+#[test]
+fn palette_json_backgrounds_are_not_night_chart_surface() {
+    const PALETTES_JSON: &str = include_str!("../../../data/palettes.json");
+    const NIGHT_CHART_SURFACE: &str = "#0a0404";
+    let file: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(PALETTES_JSON).expect("palettes.json");
+    for (id, entry) in &file {
+        let light = entry
+            .get("light")
+            .and_then(|v| v.get("background"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| panic!("{id} light background"));
+        let dark = entry
+            .get("dark")
+            .and_then(|v| v.get("background"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| panic!("{id} dark background"));
+        assert_ne!(
+            light.to_ascii_lowercase(),
+            NIGHT_CHART_SURFACE,
+            "palette {id} light"
+        );
+        assert_ne!(
+            dark.to_ascii_lowercase(),
+            NIGHT_CHART_SURFACE,
+            "palette {id} dark"
+        );
+    }
 }

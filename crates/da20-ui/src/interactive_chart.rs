@@ -26,7 +26,9 @@ use crate::i18n::{
     afm_lookup_tag_label, copy, format_climb_readout_interactive_pair, format_out_of_chart,
     format_takeoff_strip_pa_trace_label, Locale,
 };
-use crate::inputs::set_chart_pa;
+use crate::inputs::{set_chart_pa, shared_airfield_set_pressure_altitude, AirfieldInputsMode};
+use crate::phases::Phase;
+use crate::prefs::FlightPrefs;
 use crate::storage::compute_all;
 
 fn chart_phase(kind: ChartKind) -> Option<ChartPhase> {
@@ -53,6 +55,8 @@ pub fn InteractiveChart(
     kind: ChartKind,
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
+    #[prop(optional)] flight_prefs: Option<RwSignal<FlightPrefs>>,
+    #[prop(optional)] sync_phase: Option<Phase>,
 ) -> impl IntoView {
     let dragging = RwSignal::new(false);
 
@@ -100,7 +104,15 @@ pub fn InteractiveChart(
     let on_pointer_down = move |ev: web_sys::PointerEvent| {
         dragging.set(true);
         update_cursor(&ev, cursor_x, cursor_y);
-        apply_drag(kind, cursor_x.get(), cursor_y.get(), data.get(), inputs);
+        apply_chart_drag(
+            kind,
+            cursor_x.get(),
+            cursor_y.get(),
+            data.get(),
+            flight_prefs,
+            sync_phase,
+            inputs,
+        );
         if let Some(el) = ev
             .current_target()
             .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
@@ -111,6 +123,12 @@ pub fn InteractiveChart(
     let on_pointer_up = move |ev: web_sys::PointerEvent| {
         if dragging.get() {
             inputs.update(round_after_chart_drag);
+            if let (Some(fp), Some(phase)) = (flight_prefs, sync_phase) {
+                fp.update(|p| {
+                    crate::phase_state::persist_tab_inputs(phase, p, &inputs.get_untracked());
+                    p.save();
+                });
+            }
         }
         dragging.set(false);
         if let Some(el) = ev
@@ -125,7 +143,15 @@ pub fn InteractiveChart(
             return;
         }
         update_cursor(&ev, cursor_x, cursor_y);
-        apply_drag(kind, cursor_x.get(), cursor_y.get(), data.get(), inputs);
+        apply_chart_drag(
+            kind,
+            cursor_x.get(),
+            cursor_y.get(),
+            data.get(),
+            flight_prefs,
+            sync_phase,
+            inputs,
+        );
     };
 
     view! {
@@ -139,6 +165,16 @@ pub fn InteractiveChart(
                 on:pointerleave=move |_| {
                     if dragging.get() {
                         inputs.update(round_after_chart_drag);
+                        if let (Some(fp), Some(phase)) = (flight_prefs, sync_phase) {
+                            fp.update(|p| {
+                                crate::phase_state::persist_tab_inputs(
+                                    phase,
+                                    p,
+                                    &inputs.get_untracked(),
+                                );
+                                p.save();
+                            });
+                        }
                     }
                     dragging.set(false);
                 }
@@ -560,11 +596,13 @@ fn nearest_pa_index(axis: &[f64], pa: f64) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
-fn apply_drag(
+fn apply_chart_drag(
     kind: ChartKind,
     nx: f64,
     ny: f64,
     data: PerformanceData,
+    flight_prefs: Option<RwSignal<FlightPrefs>>,
+    sync_phase: Option<Phase>,
     inputs: RwSignal<FlightInputs>,
 ) {
     let inner = data.inner();
@@ -583,7 +621,21 @@ fn apply_drag(
         }
         ChartKind::Landing => {
             let pa = lerp_axis(&inner.land_alt.value, nx);
-            set_chart_pa(inputs, pa, ChartPhase::Landing);
+            if let (Some(fp), Some(_phase)) = (flight_prefs, sync_phase) {
+                fp.update(|p| {
+                    inputs.update(|i| {
+                        shared_airfield_set_pressure_altitude(
+                            AirfieldInputsMode::Landing,
+                            Some(ChartPhase::Landing),
+                            p,
+                            i,
+                            pa,
+                        );
+                    });
+                });
+            } else {
+                set_chart_pa(inputs, pa, ChartPhase::Landing);
+            }
         }
         ChartKind::Wind => {
             let angle = nx * 90.0;

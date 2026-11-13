@@ -999,8 +999,8 @@ mod tests {
         let mt = Mt175rData::production();
         let rpm = lookup_fig2_rpm_at_pct(&mt, 12_000.0, 55.0).unwrap().rpm;
         assert!(
-            (rpm - 2399.0).abs() < 0.5,
-            "55% @12000 ft DA should be peak_scan ~2399 RPM, got {rpm}"
+            (rpm - 2398.8).abs() < 0.5,
+            "55% @12000 ft DA should be peak_scan ~2398.8 RPM from fig2_orig, got {rpm}"
         );
     }
 

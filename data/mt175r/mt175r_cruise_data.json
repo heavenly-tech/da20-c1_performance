@@ -101,6 +101,16 @@
       "pass": true,
       "table_linear_interp_rpm": 2440.0
     },
+    "fig2_55pct_peak_scan_high_da": {
+      "source_image": "data/mt175r/figures/fig2_orig.png",
+      "method": "axis_calibration.fig2 maps DA\u2192image row and RPM\u2192column; at each target DA, scan a \u00b13 px row band for column-wise ink minima, smooth 5 px, keep local minima; 55% curve identified as the RPM peak between the 45% (~2232 RPM) and 65% (~2564 RPM) peaks at the same row (x\u2248436 px on 733\u00d7430 orig).",
+      "samples_rpm": {
+        "11800": 2398.8,
+        "11950": 2398.8,
+        "12000": 2398.8
+      },
+      "note": "Measured 2398.76 RPM at 11800 DA (rounded 2398.8); curve flat within digitization noise through 12000 ft."
+    },
     "fig3_speed_power": {
       "input": {
         "da_ft": 6000,
@@ -963,7 +973,7 @@
           ],
           "rpm_range": [
             2156.7,
-            2399.3
+            2398.8
           ],
           "fit": {
             "a": 491.7982842974355,
@@ -1099,17 +1109,17 @@
             },
             {
               "da_ft": 11800,
-              "rpm": 2399.3,
+              "rpm": 2398.8,
               "source": "peak_scan"
             },
             {
               "da_ft": 11950,
-              "rpm": 2399.0,
+              "rpm": 2398.8,
               "source": "peak_scan"
             },
             {
               "da_ft": 12000,
-              "rpm": 2399.0,
+              "rpm": 2398.8,
               "source": "peak_scan"
             }
           ]

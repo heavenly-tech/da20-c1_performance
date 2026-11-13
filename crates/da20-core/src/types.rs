@@ -18,7 +18,8 @@ pub mod defaults {
     pub const RUNWAY: &str = "190";
     pub const WIND_DIR_DEG: f64 = 200.0;
     pub const WIND_SPEED_KT: f64 = 8.0;
-    pub const WEIGHT_LB: f64 = 1764.0;
+    /// Default planning weight (lb); ~799.7 kg — below Fig 5.4 hull (800 kg tabulated max).
+    pub const WEIGHT_LB: f64 = 1763.0;
     pub const CRUISE_PRESSURE_ALT_FT: f64 = 6500.0;
     pub const CRUISE_RPM: f64 = 2600.0;
     /// Fig 5.4 weight panel reference (AFM worked example, kg).
@@ -154,6 +155,9 @@ pub struct FlightInputs {
     pub wind_strip_crosswind_clamped: bool,
     #[serde(default)]
     pub propeller: PropellerKind,
+    /// AFM §5.3.12 NOTE: 1000 RPM ground idle increases landing distance ~5% / ground roll ~7%.
+    #[serde(default = "default_landing_ground_idle_1000_rpm")]
+    pub landing_ground_idle_1000_rpm: bool,
 }
 
 fn default_fuel_usable() -> f64 {
@@ -180,6 +184,10 @@ fn default_wheel_fairings_installed() -> bool {
     true
 }
 
+fn default_landing_ground_idle_1000_rpm() -> bool {
+    true
+}
+
 impl Default for FlightInputs {
     fn default() -> Self {
         Self {
@@ -203,6 +211,7 @@ impl Default for FlightInputs {
             fuel_reserve_us_gal: defaults::FUEL_RESERVE_US_GAL,
             wind_strip_crosswind_clamped: false,
             propeller: PropellerKind::default(),
+            landing_ground_idle_1000_rpm: default_landing_ground_idle_1000_rpm(),
         }
     }
 }
@@ -440,8 +449,16 @@ pub struct LandingResult {
     pub provenance: ProvenanceBlock,
     #[serde(default)]
     pub afm_lookup_tag: AfmLookupTag,
+    /// Ground roll (ft), including optional ground-idle NOTE factors.
     pub ground_roll_ft: f64,
+    /// Distance over 50 ft (ft), including optional ground-idle NOTE factors.
     pub distance_over_50ft_ft: f64,
+    /// Table 4 interpolated ground roll before ground-idle correction (if applied).
+    #[serde(default)]
+    pub ground_roll_chart_ft: Option<f64>,
+    /// Table 4 interpolated 50 ft distance before ground-idle correction (if applied).
+    #[serde(default)]
+    pub distance_over_50ft_chart_ft: Option<f64>,
     pub wind_correction_ft: f64,
     #[serde(default)]
     pub table4_source: Option<Table4SourceTrace>,

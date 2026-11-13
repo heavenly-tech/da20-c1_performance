@@ -118,4 +118,30 @@ mod tests {
         assert_eq!(t.distance_over_obstacle_conservative_ft, 1200.0);
         assert!((t.distance_over_obstacle_conservative_m - 365.76).abs() < 0.05);
     }
+
+    #[test]
+    fn wheel_fairings_do_not_change_takeoff() {
+        let data = PerformanceData::production();
+        let base = FlightInputs {
+            pressure_altitude_input_ft: 2130.0,
+            oat_c: 20.0,
+            weight_lb: 1600.0,
+            ..FlightInputs::default()
+        };
+        let with_fairings = FlightInputs {
+            wheel_fairings_installed: true,
+            ..base.clone()
+        };
+        let without_fairings = FlightInputs {
+            wheel_fairings_installed: false,
+            ..base
+        };
+        let a = compute_takeoff(&data, &with_fairings).unwrap();
+        let b = compute_takeoff(&data, &without_fairings).unwrap();
+        assert_eq!(a.ground_roll_ft, b.ground_roll_ft);
+        assert_eq!(
+            a.distance_over_obstacle_conservative_ft,
+            b.distance_over_obstacle_conservative_ft
+        );
+    }
 }
