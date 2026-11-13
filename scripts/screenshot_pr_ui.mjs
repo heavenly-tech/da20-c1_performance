@@ -103,15 +103,34 @@ for (const theme of themes) {
     );
     await page.waitForSelector(tab.wait, { timeout: 30_000 }).catch(() => {});
 
+    if (tab.key === "takeoff" && label === "after") {
+      const lbBtn = page.getByRole("button", { name: /^lb$/i });
+      if ((await lbBtn.count()) > 0) {
+        await lbBtn.first().click();
+      }
+      const w = page.locator(".unit-row input.mono").first();
+      if ((await w.count()) > 0) {
+        await w.click();
+        await w.fill("1763");
+        await w.press("Tab");
+        await page.waitForTimeout(400);
+      }
+    }
+
     if (tab.key === "landing" && label === "after") {
-      const onBtn = page.getByRole("button", { name: "Sí", exact: true });
-      if ((await onBtn.count()) > 0) {
-        await onBtn.click();
+      const offBtn = page.getByRole("button", { name: "No", exact: true });
+      if ((await offBtn.count()) > 0) {
+        await offBtn.click();
         await page.waitForTimeout(400);
       }
     }
 
     if (tab.key === "cruise" && label === "after") {
+      const mt = page.getByRole("button", { name: /MT 175|175 R/i });
+      if ((await mt.count()) > 0) {
+        await mt.first().click();
+        await page.waitForTimeout(400);
+      }
       const bhp = page.getByRole("button", { name: "Fijar %BHP", exact: true });
       if ((await bhp.count()) > 0) {
         await bhp.click();
@@ -132,7 +151,8 @@ for (const theme of themes) {
       /* no before baseline */
     }
     const prevMd5 = await md5File(file).catch(() => null);
-    await page.screenshot({ path: file, fullPage: false });
+    const fullPage = tab.key === "method" && label === "after";
+    await page.screenshot({ path: file, fullPage });
     const afterMd5 = await md5File(file);
     md5Changes.push({
       file: path.basename(file),

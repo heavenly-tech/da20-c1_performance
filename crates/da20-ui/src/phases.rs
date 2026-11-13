@@ -353,7 +353,31 @@ fn phase_chart(
         .into_any(),
         Phase::Landing => view! {
             <LandingTableView locale=locale data=data inputs=inputs/>
-            <InteractiveChart locale=locale kind=ChartKind::Landing data=data inputs=inputs/>
+            {flight_prefs
+                .map(|fp| {
+                    view! {
+                        <InteractiveChart
+                            locale=locale
+                            kind=ChartKind::Landing
+                            data=data
+                            inputs=inputs
+                            flight_prefs=fp
+                            sync_phase=Phase::Landing
+                        />
+                    }
+                    .into_any()
+                })
+                .unwrap_or_else(|| {
+                    view! {
+                        <InteractiveChart
+                            locale=locale
+                            kind=ChartKind::Landing
+                            data=data
+                            inputs=inputs
+                        />
+                    }
+                    .into_any()
+                })}
         }
         .into_any(),
         Phase::Manual => view! { <span></span> }.into_any(),

@@ -716,6 +716,28 @@ mod tests {
     }
 
     #[test]
+    fn endurance_cruise_seeded_from_cruise_on_finish_migration() {
+        let mut prefs = FlightPrefs::default();
+        prefs.cruise.cruise_pressure_alt_ft = 7200.0;
+        prefs.cruise.weight_lb = 1700.0;
+        prefs.cruise.cruise_percent_bhp_saved = Some(65.0);
+        prefs.endurance = EnduranceTabPrefs::default();
+        prefs.finish_migration();
+        assert_eq!(prefs.endurance.cruise.cruise_pressure_alt_ft, 7200.0);
+        assert_eq!(prefs.endurance.cruise.weight_lb, 1700.0);
+        assert_eq!(prefs.endurance.cruise.cruise_percent_bhp_saved, Some(65.0));
+    }
+
+    #[test]
+    fn endurance_cruise_not_overwritten_when_already_customized() {
+        let mut prefs = FlightPrefs::default();
+        prefs.cruise.cruise_pressure_alt_ft = 7200.0;
+        prefs.endurance.cruise.cruise_pressure_alt_ft = 8100.0;
+        prefs.finish_migration();
+        assert_eq!(prefs.endurance.cruise.cruise_pressure_alt_ft, 8100.0);
+    }
+
+    #[test]
     fn legacy_v2_ground_keys_migrate_into_tabs() {
         let json = r#"{"ground_elevation_ft":1500.0,"ground_oat_c":18.0}"#;
         let mut prefs: FlightPrefs = serde_json::from_str(json).expect("legacy v2");
