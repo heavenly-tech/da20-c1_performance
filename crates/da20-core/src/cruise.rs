@@ -4,7 +4,8 @@ use crate::interpolation::lerp;
 use crate::provenance::provenance_for;
 use crate::types::{
     cruise_fairing_multiplier, AfmLookupTag, CalculationWarning, CruiseResult, CruiseSolveMode,
-    FlightInputs, Table3PaBracketRow, Table3PublishedCell, Table3RpmBracketRow, Table3SourceTrace,
+    FlightInputs, PropellerKind, Table3PaBracketRow, Table3PublishedCell, Table3RpmBracketRow,
+    Table3SourceTrace,
 };
 
 pub const CRUISE_TABLE3_GPH_NOTE: &str = "Table 3 GPH values are transcribed as printed in AFM Rev 29 (includes known oddities, e.g. 2000 ft / 2700 RPM ISA 6.8 GPH vs −20 °C 7.7 GPH; 4000 ft / 2800 RPM +10 °C 6.8 GPH).";
@@ -666,11 +667,13 @@ fn build_cruise_result(
         fuel_flow_chart_us_gal_h: Some(tri.gph),
         fuel_flow_us_gal_h: tri.gph,
         table3_source: Some(table3_source),
+        mt_fig4_source: None,
+        density_altitude_ft: None,
         warnings,
     })
 }
 
-pub fn compute_cruise(
+fn compute_cruise_sensenich(
     data: &PerformanceData,
     inputs: &FlightInputs,
 ) -> Result<CruiseResult, CruiseError> {
@@ -712,14 +715,27 @@ pub fn compute_cruise(
     )
 }
 
+pub fn compute_cruise(
+    data: &PerformanceData,
+    inputs: &FlightInputs,
+) -> Result<CruiseResult, CruiseError> {
+    match inputs.propeller {
+        PropellerKind::Mt175R => crate::mt175r::cruise::compute_cruise(data, inputs),
+        PropellerKind::Sensenich => compute_cruise_sensenich(data, inputs),
+    }
+}
+
 /// RPM row to highlight in the full Table 3 view (solved RPM in %BHP mode).
 pub fn effective_cruise_highlight_rpm(data: &PerformanceData, inputs: &FlightInputs) -> f64 {
-    match inputs.cruise_solve_mode {
-        CruiseSolveMode::SetRpm => inputs.cruise_rpm,
-        CruiseSolveMode::SetPercentBhp => compute_cruise(data, inputs)
-            .ok()
-            .and_then(|r| r.rpm)
-            .unwrap_or(inputs.cruise_rpm),
+    match inputs.propeller {
+        PropellerKind::Mt175R => crate::mt175r::cruise::effective_cruise_highlight_rpm(inputs),
+        PropellerKind::Sensenich => match inputs.cruise_solve_mode {
+            CruiseSolveMode::SetRpm => inputs.cruise_rpm,
+            CruiseSolveMode::SetPercentBhp => compute_cruise_sensenich(data, inputs)
+                .ok()
+                .and_then(|r| r.rpm)
+                .unwrap_or(inputs.cruise_rpm),
+        },
     }
 }
 
@@ -1284,5 +1300,31 @@ mod tests {
         assert!((off.fuel_flow_us_gal_h - chart_ff).abs() < 1e-9);
         assert!((on.tas_kt - chart_tas).abs() < 1e-6);
         assert!((on.fuel_flow_us_gal_h - chart_ff).abs() < 1e-6);
+    }
+
+    #[test]
+    fn propeller_does_not_change_takeoff_climb_landing() {
+        use crate::climb::compute_climb;
+        use crate::landing::compute_landing;
+        use crate::takeoff::compute_takeoff;
+
+        let data = PerformanceData::production();
+        let base = FlightInputs {
+            weight_lb: 1600.0,
+            ..FlightInputs::default()
+        };
+        let mt = FlightInputs {
+            propeller: PropellerKind::Mt175R,
+            ..base.clone()
+        };
+        let to0 = compute_takeoff(&data, &base).unwrap();
+        let to1 = compute_takeoff(&data, &mt).unwrap();
+        assert_eq!(to0.ground_roll_ft, to1.ground_roll_ft);
+        let cl0 = compute_climb(&data, &base, base.cruise_pressure_alt_ft).unwrap();
+        let cl1 = compute_climb(&data, &mt, mt.cruise_pressure_alt_ft).unwrap();
+        assert_eq!(cl0.rate_of_climb_fpm, cl1.rate_of_climb_fpm);
+        let ld0 = compute_landing(&data, &base).unwrap();
+        let ld1 = compute_landing(&data, &mt).unwrap();
+        assert_eq!(ld0.ground_roll_ft, ld1.ground_roll_ft);
     }
 }

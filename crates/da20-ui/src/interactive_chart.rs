@@ -696,6 +696,7 @@ pub fn CruiseTableView(
 
 #[component]
 pub fn LandingTableView(
+    locale: RwSignal<Locale>,
     data: RwSignal<PerformanceData>,
     inputs: RwSignal<FlightInputs>,
 ) -> impl IntoView {
@@ -709,9 +710,9 @@ pub fn LandingTableView(
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>"PA ft"</th>
-                        <th>"Roll ft"</th>
-                        <th>"50 ft ft"</th>
+                        <th>{move || copy(locale.get()).table_source_pa_lbl}</th>
+                        <th>{move || copy(locale.get()).table_source_landing_roll_ft}</th>
+                        <th>{move || copy(locale.get()).table_source_landing_over_50ft_ft}</th>
                     </tr>
                 </thead>
                 <tbody>

@@ -1,0 +1,2347 @@
+{
+  "document": {
+    "title": "Airplane Flight Manual Supplement",
+    "doc_no": "E-1487",
+    "aircraft": "DA 20-C1 (Katana)",
+    "propeller": "MT 175 R 150-2Ca",
+    "propeller_type": "2-blade wood composite fixed pitch",
+    "diameter": {
+      "cm": 175,
+      "in": 68.9
+    },
+    "pitch": "150 cm (59.1 in) at station 65.6 cm (25.8 in)",
+    "static_rpm_note": "Static rpm at full throttle, ISA, SL, no wind (carburetor heat off and mixture leaned to max. rpm): 2000 to 2200 rpm",
+    "issue": "Original Issue - 01 March 2007",
+    "approval": "Performance Data is not TCCA Approved.",
+    "scope": "No change to the basic airplane except Cruise Performance.",
+    "pdf": "/workspace/mt175r/MT175R_supplement.pdf",
+    "pages": 7,
+    "source_file": "Microsoft Word - AFMS_E-1487_i01-TCCA version-approved.doc"
+  },
+  "units": {
+    "pressure_altitude": "ft",
+    "density_altitude": "ft",
+    "oat": "deg_C",
+    "rpm": "RPM",
+    "pct_bhp": "percent of rated BHP",
+    "tas": "kt",
+    "fuel_flow": "US gal/h (GPH)"
+  },
+  "max_propeller_speed_rpm": 2800,
+  "digitization": {
+    "method": "Axes calibrated from sub-pixel grid-line peaks, converted with piecewise-linear interpolation between major ticks (eliminates residual of a global linear fit). Curves traced from the original embedded JPEGs (not the upsampled 300 DPI page render). Nearly-straight curves were RANSAC-fitted (x = a + b y or y = a + b x); mildly curved Fig 3 %BHP curves and the Full Throttle envelope were walked with a slope-constrained nearest-peak tracker and fitted with a quadratic or cubic in y when the RMSE was below 1.5 px. Additional Fig 2 endpoints were read as off-grid peaks on the original image to complete printed extents near labels.",
+    "source_image_resolution": {
+      "fig1": {
+        "w": 815,
+        "h": 515,
+        "embedded_ppi": "\u2248177"
+      },
+      "fig2": {
+        "w": 733,
+        "h": 430,
+        "embedded_ppi": "\u2248156"
+      },
+      "fig3": {
+        "w": 589,
+        "h": 402,
+        "embedded_ppi": "\u2248133"
+      },
+      "fig4": {
+        "w": 811,
+        "h": 479,
+        "embedded_ppi": "\u2248162"
+      }
+    },
+    "uncertainty": {
+      "fig1_da_ft": {
+        "pixel": 36,
+        "fit_rmse_px": 0.5,
+        "quoted": 50,
+        "note": "1 px \u2248 36 ft. Linear-fit RMSE \u2248 0.8\u20131.1 px. Printed example is a computed value (7391), not a chart reading."
+      },
+      "fig2_rpm": {
+        "pixel": 1.5,
+        "fit_rmse_px": 1.0,
+        "quoted": 5,
+        "note": "1 px \u2248 1.5 RPM. Fit RMSE 0.5\u20131.1 px. Example residual \u22121.3 RPM."
+      },
+      "fig3_tas_kt": {
+        "pixel": 0.13,
+        "fit_rmse_px": 0.35,
+        "quoted": 0.4,
+        "note": "1 px \u2248 0.13 kt. Quadratic/cubic RMSE 0.30\u20130.42 px. Example residual +0.12 kt."
+      },
+      "fig4_table": "Exact printed integers and one-decimal GPH; no digitization uncertainty except as noted for two physically suspicious GPH cells."
+    }
+  },
+  "validation": {
+    "fig1_density_altitude": {
+      "input": {
+        "pa_ft": 6000,
+        "oat_c": 15
+      },
+      "printed_da_ft": 7391,
+      "digitized_da_ft": 7366.5,
+      "error_ft": -24.5,
+      "nws_formula_da_ft": 7390.37,
+      "icao_isa_da_ft": 7373.52,
+      "target_ft": 50,
+      "pass": true,
+      "note": "The printed 7391 ft is a computed value (1 ft precision), not a chart reading. The NWS/NOAA density-altitude formula DA = 145442.16 * (1 - ((17.326*P_inHg)/(459.67+T_F))^0.235) with P = 29.92126*(1-6.8755856e-6*PA)^5.2558797 gives 7390.37 ft (error \u22120.63 ft). ICAO ISA (g=9.80665, R=287.05287, L=0.0065 K/m) gives 7373.52 ft (error \u221217.5 ft). Prefer the NWS formula (or ICAO ISA) over the digitized PA lines for the app; both are well inside the 50 ft target. Digitized 6000 ft PA line at 15 \u00b0C is 7366.5 ft."
+    },
+    "fig2_power": {
+      "input": {
+        "da_ft": 6000,
+        "pct_bhp": 65
+      },
+      "printed_rpm": 2440,
+      "digitized_rpm": 2438.7,
+      "error_rpm": -1.3,
+      "target_rpm": 10,
+      "pass": true,
+      "table_linear_interp_rpm": 2440.0
+    },
+    "fig3_speed_power": {
+      "input": {
+        "da_ft": 6000,
+        "pct_bhp": 65
+      },
+      "printed_tas_kt": 122,
+      "digitized_tas_kt": 122.12,
+      "error_kt": 0.12,
+      "target_kt": 1,
+      "pass": true,
+      "table_linear_interp_ktas": 122.4
+    },
+    "table_vs_charts": [
+      {
+        "da_ft": 2000,
+        "pct_bhp": 55,
+        "table_rpm": 2200.0,
+        "fig2_rpm": 2188.9,
+        "d_rpm": -11.1,
+        "table_ktas": 109.0,
+        "fig3_tas": 108.58,
+        "d_tas": -0.42,
+        "table_gph": 5.4
+      },
+      {
+        "da_ft": 2000,
+        "pct_bhp": 65,
+        "table_rpm": 2366.7,
+        "fig2_rpm": 2353.7,
+        "d_rpm": -13.0,
+        "table_ktas": 119.0,
+        "fig3_tas": 118.9,
+        "d_tas": -0.1,
+        "table_gph": 6.033333333333333
+      },
+      {
+        "da_ft": 2000,
+        "pct_bhp": 75,
+        "table_rpm": 2533.3,
+        "fig2_rpm": 2524.0,
+        "d_rpm": -9.3,
+        "table_ktas": 130.0,
+        "fig3_tas": 129.23,
+        "d_tas": -0.77,
+        "table_gph": 7.666666666666667
+      },
+      {
+        "da_ft": 4000,
+        "pct_bhp": 55,
+        "table_rpm": 2233.3,
+        "fig2_rpm": 2230.5,
+        "d_rpm": -2.8,
+        "table_ktas": 110.0,
+        "fig3_tas": 110.16,
+        "d_tas": 0.16,
+        "table_gph": 5.3999999999999995
+      },
+      {
+        "da_ft": 4000,
+        "pct_bhp": 65,
+        "table_rpm": 2400.0,
+        "fig2_rpm": 2395.5,
+        "d_rpm": -4.5,
+        "table_ktas": 120.0,
+        "fig3_tas": 120.47,
+        "d_tas": 0.47,
+        "table_gph": 6.0
+      },
+      {
+        "da_ft": 4000,
+        "pct_bhp": 75,
+        "table_rpm": 2566.7,
+        "fig2_rpm": 2563.4,
+        "d_rpm": -3.3,
+        "table_ktas": 131.0,
+        "fig3_tas": 130.77,
+        "d_tas": -0.23,
+        "table_gph": 7.633333333333334
+      },
+      {
+        "da_ft": 6000,
+        "pct_bhp": 55,
+        "table_rpm": 2266.7,
+        "fig2_rpm": 2273.2,
+        "d_rpm": 6.5,
+        "table_ktas": 111.67,
+        "fig3_tas": 111.79,
+        "d_tas": 0.12,
+        "table_gph": 5.3999999999999995
+      },
+      {
+        "da_ft": 6000,
+        "pct_bhp": 65,
+        "table_rpm": 2440.0,
+        "fig2_rpm": 2438.7,
+        "d_rpm": -1.3,
+        "table_ktas": 122.4,
+        "fig3_tas": 122.12,
+        "d_tas": -0.28,
+        "table_gph": 6.140000000000001
+      },
+      {
+        "da_ft": 6000,
+        "pct_bhp": 75,
+        "table_rpm": 2616.7,
+        "fig2_rpm": 2603.7,
+        "d_rpm": -13.0,
+        "table_ktas": 133.17,
+        "fig3_tas": 132.43,
+        "d_tas": -0.74,
+        "table_gph": 7.783333333333333
+      },
+      {
+        "da_ft": 8000,
+        "pct_bhp": 55,
+        "table_rpm": 2316.7,
+        "fig2_rpm": 2315.0,
+        "d_rpm": -1.7,
+        "table_ktas": 114.0,
+        "fig3_tas": 113.48,
+        "d_tas": -0.52,
+        "table_gph": 5.45
+      },
+      {
+        "da_ft": 8000,
+        "pct_bhp": 65,
+        "table_rpm": 2483.3,
+        "fig2_rpm": 2481.2,
+        "d_rpm": -2.1,
+        "table_ktas": 124.0,
+        "fig3_tas": 123.83,
+        "d_tas": -0.17,
+        "table_gph": 6.116666666666667
+      },
+      {
+        "da_ft": 8000,
+        "pct_bhp": 75,
+        "table_rpm": 2650.0,
+        "fig2_rpm": 2643.8,
+        "d_rpm": -6.2,
+        "table_ktas": 135.0,
+        "fig3_tas": 134.23,
+        "d_tas": -0.77,
+        "table_gph": 7.7
+      },
+      {
+        "da_ft": 10000,
+        "pct_bhp": 45,
+        "table_rpm": 2200.0,
+        "fig2_rpm": 2186.2,
+        "d_rpm": -13.8,
+        "table_ktas": 105.0,
+        "fig3_tas": 104.88,
+        "d_tas": -0.12,
+        "table_gph": 3.3
+      },
+      {
+        "da_ft": 10000,
+        "pct_bhp": 55,
+        "table_rpm": 2366.7,
+        "fig2_rpm": 2356.2,
+        "d_rpm": -10.5,
+        "table_ktas": 116.0,
+        "fig3_tas": 115.23,
+        "d_tas": -0.77,
+        "table_gph": 5.433333333333333
+      },
+      {
+        "da_ft": 10000,
+        "pct_bhp": 65,
+        "table_rpm": 2533.3,
+        "fig2_rpm": 2523.3,
+        "d_rpm": -10.0,
+        "table_ktas": 126.0,
+        "fig3_tas": 125.61,
+        "d_tas": -0.39,
+        "table_gph": 6.1000000000000005
+      }
+    ]
+  },
+  "lookup_chain": {
+    "steps": [
+      "PA (ft) + OAT (\u00b0C) \u2192 density altitude DA (ft), via the NWS/ICAO formula (preferred) or Fig 1.",
+      "DA + RPM \u2192 %BHP, from Fig 2 (45/55/65/75% curves) or Fig 4 table (broader %BHP, including 43\u201385%). Inverse: DA + %BHP \u2192 RPM (bisection on the same data, interpolate only).",
+      "DA + %BHP \u2192 TAS (kt), from Fig 3 (Max Gross Weight, mixture leaned to best power) or Fig 4 table.",
+      "DA + RPM \u2192 GPH, from Fig 4 table ONLY. The supplement has no separate fuel-flow-vs-%BHP chart.",
+      "Full-throttle TAS envelope is the right-hand curve on Fig 3; at a given DA, TAS and %BHP cannot exceed it."
+    ],
+    "interpolate_only": "Never extrapolate. If PA, OAT, DA, RPM or %BHP falls outside the domain below, the app must show 'Fuera de carta / Out of chart' with the valid range and no numeric result. Sweep cells show '\u2014' with a footnote."
+  },
+  "domains": {
+    "fig1_density_altitude": {
+      "oat_c": [
+        -10,
+        60
+      ],
+      "pa_ft": [
+        0,
+        12000
+      ],
+      "da_ft_chart": [
+        -2000,
+        14000
+      ],
+      "note": "PA lines are MSL (0), 2000, 4000, 6000, 8000, 10000, 12000 ft. High-PA lines leave the top of the chart (e.g. 12000 ft PA exits near OAT \u2248 8\u201310 \u00b0C). MSL enters from the bottom near OAT \u2248 \u22122 \u00b0C."
+    },
+    "fig2_power": {
+      "da_ft": [
+        0,
+        12000
+      ],
+      "rpm": [
+        1900,
+        2800
+      ],
+      "pct_bhp_curves": [
+        45,
+        55,
+        65,
+        75
+      ],
+      "pct_bhp_75_da_ft_max": 8270,
+      "note": "45/55/65% span DA 0\u201312000. 75% runs from DA \u2248 0 (\u22482488 RPM) to DA \u2248 8270 (\u22482649 RPM) and stops; 75% is out of chart above that. Below the 45% curve or right of 2800 RPM is out of chart on Fig 2. The table (Fig 4) covers a wider %BHP band at DA 2000\u201312000."
+    },
+    "fig3_speed_power": {
+      "da_ft": [
+        0,
+        12000
+      ],
+      "tas_kt": [
+        90,
+        150
+      ],
+      "pct_bhp_curves": [
+        45,
+        55,
+        65,
+        75
+      ],
+      "pct_bhp_75_da_ft_max": 8500,
+      "conditions": "Max Gross Weight, Mixture Leaned to Best Power",
+      "note": "45/55/65% span DA 0\u201312000 (65% meets Full Throttle at the top, DA 12000 / \u2248127.5 kt). 75% meets Full Throttle at DA 8500 ft / 134.2 kt. TAS is bounded on the right by Full Throttle. Below 45% is out of chart on Fig 3."
+    },
+    "fig4_table": {
+      "da_ft": [
+        2000,
+        4000,
+        6000,
+        8000,
+        10000,
+        12000
+      ],
+      "temperature": "Standard Temperature (table is keyed by Density Altitude, so it is used at any OAT after converting PA+OAT \u2192 DA)",
+      "rpm_by_da": {
+        "2000": [
+          2200,
+          2700
+        ],
+        "4000": [
+          2200,
+          2700
+        ],
+        "6000": [
+          2200,
+          2700
+        ],
+        "8000": [
+          2200,
+          2650
+        ],
+        "10000": [
+          2200,
+          2550
+        ],
+        "12000": [
+          2200,
+          2450
+        ]
+      },
+      "note": "No sea-level (DA 0) row. No 2600 RPM at 10000 (max is 2550). No 2500 RPM at 12000 (max is 2450). Interpolate only between listed DA and RPM nodes. GPH is only in this table."
+    }
+  },
+  "figures": {
+    "fig1_density_altitude": {
+      "page": 4,
+      "title": "Figure 1: Density Altitude Chart",
+      "x_axis": {
+        "quantity": "OAT",
+        "unit": "deg_C",
+        "min": -10,
+        "max": 60,
+        "major": 10
+      },
+      "y_axis": {
+        "quantity": "Density Altitude",
+        "unit": "ft",
+        "min": -2000,
+        "max": 14000,
+        "major": 2000
+      },
+      "curves": {
+        "MSL (0)": {
+          "pa_ft": 0,
+          "oat_c_range": [
+            5.0,
+            50.0
+          ],
+          "fit": {
+            "a": 504.13467386540844,
+            "b": -0.3302572246485775,
+            "rmse_px": 1.0823200125242236
+          },
+          "samples": [
+            {
+              "oat_c": 5.0,
+              "da_ft": -1175.2
+            },
+            {
+              "oat_c": 10.0,
+              "da_ft": -605.0
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": -34.8
+            },
+            {
+              "oat_c": 20.0,
+              "da_ft": 535.6
+            },
+            {
+              "oat_c": 25.0,
+              "da_ft": 1100.0
+            },
+            {
+              "oat_c": 30.0,
+              "da_ft": 1664.4
+            },
+            {
+              "oat_c": 35.0,
+              "da_ft": 2234.8
+            },
+            {
+              "oat_c": 40.0,
+              "da_ft": 2805.3
+            },
+            {
+              "oat_c": 45.0,
+              "da_ft": 3375.8
+            },
+            {
+              "oat_c": 50.0,
+              "da_ft": 3946.3
+            }
+          ]
+        },
+        "2000": {
+          "pa_ft": 2000,
+          "oat_c_range": [
+            10.0,
+            50.0
+          ],
+          "fit": {
+            "a": 432.48068534235443,
+            "b": -0.32108324526836574,
+            "rmse_px": 0.936671740968918
+          },
+          "samples": [
+            {
+              "oat_c": 10.0,
+              "da_ft": 1908.8
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": 2463.4
+            },
+            {
+              "oat_c": 20.0,
+              "da_ft": 3018.1
+            },
+            {
+              "oat_c": 25.0,
+              "da_ft": 3566.9
+            },
+            {
+              "oat_c": 30.0,
+              "da_ft": 4115.6
+            },
+            {
+              "oat_c": 35.0,
+              "da_ft": 4670.2
+            },
+            {
+              "oat_c": 40.0,
+              "da_ft": 5224.9
+            },
+            {
+              "oat_c": 45.0,
+              "da_ft": 5779.5
+            },
+            {
+              "oat_c": 50.0,
+              "da_ft": 6334.1
+            }
+          ]
+        },
+        "4000": {
+          "pa_ft": 4000,
+          "oat_c_range": [
+            0.0,
+            45.0
+          ],
+          "fit": {
+            "a": 365.079880030042,
+            "b": -0.32134587090774935,
+            "rmse_px": 1.0047726730040343
+          },
+          "samples": [
+            {
+              "oat_c": 0.0,
+              "da_ft": 3252.3
+            },
+            {
+              "oat_c": 5.0,
+              "da_ft": 3807.4
+            },
+            {
+              "oat_c": 10.0,
+              "da_ft": 4362.5
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": 4917.6
+            },
+            {
+              "oat_c": 20.0,
+              "da_ft": 5472.6
+            },
+            {
+              "oat_c": 25.0,
+              "da_ft": 6021.8
+            },
+            {
+              "oat_c": 30.0,
+              "da_ft": 6571.0
+            },
+            {
+              "oat_c": 35.0,
+              "da_ft": 7126.0
+            },
+            {
+              "oat_c": 40.0,
+              "da_ft": 7681.1
+            },
+            {
+              "oat_c": 45.0,
+              "da_ft": 8236.1
+            }
+          ]
+        },
+        "6000": {
+          "pa_ft": 6000,
+          "oat_c_range": [
+            0.0,
+            45.0
+          ],
+          "fit": {
+            "a": 296.7360670617857,
+            "b": -0.31824225082363417,
+            "rmse_px": 0.8994513713053737
+          },
+          "samples": [
+            {
+              "oat_c": 0.0,
+              "da_ft": 5717.4
+            },
+            {
+              "oat_c": 5.0,
+              "da_ft": 6267.1
+            },
+            {
+              "oat_c": 10.0,
+              "da_ft": 6816.8
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": 7366.5
+            },
+            {
+              "oat_c": 20.0,
+              "da_ft": 7916.1
+            },
+            {
+              "oat_c": 25.0,
+              "da_ft": 8460.0
+            },
+            {
+              "oat_c": 30.0,
+              "da_ft": 9003.9
+            },
+            {
+              "oat_c": 35.0,
+              "da_ft": 9553.7
+            },
+            {
+              "oat_c": 40.0,
+              "da_ft": 10103.4
+            },
+            {
+              "oat_c": 45.0,
+              "da_ft": 10653.1
+            }
+          ]
+        },
+        "8000": {
+          "pa_ft": 8000,
+          "oat_c_range": [
+            0.0,
+            40.0
+          ],
+          "fit": {
+            "a": 229.43235589686657,
+            "b": -0.3181586960330656,
+            "rmse_px": 0.8805043386851394
+          },
+          "samples": [
+            {
+              "oat_c": 0.0,
+              "da_ft": 8164.2
+            },
+            {
+              "oat_c": 5.0,
+              "da_ft": 8713.8
+            },
+            {
+              "oat_c": 10.0,
+              "da_ft": 9263.4
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": 9812.9
+            },
+            {
+              "oat_c": 20.0,
+              "da_ft": 10362.5
+            },
+            {
+              "oat_c": 25.0,
+              "da_ft": 10906.3
+            },
+            {
+              "oat_c": 30.0,
+              "da_ft": 11450.1
+            },
+            {
+              "oat_c": 35.0,
+              "da_ft": 11999.6
+            },
+            {
+              "oat_c": 40.0,
+              "da_ft": 12539.4
+            }
+          ]
+        },
+        "10000": {
+          "pa_ft": 10000,
+          "oat_c_range": [
+            -5.0,
+            30.0
+          ],
+          "fit": {
+            "a": 163.3943209384109,
+            "b": -0.32314779606855154,
+            "rmse_px": 0.795696275641466
+          },
+          "samples": [
+            {
+              "oat_c": -5.0,
+              "da_ft": 10045.6
+            },
+            {
+              "oat_c": 0.0,
+              "da_ft": 10598.2
+            },
+            {
+              "oat_c": 5.0,
+              "da_ft": 11156.4
+            },
+            {
+              "oat_c": 10.0,
+              "da_ft": 11714.6
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": 12267.9
+            },
+            {
+              "oat_c": 20.0,
+              "da_ft": 12816.1
+            },
+            {
+              "oat_c": 25.0,
+              "da_ft": 13358.6
+            },
+            {
+              "oat_c": 30.0,
+              "da_ft": 13901.0
+            }
+          ]
+        },
+        "12000": {
+          "pa_ft": 12000,
+          "oat_c_range": [
+            -5.0,
+            5.0
+          ],
+          "fit": {
+            "a": 97.40020405980854,
+            "b": -0.3307319620115849,
+            "rmse_px": 0.4850331137619842
+          },
+          "samples": [
+            {
+              "oat_c": -5.0,
+              "da_ft": 12473.3
+            },
+            {
+              "oat_c": 0.0,
+              "da_ft": 13028.7
+            },
+            {
+              "oat_c": 5.0,
+              "da_ft": 13589.9
+            }
+          ]
+        },
+        "Standard Temperature": {
+          "pa_ft": null,
+          "oat_c_range": [
+            -5.0,
+            15.0
+          ],
+          "fit": {
+            "a": -76.78047261880796,
+            "b": 1.4664236850655117,
+            "rmse_px": 0.8050259991641903
+          },
+          "samples": [
+            {
+              "oat_c": -5.0,
+              "da_ft": 10190.8
+            },
+            {
+              "oat_c": 0.0,
+              "da_ft": 7683.6
+            },
+            {
+              "oat_c": 5.0,
+              "da_ft": 5150.6
+            },
+            {
+              "oat_c": 10.0,
+              "da_ft": 2617.5
+            },
+            {
+              "oat_c": 15.0,
+              "da_ft": 84.7
+            }
+          ]
+        }
+      },
+      "preferred_formula": "nws",
+      "formulas": {
+        "nws": {
+          "description": "NOAA/NWS density-altitude formula, matches printed 7391 within 1 ft.",
+          "da_ft": "145442.16 * (1 - ((17.326 * P_inHg) / (459.67 + T_F)) ** 0.235)",
+          "P_inHg": "29.92126 * (1 - 6.8755856e-6 * PA_ft) ** 5.2558797",
+          "T_F": "OAT_C * 9/5 + 32"
+        },
+        "icao_isa": {
+          "description": "ICAO standard-atmosphere inversion (troposphere). Gives 7373.5 ft for the worked example.",
+          "constants": {
+            "T0_K": 288.15,
+            "L_K_per_m": 0.0065,
+            "g": 9.80665,
+            "R": 287.05287,
+            "P0_Pa": 101325,
+            "ft": 0.3048
+          }
+        }
+      }
+    },
+    "fig2_power": {
+      "page": 5,
+      "title": "DA 20-C1 Katana Power Chart  (Figure 2: Power Chart)",
+      "x_axis": {
+        "quantity": "RPM",
+        "unit": "RPM",
+        "label": "RPMx100",
+        "min": 1900,
+        "max": 2800,
+        "major": 100
+      },
+      "y_axis": {
+        "quantity": "Density Altitude",
+        "unit": "ft",
+        "min": 0,
+        "max": 12000,
+        "major": 2000
+      },
+      "curves": {
+        "45%": {
+          "pct_bhp": 45,
+          "da_ft_range": [
+            100,
+            11950
+          ],
+          "rpm_range": [
+            1989.4,
+            2234.9
+          ],
+          "fit": {
+            "a": 375.9289301843994,
+            "b": -0.6059262103820044,
+            "rmse_px": 0.9740347900340542,
+            "form": "x=a+b*y"
+          },
+          "samples": [
+            {
+              "da_ft": 100,
+              "rpm": 1989.4,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 500.0,
+              "rpm": 1994.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 1000.0,
+              "rpm": 2004.8,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 1500.0,
+              "rpm": 2014.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2000.0,
+              "rpm": 2025.0,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2500.0,
+              "rpm": 2035.1,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3000.0,
+              "rpm": 2045.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3500.0,
+              "rpm": 2055.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4000.0,
+              "rpm": 2065.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4500.0,
+              "rpm": 2075.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5000.0,
+              "rpm": 2086.0,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5500.0,
+              "rpm": 2096.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6000.0,
+              "rpm": 2106.5,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6500.0,
+              "rpm": 2116.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7000.0,
+              "rpm": 2126.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7500.0,
+              "rpm": 2136.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8000.0,
+              "rpm": 2146.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8500.0,
+              "rpm": 2156.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 9000.0,
+              "rpm": 2166.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 9500.0,
+              "rpm": 2176.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 10000.0,
+              "rpm": 2186.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 10500.0,
+              "rpm": 2196.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 11800,
+              "rpm": 2231.8,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 11950,
+              "rpm": 2234.9,
+              "source": "peak_scan"
+            }
+          ]
+        },
+        "55%": {
+          "pct_bhp": 55,
+          "da_ft_range": [
+            100,
+            11500.0
+          ],
+          "rpm_range": [
+            2156.7,
+            2387.9
+          ],
+          "fit": {
+            "a": 491.7982842974355,
+            "b": -0.6278692678505737,
+            "rmse_px": 0.9486653555258817,
+            "form": "x=a+b*y"
+          },
+          "samples": [
+            {
+              "da_ft": 100,
+              "rpm": 2156.7,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 300,
+              "rpm": 2161.2,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 500,
+              "rpm": 2164.2,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 1000,
+              "rpm": 2173.1,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 1500.0,
+              "rpm": 2178.5,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2000.0,
+              "rpm": 2188.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2500.0,
+              "rpm": 2199.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3000.0,
+              "rpm": 2209.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3500.0,
+              "rpm": 2220.1,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4000.0,
+              "rpm": 2230.5,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4500.0,
+              "rpm": 2241.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5000.0,
+              "rpm": 2251.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5500.0,
+              "rpm": 2262.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6000.0,
+              "rpm": 2273.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6500.0,
+              "rpm": 2283.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7000.0,
+              "rpm": 2294.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7500.0,
+              "rpm": 2304.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8000.0,
+              "rpm": 2315.0,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8500.0,
+              "rpm": 2325.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 9000.0,
+              "rpm": 2335.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 9500.0,
+              "rpm": 2345.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 10000.0,
+              "rpm": 2356.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 10500.0,
+              "rpm": 2366.8,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 11000.0,
+              "rpm": 2377.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 11500.0,
+              "rpm": 2387.9,
+              "source": "line_fit"
+            }
+          ]
+        },
+        "65%": {
+          "pct_bhp": 65,
+          "da_ft_range": [
+            100,
+            11950
+          ],
+          "rpm_range": [
+            2322.4,
+            2567.2
+          ],
+          "fit": {
+            "a": 603.8420117553562,
+            "b": -0.6361959892507665,
+            "rmse_px": 1.0572513717479246,
+            "form": "x=a+b*y"
+          },
+          "samples": [
+            {
+              "da_ft": 100,
+              "rpm": 2322.4,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 500,
+              "rpm": 2329.9,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 1000,
+              "rpm": 2338.8,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 1500,
+              "rpm": 2349.3,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 2000.0,
+              "rpm": 2353.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2500.0,
+              "rpm": 2364.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3000.0,
+              "rpm": 2374.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3500.0,
+              "rpm": 2385.1,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4000.0,
+              "rpm": 2395.5,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4500.0,
+              "rpm": 2406.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5000.0,
+              "rpm": 2417.0,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5500.0,
+              "rpm": 2427.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6000.0,
+              "rpm": 2438.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6500.0,
+              "rpm": 2449.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7000.0,
+              "rpm": 2459.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7500.0,
+              "rpm": 2470.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8000.0,
+              "rpm": 2481.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8500.0,
+              "rpm": 2491.8,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 9000.0,
+              "rpm": 2502.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 9500.0,
+              "rpm": 2512.8,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 10000.0,
+              "rpm": 2523.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 10500.0,
+              "rpm": 2533.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 11000.0,
+              "rpm": 2544.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 11500.0,
+              "rpm": 2555.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 11800,
+              "rpm": 2564.2,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 11950,
+              "rpm": 2567.2,
+              "source": "peak_scan"
+            }
+          ]
+        },
+        "75%": {
+          "pct_bhp": 75,
+          "da_ft_range": [
+            100,
+            8270
+          ],
+          "rpm_range": [
+            2487.9,
+            2643.8
+          ],
+          "fit": {
+            "a": 705.7155793643827,
+            "b": -0.6000403832698195,
+            "rmse_px": 0.5070585246220484,
+            "form": "x=a+b*y"
+          },
+          "samples": [
+            {
+              "da_ft": 100,
+              "rpm": 2487.9,
+              "source": "peak_scan"
+            },
+            {
+              "da_ft": 500.0,
+              "rpm": 2494.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 1000.0,
+              "rpm": 2504.3,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 1500.0,
+              "rpm": 2514.2,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2000.0,
+              "rpm": 2524.0,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 2500.0,
+              "rpm": 2533.9,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3000.0,
+              "rpm": 2543.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 3500.0,
+              "rpm": 2553.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4000.0,
+              "rpm": 2563.4,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 4500.0,
+              "rpm": 2573.5,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5000.0,
+              "rpm": 2583.5,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 5500.0,
+              "rpm": 2593.6,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6000.0,
+              "rpm": 2603.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 6500.0,
+              "rpm": 2613.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7000.0,
+              "rpm": 2623.7,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 7500.0,
+              "rpm": 2633.8,
+              "source": "line_fit"
+            },
+            {
+              "da_ft": 8000.0,
+              "rpm": 2643.8,
+              "source": "line_fit"
+            }
+          ],
+          "note": "Printed 75% curve ends between the 8000 and 10000 ft grid lines, near DA 8270 ft / 2650 RPM. Do not extrapolate above this."
+        }
+      }
+    },
+    "fig3_speed_power": {
+      "page": 6,
+      "title": "Speed Power - Cruise Performance, DA 20-C1 Katana  (Figure 3)",
+      "conditions": "Max Gross Weight, Mixture Leaned to Best Power",
+      "flight_test_note": "The cruise performance while not a certification requirement, are based on actual flight tests. The actual performance attained will vary from airplane to airplane depending on age and condition of the airframe and powerplants, aircraft rigging and operator technique.",
+      "x_axis": {
+        "quantity": "True Airspeed",
+        "unit": "kt",
+        "min": 90,
+        "max": 150,
+        "major": 10
+      },
+      "y_axis": {
+        "quantity": "Density Altitude",
+        "unit": "ft",
+        "min": 0,
+        "max": 12000,
+        "major": 2000
+      },
+      "curves": {
+        "45%": {
+          "pct_bhp": 45,
+          "kind": "pct_bhp",
+          "da_ft_range": [
+            500.0,
+            11500.0
+          ],
+          "tas_kt_range": [
+            97.07,
+            106.3
+          ],
+          "fit": {
+            "coef": [
+              256.23340660270776,
+              -0.3886788109447716,
+              0.00016336608293508888
+            ],
+            "rmse_px": 0.3030857705480047,
+            "form": "x=a+by+cy2"
+          },
+          "samples": [
+            {
+              "da_ft": 500.0,
+              "tas_kt": 97.07
+            },
+            {
+              "da_ft": 1000.0,
+              "tas_kt": 97.44
+            },
+            {
+              "da_ft": 1500.0,
+              "tas_kt": 97.82
+            },
+            {
+              "da_ft": 2000.0,
+              "tas_kt": 98.2
+            },
+            {
+              "da_ft": 2500.0,
+              "tas_kt": 98.58
+            },
+            {
+              "da_ft": 3000.0,
+              "tas_kt": 98.97
+            },
+            {
+              "da_ft": 3500.0,
+              "tas_kt": 99.36
+            },
+            {
+              "da_ft": 4000.0,
+              "tas_kt": 99.76
+            },
+            {
+              "da_ft": 4500.0,
+              "tas_kt": 100.16
+            },
+            {
+              "da_ft": 5000.0,
+              "tas_kt": 100.57
+            },
+            {
+              "da_ft": 5500.0,
+              "tas_kt": 100.98
+            },
+            {
+              "da_ft": 6000.0,
+              "tas_kt": 101.4
+            },
+            {
+              "da_ft": 6500.0,
+              "tas_kt": 101.82
+            },
+            {
+              "da_ft": 7000.0,
+              "tas_kt": 102.24
+            },
+            {
+              "da_ft": 7500.0,
+              "tas_kt": 102.67
+            },
+            {
+              "da_ft": 8000.0,
+              "tas_kt": 103.11
+            },
+            {
+              "da_ft": 8500.0,
+              "tas_kt": 103.54
+            },
+            {
+              "da_ft": 9000.0,
+              "tas_kt": 103.99
+            },
+            {
+              "da_ft": 9500.0,
+              "tas_kt": 104.43
+            },
+            {
+              "da_ft": 10000.0,
+              "tas_kt": 104.88
+            },
+            {
+              "da_ft": 10500.0,
+              "tas_kt": 105.35
+            },
+            {
+              "da_ft": 11000.0,
+              "tas_kt": 105.82
+            },
+            {
+              "da_ft": 11500.0,
+              "tas_kt": 106.3
+            }
+          ]
+        },
+        "55%": {
+          "pct_bhp": 55,
+          "kind": "pct_bhp",
+          "da_ft_range": [
+            500.0,
+            11500.0
+          ],
+          "tas_kt_range": [
+            107.44,
+            116.62
+          ],
+          "fit": {
+            "coef": [
+              335.6927608797852,
+              -0.3755605114209408,
+              0.00013688574671812362
+            ],
+            "rmse_px": 0.2982505823459587,
+            "form": "x=a+by+cy2"
+          },
+          "samples": [
+            {
+              "da_ft": 500.0,
+              "tas_kt": 107.44
+            },
+            {
+              "da_ft": 1000.0,
+              "tas_kt": 107.82
+            },
+            {
+              "da_ft": 1500.0,
+              "tas_kt": 108.2
+            },
+            {
+              "da_ft": 2000.0,
+              "tas_kt": 108.58
+            },
+            {
+              "da_ft": 2500.0,
+              "tas_kt": 108.97
+            },
+            {
+              "da_ft": 3000.0,
+              "tas_kt": 109.36
+            },
+            {
+              "da_ft": 3500.0,
+              "tas_kt": 109.76
+            },
+            {
+              "da_ft": 4000.0,
+              "tas_kt": 110.16
+            },
+            {
+              "da_ft": 4500.0,
+              "tas_kt": 110.56
+            },
+            {
+              "da_ft": 5000.0,
+              "tas_kt": 110.97
+            },
+            {
+              "da_ft": 5500.0,
+              "tas_kt": 111.38
+            },
+            {
+              "da_ft": 6000.0,
+              "tas_kt": 111.79
+            },
+            {
+              "da_ft": 6500.0,
+              "tas_kt": 112.21
+            },
+            {
+              "da_ft": 7000.0,
+              "tas_kt": 112.63
+            },
+            {
+              "da_ft": 7500.0,
+              "tas_kt": 113.05
+            },
+            {
+              "da_ft": 8000.0,
+              "tas_kt": 113.48
+            },
+            {
+              "da_ft": 8500.0,
+              "tas_kt": 113.91
+            },
+            {
+              "da_ft": 9000.0,
+              "tas_kt": 114.35
+            },
+            {
+              "da_ft": 9500.0,
+              "tas_kt": 114.79
+            },
+            {
+              "da_ft": 10000.0,
+              "tas_kt": 115.23
+            },
+            {
+              "da_ft": 10500.0,
+              "tas_kt": 115.69
+            },
+            {
+              "da_ft": 11000.0,
+              "tas_kt": 116.15
+            },
+            {
+              "da_ft": 11500.0,
+              "tas_kt": 116.62
+            }
+          ]
+        },
+        "65%": {
+          "pct_bhp": 65,
+          "kind": "pct_bhp",
+          "da_ft_range": [
+            500.0,
+            11500.0
+          ],
+          "tas_kt_range": [
+            117.76,
+            127.02
+          ],
+          "fit": {
+            "coef": [
+              417.88406798755483,
+              -0.3877978140472925,
+              0.00015840247283220785
+            ],
+            "rmse_px": 0.3549343629606372,
+            "form": "x=a+by+cy2"
+          },
+          "samples": [
+            {
+              "da_ft": 500.0,
+              "tas_kt": 117.76
+            },
+            {
+              "da_ft": 1000.0,
+              "tas_kt": 118.13
+            },
+            {
+              "da_ft": 1500.0,
+              "tas_kt": 118.51
+            },
+            {
+              "da_ft": 2000.0,
+              "tas_kt": 118.9
+            },
+            {
+              "da_ft": 2500.0,
+              "tas_kt": 119.28
+            },
+            {
+              "da_ft": 3000.0,
+              "tas_kt": 119.67
+            },
+            {
+              "da_ft": 3500.0,
+              "tas_kt": 120.07
+            },
+            {
+              "da_ft": 4000.0,
+              "tas_kt": 120.47
+            },
+            {
+              "da_ft": 4500.0,
+              "tas_kt": 120.88
+            },
+            {
+              "da_ft": 5000.0,
+              "tas_kt": 121.28
+            },
+            {
+              "da_ft": 5500.0,
+              "tas_kt": 121.7
+            },
+            {
+              "da_ft": 6000.0,
+              "tas_kt": 122.12
+            },
+            {
+              "da_ft": 6500.0,
+              "tas_kt": 122.54
+            },
+            {
+              "da_ft": 7000.0,
+              "tas_kt": 122.96
+            },
+            {
+              "da_ft": 7500.0,
+              "tas_kt": 123.39
+            },
+            {
+              "da_ft": 8000.0,
+              "tas_kt": 123.83
+            },
+            {
+              "da_ft": 8500.0,
+              "tas_kt": 124.27
+            },
+            {
+              "da_ft": 9000.0,
+              "tas_kt": 124.71
+            },
+            {
+              "da_ft": 9500.0,
+              "tas_kt": 125.16
+            },
+            {
+              "da_ft": 10000.0,
+              "tas_kt": 125.61
+            },
+            {
+              "da_ft": 10500.0,
+              "tas_kt": 126.08
+            },
+            {
+              "da_ft": 11000.0,
+              "tas_kt": 126.55
+            },
+            {
+              "da_ft": 11500.0,
+              "tas_kt": 127.02
+            }
+          ]
+        },
+        "75%": {
+          "pct_bhp": 75,
+          "kind": "pct_bhp",
+          "da_ft_range": [
+            500.0,
+            8500.0
+          ],
+          "tas_kt_range": [
+            128.2,
+            134.23
+          ],
+          "fit": {
+            "rmse_px": 6.915890706368599,
+            "form": "walk (poly rejected)"
+          },
+          "samples": [
+            {
+              "da_ft": 500.0,
+              "tas_kt": 128.2
+            },
+            {
+              "da_ft": 1000.0,
+              "tas_kt": 128.52
+            },
+            {
+              "da_ft": 1500.0,
+              "tas_kt": 128.85
+            },
+            {
+              "da_ft": 2000.0,
+              "tas_kt": 129.23
+            },
+            {
+              "da_ft": 2500.0,
+              "tas_kt": 129.61
+            },
+            {
+              "da_ft": 3000.0,
+              "tas_kt": 130.0
+            },
+            {
+              "da_ft": 3500.0,
+              "tas_kt": 130.38
+            },
+            {
+              "da_ft": 4000.0,
+              "tas_kt": 130.77
+            },
+            {
+              "da_ft": 4500.0,
+              "tas_kt": 131.15
+            },
+            {
+              "da_ft": 5000.0,
+              "tas_kt": 131.6
+            },
+            {
+              "da_ft": 5500.0,
+              "tas_kt": 132.05
+            },
+            {
+              "da_ft": 6000.0,
+              "tas_kt": 132.43
+            },
+            {
+              "da_ft": 6500.0,
+              "tas_kt": 132.85
+            },
+            {
+              "da_ft": 7000.0,
+              "tas_kt": 133.33
+            },
+            {
+              "da_ft": 7500.0,
+              "tas_kt": 133.81
+            },
+            {
+              "da_ft": 8000.0,
+              "tas_kt": 134.23
+            },
+            {
+              "da_ft": 8500.0,
+              "tas_kt": 134.2
+            }
+          ],
+          "meets_full_throttle": {
+            "da_ft": 8500,
+            "tas_kt": 134.2
+          },
+          "note": "75% meets the Full Throttle envelope at DA 8500 ft, TAS 134.2 kt (gap 0.03 kt). Above this, 75% is not available; use Full Throttle. Do not extrapolate."
+        },
+        "Full Throttle": {
+          "pct_bhp": null,
+          "kind": "full_throttle",
+          "da_ft_range": [
+            500.0,
+            11500.0
+          ],
+          "tas_kt_range": [
+            128.51,
+            140.64
+          ],
+          "fit": {
+            "coef": [
+              268.4008140394097,
+              1.5570844123049794,
+              -0.0038309768727292984,
+              3.3702287288869294e-06
+            ],
+            "rmse_px": 0.4203473691556551,
+            "form": "x=a+by+cy2+dy3"
+          },
+          "samples": [
+            {
+              "da_ft": 500.0,
+              "tas_kt": 140.64
+            },
+            {
+              "da_ft": 1000.0,
+              "tas_kt": 140.46
+            },
+            {
+              "da_ft": 1500.0,
+              "tas_kt": 140.27
+            },
+            {
+              "da_ft": 2000.0,
+              "tas_kt": 140.05
+            },
+            {
+              "da_ft": 2500.0,
+              "tas_kt": 139.81
+            },
+            {
+              "da_ft": 3000.0,
+              "tas_kt": 139.55
+            },
+            {
+              "da_ft": 3500.0,
+              "tas_kt": 139.26
+            },
+            {
+              "da_ft": 4000.0,
+              "tas_kt": 138.94
+            },
+            {
+              "da_ft": 4500.0,
+              "tas_kt": 138.59
+            },
+            {
+              "da_ft": 5000.0,
+              "tas_kt": 138.2
+            },
+            {
+              "da_ft": 5500.0,
+              "tas_kt": 137.77
+            },
+            {
+              "da_ft": 6000.0,
+              "tas_kt": 137.3
+            },
+            {
+              "da_ft": 6500.0,
+              "tas_kt": 136.79
+            },
+            {
+              "da_ft": 7000.0,
+              "tas_kt": 136.23
+            },
+            {
+              "da_ft": 7500.0,
+              "tas_kt": 135.62
+            },
+            {
+              "da_ft": 8000.0,
+              "tas_kt": 134.95
+            },
+            {
+              "da_ft": 8500.0,
+              "tas_kt": 134.23
+            },
+            {
+              "da_ft": 9000.0,
+              "tas_kt": 133.45
+            },
+            {
+              "da_ft": 9500.0,
+              "tas_kt": 132.62
+            },
+            {
+              "da_ft": 10000.0,
+              "tas_kt": 131.71
+            },
+            {
+              "da_ft": 10500.0,
+              "tas_kt": 130.72
+            },
+            {
+              "da_ft": 11000.0,
+              "tas_kt": 129.65
+            },
+            {
+              "da_ft": 11500.0,
+              "tas_kt": 128.51
+            }
+          ],
+          "note": "Right-hand envelope of the speed-power chart. At a given DA, TAS cannot exceed this curve. 75% meets it at 8500 ft; 65% meets it at the top of the chart (DA 12000 ft, TAS \u2248 127.5 kt)."
+        }
+      }
+    },
+    "fig4_cruise_table": {
+      "page": 7,
+      "title": "Figure 4: Cruise Performance",
+      "subtitle": "Table to calculate maximum endurance and range depending on the available fuel.",
+      "temperature": "Standard Temperature",
+      "columns": [
+        "da_ft",
+        "rpm",
+        "pct_bhp",
+        "ktas",
+        "gph"
+      ],
+      "rows": [
+        {
+          "da_ft": 2000,
+          "rpm": 2700,
+          "pct_bhp": 85,
+          "ktas": 140,
+          "gph": 8.7
+        },
+        {
+          "da_ft": 2000,
+          "rpm": 2600,
+          "pct_bhp": 79,
+          "ktas": 134,
+          "gph": 8.4
+        },
+        {
+          "da_ft": 2000,
+          "rpm": 2500,
+          "pct_bhp": 73,
+          "ktas": 128,
+          "gph": 7.3
+        },
+        {
+          "da_ft": 2000,
+          "rpm": 2400,
+          "pct_bhp": 67,
+          "ktas": 121,
+          "gph": 6.2
+        },
+        {
+          "da_ft": 2000,
+          "rpm": 2300,
+          "pct_bhp": 61,
+          "ktas": 115,
+          "gph": 5.7
+        },
+        {
+          "da_ft": 2000,
+          "rpm": 2200,
+          "pct_bhp": 55,
+          "ktas": 109,
+          "gph": 5.4
+        },
+        {
+          "da_ft": 4000,
+          "rpm": 2700,
+          "pct_bhp": 83,
+          "ktas": 139,
+          "gph": 8.8
+        },
+        {
+          "da_ft": 4000,
+          "rpm": 2600,
+          "pct_bhp": 77,
+          "ktas": 133,
+          "gph": 8.0
+        },
+        {
+          "da_ft": 4000,
+          "rpm": 2500,
+          "pct_bhp": 71,
+          "ktas": 127,
+          "gph": 6.9
+        },
+        {
+          "da_ft": 4000,
+          "rpm": 2400,
+          "pct_bhp": 65,
+          "ktas": 120,
+          "gph": 6.0
+        },
+        {
+          "da_ft": 4000,
+          "rpm": 2300,
+          "pct_bhp": 59,
+          "ktas": 114,
+          "gph": 5.6
+        },
+        {
+          "da_ft": 4000,
+          "rpm": 2200,
+          "pct_bhp": 53,
+          "ktas": 108,
+          "gph": 5.3
+        },
+        {
+          "da_ft": 6000,
+          "rpm": 2700,
+          "pct_bhp": 80,
+          "ktas": 139,
+          "gph": 8.7
+        },
+        {
+          "da_ft": 6000,
+          "rpm": 2600,
+          "pct_bhp": 74,
+          "ktas": 132,
+          "gph": 7.6
+        },
+        {
+          "da_ft": 6000,
+          "rpm": 2500,
+          "pct_bhp": 68,
+          "ktas": 126,
+          "gph": 6.5
+        },
+        {
+          "da_ft": 6000,
+          "rpm": 2400,
+          "pct_bhp": 63,
+          "ktas": 120,
+          "gph": 5.9
+        },
+        {
+          "da_ft": 6000,
+          "rpm": 2300,
+          "pct_bhp": 57,
+          "ktas": 114,
+          "gph": 5.6
+        },
+        {
+          "da_ft": 6000,
+          "rpm": 2200,
+          "pct_bhp": 51,
+          "ktas": 107,
+          "gph": 5.0
+        },
+        {
+          "da_ft": 8000,
+          "rpm": 2650,
+          "pct_bhp": 75,
+          "ktas": 135,
+          "gph": 7.7
+        },
+        {
+          "da_ft": 8000,
+          "rpm": 2600,
+          "pct_bhp": 72,
+          "ktas": 132,
+          "gph": 7.1
+        },
+        {
+          "da_ft": 8000,
+          "rpm": 2500,
+          "pct_bhp": 66,
+          "ktas": 125,
+          "gph": 6.2
+        },
+        {
+          "da_ft": 8000,
+          "rpm": 2400,
+          "pct_bhp": 60,
+          "ktas": 119,
+          "gph": 5.7
+        },
+        {
+          "da_ft": 8000,
+          "rpm": 2300,
+          "pct_bhp": 54,
+          "ktas": 113,
+          "gph": 5.4
+        },
+        {
+          "da_ft": 8000,
+          "rpm": 2200,
+          "pct_bhp": 48,
+          "ktas": 107,
+          "gph": 4.4
+        },
+        {
+          "da_ft": 10000,
+          "rpm": 2550,
+          "pct_bhp": 66,
+          "ktas": 127,
+          "gph": 6.2
+        },
+        {
+          "da_ft": 10000,
+          "rpm": 2500,
+          "pct_bhp": 63,
+          "ktas": 124,
+          "gph": 5.9
+        },
+        {
+          "da_ft": 10000,
+          "rpm": 2400,
+          "pct_bhp": 57,
+          "ktas": 118,
+          "gph": 5.6
+        },
+        {
+          "da_ft": 10000,
+          "rpm": 2300,
+          "pct_bhp": 51,
+          "ktas": 112,
+          "gph": 5.1
+        },
+        {
+          "da_ft": 10000,
+          "rpm": 2200,
+          "pct_bhp": 45,
+          "ktas": 105,
+          "gph": 3.3
+        },
+        {
+          "da_ft": 12000,
+          "rpm": 2450,
+          "pct_bhp": 58,
+          "ktas": 120,
+          "gph": 5.7
+        },
+        {
+          "da_ft": 12000,
+          "rpm": 2400,
+          "pct_bhp": 55,
+          "ktas": 117,
+          "gph": 5.5
+        },
+        {
+          "da_ft": 12000,
+          "rpm": 2300,
+          "pct_bhp": 49,
+          "ktas": 111,
+          "gph": 4.6
+        },
+        {
+          "da_ft": 12000,
+          "rpm": 2200,
+          "pct_bhp": 43,
+          "ktas": 104,
+          "gph": 1.7
+        }
+      ],
+      "gph_notes": [
+        "Fuel flow (GPH) is given only in this table, versus density altitude and RPM, at standard temperature. There is no fuel-flow-vs-%BHP chart in the supplement.",
+        "GPH generally declines with %BHP, but is not a clean function of %BHP alone (scatter of several tenths of a gallon).",
+        "The 10000 ft / 2200 RPM GPH of 3.3 and the 12000 ft / 2200 RPM GPH of 1.7 are clearly the printed figures (confirmed at 6\u00d7 on the original JPEG) but are physically suspicious: neighbouring 2300 RPM values are 5.1 and 4.6, and the drop from 4.4 at 8000/2200 is very steep. Transcribed as printed; treat as uncertain if used for endurance.",
+        "4000 ft / 2700 RPM GPH is 8.8, slightly higher than 2000 ft / 2700 RPM at 8.7 despite lower %BHP (83 vs 85). As printed."
+      ],
+      "n_rows": 33
+    }
+  },
+  "axis_calibration": {
+    "fig1": {
+      "oat_c": {
+        "pix": [
+          84.95974468825015,
+          178.99488619155233,
+          273.99873547885056,
+          368.99543615232534,
+          462.994542148141,
+          557.9947689089959,
+          652.9982959303862,
+          747.9895924327853
+        ],
+        "data": [
+          -10.0,
+          0.0,
+          10.0,
+          20.0,
+          30.0,
+          40.0,
+          50.0,
+          60.0
+        ],
+        "lin_a": -18.927010285474367,
+        "lin_b": 0.10556440187613665,
+        "lin_rmse": 0.03111553092400861
+      },
+      "da_ft": {
+        "pix": [
+          11.007851465952314,
+          67.003760393395,
+          122.00107241091573,
+          176.99933082814994,
+          232.0014838780301,
+          287.0009955610763,
+          341.9971396440446,
+          397.0004435543286,
+          452.0266110223467
+        ],
+        "data": [
+          14000.0,
+          12000.0,
+          10000.0,
+          8000.0,
+          6000.0,
+          4000.0,
+          2000.0,
+          0.0,
+          -2000.0
+        ],
+        "lin_a": 14422.09249470586,
+        "lin_b": -36.318843948912146,
+        "lin_rmse": 9.438554360875978
+      }
+    },
+    "fig2": {
+      "rpm_x100": {
+        "pix": [
+          104.9491631255605,
+          170.9956365292304,
+          236.99383501321068,
+          303.99947474193846,
+          369.9836883647776,
+          436.99221468593333,
+          503.00154714440265,
+          570.0037233074496,
+          635.9955532636802,
+          702.9940160212633
+        ],
+        "data": [
+          19.0,
+          20.0,
+          21.0,
+          22.0,
+          23.0,
+          24.0,
+          25.0,
+          26.0,
+          27.0,
+          28.0
+        ],
+        "lin_a": 17.42763991602182,
+        "lin_b": 0.0150458305832946,
+        "lin_rmse": 0.004422866297053998
+      },
+      "da_ft": {
+        "pix": [
+          89.00634122287968,
+          133.99907971587473,
+          177.99988992588342,
+          222.14823676294824,
+          267.00114318376677,
+          310.9997763575099,
+          355.01292034417304
+        ],
+        "data": [
+          12000.0,
+          10000.0,
+          8000.0,
+          6000.0,
+          4000.0,
+          2000.0,
+          0.0
+        ],
+        "lin_a": 16031.434898847469,
+        "lin_b": -45.123708963052714,
+        "lin_rmse": 11.552761393618901
+      }
+    },
+    "fig3": {
+      "tas_kt": {
+        "pix": [
+          90.93683112157534,
+          168.99518614186883,
+          246.99833089830435,
+          325.0063446146201,
+          403.00526506242085,
+          481.00065695675266,
+          558.9880071909546
+        ],
+        "data": [
+          90.0,
+          100.0,
+          110.0,
+          120.0,
+          130.0,
+          140.0,
+          150.0
+        ],
+        "lin_a": 78.33787431609929,
+        "lin_b": 0.12819506536539824,
+        "lin_rmse": 0.002418596714402772
+      },
+      "da_ft": {
+        "pix": [
+          92.00572046935896,
+          134.0004736960613,
+          174.99862796071636,
+          216.00261177130287,
+          257.0013060084955,
+          298.00190002291265,
+          339.0083164568108
+        ],
+        "data": [
+          12000.0,
+          10000.0,
+          8000.0,
+          6000.0,
+          4000.0,
+          2000.0,
+          0.0
+        ],
+        "lin_a": 16502.065306817993,
+        "lin_b": -48.652240156914885,
+        "lin_rmse": 13.348050252118771
+      }
+    }
+  },
+  "source": {
+    "document": "AFMS E-1487",
+    "propeller": "MT 175 R 150-2Ca",
+    "issue": "Original Issue 01-Mar-2007",
+    "pages": "4-7",
+    "approval_note": "Performance Data is not TCCA Approved"
+  }
+}

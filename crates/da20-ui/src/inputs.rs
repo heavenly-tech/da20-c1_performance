@@ -1,8 +1,9 @@
+use da20_core::altitude::isa_troposphere_density_altitude_ft;
 use da20_core::altitude::{clear_pa_override, effective_pressure_altitude_ft, set_pa_override};
-use da20_core::chart_bounds::limits;
+use da20_core::chart_bounds::{limits, CHART_EDGE_TOL};
 use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::types::CruiseSolveMode;
-use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs};
+use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs, PropellerKind};
 use da20_core::wind::{
     apply_signed_along_runway_wind, runway_heading_deg, runway_heading_status,
     signed_along_runway_kt, wind_chart_panel_needs_crosswind_note, wind_components,
@@ -13,6 +14,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
+use crate::prefs::save_flight_prefs_from_inputs;
 
 /// Takeoff vs climb vs landing (full) airfield blocks.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -189,6 +191,41 @@ pub fn SharedAirfieldInputs(
     }
 }
 
+#[component]
+pub fn SharedPropellerSelector(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+) -> impl IntoView {
+    view! {
+        {move || {
+            let c = copy(locale.get());
+            view! {
+                <div class="f wheel-fairings-shared">
+                    <label>{c.propeller_toggle_label}</label>
+                    <div class="toggle-row wheel-fairings-row">
+                        <button type="button" class="btn g"
+                            class:on=move || inputs.get().propeller == PropellerKind::Sensenich
+                            on:click=move |_| inputs.update(|i| {
+                                i.propeller = PropellerKind::Sensenich;
+                                save_flight_prefs_from_inputs(i);
+                            })>
+                            {c.propeller_sensenich}
+                        </button>
+                        <button type="button" class="btn g"
+                            class:on=move || inputs.get().propeller == PropellerKind::Mt175R
+                            on:click=move |_| inputs.update(|i| {
+                                i.propeller = PropellerKind::Mt175R;
+                                save_flight_prefs_from_inputs(i);
+                            })>
+                            {c.propeller_mt175r}
+                        </button>
+                    </div>
+                </div>
+            }
+        }}
+    }
+}
+
 /// Wheel fairings: one shared `FlightInputs` flag (climb −3% ROC; cruise −5% TAS per AFM).
 #[component]
 pub fn SharedWheelFairingToggle(
@@ -204,12 +241,18 @@ pub fn SharedWheelFairingToggle(
                     <div class="toggle-row wheel-fairings-row">
                         <button type="button" class="btn g"
                             class:on=move || inputs.get().wheel_fairings_installed
-                            on:click=move |_| inputs.update(|i| i.wheel_fairings_installed = true)>
+                            on:click=move |_| inputs.update(|i| {
+                                i.wheel_fairings_installed = true;
+                                save_flight_prefs_from_inputs(i);
+                            })>
                             {c.wheel_fairings_installed_yes}
                         </button>
                         <button type="button" class="btn g"
                             class:on=move || !inputs.get().wheel_fairings_installed
-                            on:click=move |_| inputs.update(|i| i.wheel_fairings_installed = false)>
+                            on:click=move |_| inputs.update(|i| {
+                                i.wheel_fairings_installed = false;
+                                save_flight_prefs_from_inputs(i);
+                            })>
                             {c.wheel_fairings_installed_no}
                         </button>
                     </div>
@@ -229,6 +272,7 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
     view! {
         {move || {
             let c = copy(locale.get());
+            let mt = inputs.get().propeller == PropellerKind::Mt175R;
             view! {
                 <NumField label=move || c.cruise_pa.to_string()
                     min=limits::TABLE3_PA_FT.0
@@ -236,17 +280,40 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                     get=move || inputs.get().cruise_pressure_alt_ft
                     set=move |v| inputs.update(|i| {
                         i.cruise_pressure_alt_ft = v;
-                        let isa = isa_temp_c_at_pa(v);
-                        let (dmin, dmax) = limits::TABLE3_DISA_C;
-                        i.cruise_oat_c = i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
+                        if i.propeller == PropellerKind::Sensenich {
+                            let isa = isa_temp_c_at_pa(v);
+                            let (dmin, dmax) = limits::TABLE3_DISA_C;
+                            i.cruise_oat_c = i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
+                        }
                     })/>
                 <NumField label=move || c.cruise_oat.to_string()
+                    min=limits::FIG52_OAT_C.0
+                    max=limits::FIG52_OAT_C.1
                     get=move || inputs.get().cruise_oat_c
                     set=move |v| inputs.update(|i| {
-                        let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
-                        let (dmin, dmax) = limits::TABLE3_DISA_C;
-                        i.cruise_oat_c = v.clamp(isa + dmin, isa + dmax);
+                        if i.propeller == PropellerKind::Mt175R {
+                            i.cruise_oat_c = v.clamp(limits::FIG52_OAT_C.0, limits::FIG52_OAT_C.1);
+                        } else {
+                            let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
+                            let (dmin, dmax) = limits::TABLE3_DISA_C;
+                            i.cruise_oat_c = v.clamp(isa + dmin, isa + dmax);
+                        }
                     })/>
+                {mt.then(|| {
+                    let da = isa_troposphere_density_altitude_ft(
+                        inputs.get().cruise_pressure_alt_ft,
+                        inputs.get().cruise_oat_c,
+                    );
+                    let (lo, hi) = limits::FIG4_DA_FT;
+                    let da_txt = if da >= lo - CHART_EDGE_TOL && da <= hi + CHART_EDGE_TOL {
+                        format!("{}", da.round() as i64)
+                    } else {
+                        "—".into()
+                    };
+                    view! {
+                        <p class="lab mono">{c.density_altitude_readout}": "{da_txt}" ft"</p>
+                    }
+                })}
                 <div class="toggle-row">
                     <button type="button" class="btn g"
                         class:on=move || inputs.get().cruise_solve_mode == CruiseSolveMode::SetRpm
@@ -281,20 +348,22 @@ pub fn CruiseInputs(locale: RwSignal<Locale>, inputs: RwSignal<FlightInputs>) ->
                         <p class="lab warn afm-quote">{c.afm_wheel_fairings_note_cruise}</p>
                     })
                 }}
-                <div class="toggle-row">
-                    <button type="button" class="btn g"
-                        on:click=move |_| set_cruise_oat_from_isa(0.0)>
-                        {c.cruise_isa}
-                    </button>
-                    <button type="button" class="btn g"
-                        on:click=move |_| set_cruise_oat_from_isa(-20.0)>
-                        {c.cruise_disa_minus20}
-                    </button>
-                    <button type="button" class="btn g"
-                        on:click=move |_| set_cruise_oat_from_isa(10.0)>
-                        {c.cruise_disa_plus10}
-                    </button>
-                </div>
+                {(!mt).then(|| view! {
+                    <div class="toggle-row">
+                        <button type="button" class="btn g"
+                            on:click=move |_| set_cruise_oat_from_isa(0.0)>
+                            {c.cruise_isa}
+                        </button>
+                        <button type="button" class="btn g"
+                            on:click=move |_| set_cruise_oat_from_isa(-20.0)>
+                            {c.cruise_disa_minus20}
+                        </button>
+                        <button type="button" class="btn g"
+                            on:click=move |_| set_cruise_oat_from_isa(10.0)>
+                            {c.cruise_disa_plus10}
+                        </button>
+                    </div>
+                })}
             }
         }}
     }
