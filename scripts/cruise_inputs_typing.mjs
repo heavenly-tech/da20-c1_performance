@@ -129,6 +129,14 @@ async function runCruiseChecks(page, en) {
   await assertStableTyping(page, fieldByLabel(page, rpmLabel), "2450", "2450");
 }
 
+async function runTakeoffAirfieldChecks(page, en) {
+  await clickTab(page, "takeoff");
+  const paLabel = en ? "Pressure altitude (ft)" : "Altitud de presión (ft)";
+  const oatLabel = "OAT (°C)";
+  await assertStableTyping(page, fieldByLabel(page, paLabel), "3100", "3100");
+  await assertStableTyping(page, fieldByLabel(page, oatLabel), "18", "18.0");
+}
+
 async function runClimbChecks(page, en) {
   await clickTab(page, "climb");
   const paLabel = en ? "Pressure altitude (ft)" : "Altitud de presión (ft)";
@@ -137,7 +145,7 @@ async function runClimbChecks(page, en) {
     ? "Climb target PA (ft)"
     : "Altitud objetivo de trepada (ft)";
   await assertStableTyping(page, fieldByLabel(page, paLabel), "3500", "3500");
-  await assertStableTyping(page, fieldByLabel(page, oatLabel), "12", "12");
+  await assertStableTyping(page, fieldByLabel(page, oatLabel), "12", "12.0");
   await assertStableTyping(page, fieldByLabel(page, targetLabel), "4500", "4500");
 }
 
@@ -190,6 +198,7 @@ async function main() {
     await openApp(page);
     const en = await localeIsEn(page);
     await runCruiseChecks(page, en);
+    await runTakeoffAirfieldChecks(page, en);
     await runClimbChecks(page, en);
     await runLandingChecks(page, en);
     await runEnduranceChecks(page, en);

@@ -13,6 +13,7 @@ use crate::ground_oat::estimated_oat_c_from_ground;
 
 pub const TAKEOFF_PREFS_STORAGE_KEY: &str = "da20_takeoff_prefs_v1";
 pub const FLIGHT_PREFS_STORAGE_KEY: &str = "da20_flight_prefs_v2";
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 pub const FLIGHT_PREFS_STORAGE_KEY_V1: &str = "da20_flight_prefs_v1";
 
 pub const PREFERRED_DEFAULT_PERCENT_BHP: f64 = 65.0;
@@ -275,6 +276,9 @@ pub struct FlightPrefs {
     pub cruise: CruiseTabPrefs,
     #[serde(default)]
     pub endurance: EnduranceTabPrefs,
+    /// Set when JSON omitted the `endurance` object (one-time seed from cruise on load).
+    #[serde(skip)]
+    pub(crate) endurance_section_absent_on_load: bool,
     #[serde(default, rename = "cruise_oat_manual", skip_serializing)]
     legacy_cruise_oat_manual: bool,
     #[serde(default, rename = "cruise_solve_saved", skip_serializing)]
@@ -314,6 +318,7 @@ impl Default for FlightPrefs {
             landing: LandingTabPrefs::default(),
             cruise: CruiseTabPrefs::default(),
             endurance: EnduranceTabPrefs::default(),
+            endurance_section_absent_on_load: false,
             legacy_cruise_oat_manual: false,
             legacy_cruise_solve_saved: None,
             legacy_cruise_percent_bhp_saved: None,
@@ -330,12 +335,14 @@ fn default_landing_ground_idle_1000_rpm() -> bool {
 }
 
 impl FlightPrefs {
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn finish_migration(&mut self) {
         self.migrate_legacy_ground_fields();
         self.migrate_legacy_root_tab_fields();
         self.seed_endurance_from_cruise_if_needed();
     }
 
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     fn migrate_legacy_root_tab_fields(&mut self) {
         if self.legacy_cruise_oat_manual
             || self.legacy_cruise_solve_saved.is_some()
@@ -358,13 +365,17 @@ impl FlightPrefs {
         }
     }
 
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     fn seed_endurance_from_cruise_if_needed(&mut self) {
-        if self.endurance.cruise == CruiseTabPrefs::default() {
-            self.endurance.cruise = self.cruise.clone();
+        if !self.endurance_section_absent_on_load {
+            return;
         }
+        self.endurance.cruise = self.cruise.clone();
+        self.endurance_section_absent_on_load = false;
     }
 
     /// Split pre-tab-isolation `ground_*` root fields into per-tab prefs (one-time per load).
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub(crate) fn migrate_legacy_ground_fields(&mut self) {
         let legacy_elev = self.legacy_ground_elevation_ft;
         let legacy_oat = self.legacy_ground_oat_c;
@@ -445,12 +456,32 @@ pub fn resolved_default_cruise_percent_bhp(data: &PerformanceData) -> f64 {
     PREFERRED_DEFAULT_PERCENT_BHP
 }
 
+/// Deserialize flight prefs and record whether the JSON included an `endurance` object.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+pub fn flight_prefs_from_json(json: &str) -> Result<FlightPrefs, serde_json::Error> {
+    let v: serde_json::Value = serde_json::from_str(json)?;
+    let endurance_absent = v.get("endurance").is_none();
+    let mut prefs: FlightPrefs = serde_json::from_value(v)?;
+    prefs.endurance_section_absent_on_load = endurance_absent;
+    Ok(prefs)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn flight_prefs_local_storage_json() -> Option<String> {
+    let storage = web_sys::window()?.local_storage().ok()??;
+    storage.get_item(FLIGHT_PREFS_STORAGE_KEY).ok().flatten()
+}
+
 impl FlightPrefs {
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
     pub fn load() -> Self {
-        if cfg!(target_arch = "wasm32") {
-            if let Ok(mut p) = LocalStorage::get::<Self>(FLIGHT_PREFS_STORAGE_KEY) {
-                p.finish_migration();
-                return p;
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(json) = flight_prefs_local_storage_json() {
+                if let Ok(mut p) = flight_prefs_from_json(&json) {
+                    p.finish_migration();
+                    return p;
+                }
             }
             if let Ok(legacy) = LocalStorage::get::<FlightPrefsV1>(FLIGHT_PREFS_STORAGE_KEY_V1) {
                 let mut upgraded = upgrade_from_v1(legacy);
@@ -458,8 +489,10 @@ impl FlightPrefs {
                 upgraded.save();
                 return upgraded;
             }
-            Self::default()
-        } else {
+            return Self::default();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
             Self::default()
         }
     }
@@ -527,6 +560,7 @@ pub fn upgrade_from_v1(v1: FlightPrefsV1) -> FlightPrefs {
     FlightPrefs {
         propeller: v1.propeller,
         wheel_fairings_installed: v1.wheel_fairings_installed,
+        endurance_section_absent_on_load: true,
         ..FlightPrefs::default()
     }
 }
@@ -722,23 +756,51 @@ mod tests {
     }
 
     #[test]
-    fn endurance_cruise_seeded_from_cruise_on_finish_migration() {
-        let mut prefs = FlightPrefs::default();
-        prefs.cruise.cruise_pressure_alt_ft = 7200.0;
-        prefs.cruise.weight_lb = 1700.0;
-        prefs.cruise.cruise_percent_bhp_saved = Some(65.0);
-        prefs.endurance = EnduranceTabPrefs::default();
+    fn legacy_json_without_endurance_object_seeds_endurance_cruise_once() {
+        let json = r#"{
+            "cruise": {
+                "cruise_pressure_alt_ft": 7200.0,
+                "weight_lb": 1700.0,
+                "cruise_percent_bhp_saved": 65.0
+            }
+        }"#;
+        let mut prefs = flight_prefs_from_json(json).expect("deserialize legacy");
         prefs.finish_migration();
         assert_eq!(prefs.endurance.cruise.cruise_pressure_alt_ft, 7200.0);
         assert_eq!(prefs.endurance.cruise.weight_lb, 1700.0);
         assert_eq!(prefs.endurance.cruise.cruise_percent_bhp_saved, Some(65.0));
+        assert!(!prefs.endurance_section_absent_on_load);
     }
 
     #[test]
-    fn endurance_cruise_not_overwritten_when_already_customized() {
+    fn customized_cruise_default_endurance_survives_serialize_reload_twice() {
         let mut prefs = FlightPrefs::default();
         prefs.cruise.cruise_pressure_alt_ft = 7200.0;
-        prefs.endurance.cruise.cruise_pressure_alt_ft = 8100.0;
+        prefs.cruise.weight_lb = 1700.0;
+        prefs.cruise.cruise_percent_bhp_saved = Some(65.0);
+        let default_endurance_cruise = prefs.endurance.cruise.clone();
+
+        let json = serde_json::to_string(&prefs).expect("serialize");
+        assert!(json.contains("\"endurance\""));
+
+        for _ in 0..2 {
+            let mut loaded = flight_prefs_from_json(&json).expect("deserialize");
+            loaded.finish_migration();
+            assert_eq!(loaded.endurance.cruise, default_endurance_cruise);
+            assert_ne!(
+                loaded.endurance.cruise.cruise_pressure_alt_ft,
+                loaded.cruise.cruise_pressure_alt_ft
+            );
+        }
+    }
+
+    #[test]
+    fn endurance_cruise_not_overwritten_when_endurance_section_present() {
+        let json = r#"{
+            "cruise": { "cruise_pressure_alt_ft": 7200.0 },
+            "endurance": { "cruise_pressure_alt_ft": 8100.0 }
+        }"#;
+        let mut prefs = flight_prefs_from_json(json).expect("deserialize");
         prefs.finish_migration();
         assert_eq!(prefs.endurance.cruise.cruise_pressure_alt_ft, 8100.0);
     }

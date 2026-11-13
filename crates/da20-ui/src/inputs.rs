@@ -314,14 +314,53 @@ pub fn CruiseGroundInputs(
     }
 }
 
+fn airfield_chart_limits(
+    chart_phase: Option<ChartPhase>,
+    mode: AirfieldInputsMode,
+) -> (f64, f64, f64, f64) {
+    match chart_phase {
+        Some(ChartPhase::Takeoff) => (
+            limits::FIG54_PA_FT.0,
+            limits::FIG54_PA_FT.1,
+            limits::FIG54_OAT_C.0,
+            limits::FIG54_OAT_C.1,
+        ),
+        Some(ChartPhase::Landing) => (
+            limits::TABLE4_PA_FT.0,
+            limits::TABLE4_PA_FT.1,
+            CHART_CLAMP_UNSET,
+            CHART_CLAMP_UNSET,
+        ),
+        Some(ChartPhase::Climb) | None => match mode {
+            AirfieldInputsMode::Takeoff => (
+                limits::FIG54_PA_FT.0,
+                limits::FIG54_PA_FT.1,
+                limits::FIG54_OAT_C.0,
+                limits::FIG54_OAT_C.1,
+            ),
+            AirfieldInputsMode::Climb => (
+                limits::FIG52_PA_FT.0,
+                limits::FIG52_PA_FT.1,
+                limits::FIG52_OAT_C.0,
+                limits::FIG52_OAT_C.1,
+            ),
+            AirfieldInputsMode::Full | AirfieldInputsMode::Landing => (
+                limits::FIG52_PA_FT.0,
+                limits::FIG52_PA_FT.1,
+                limits::FIG52_OAT_C.0,
+                limits::FIG52_OAT_C.1,
+            ),
+        },
+    }
+}
+
 #[component]
-pub fn SharedAirfieldInputs(
+fn SharedAirfieldPaReadout(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     flight_prefs: RwSignal<FlightPrefs>,
     chart_phase: Option<ChartPhase>,
-    #[prop(default = AirfieldInputsMode::Full)] mode: AirfieldInputsMode,
-    #[prop(default = false)] hide_pa_oat: bool,
+    mode: AirfieldInputsMode,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -331,111 +370,7 @@ pub fn SharedAirfieldInputs(
             let override_active = chart_phase.is_some_and(|p| {
                 i.pa_override.as_ref().is_some_and(|o| o.phase == p)
             });
-            let (pa_min, pa_max, oat_min, oat_max) = match chart_phase {
-                Some(ChartPhase::Takeoff) => (
-                    limits::FIG54_PA_FT.0,
-                    limits::FIG54_PA_FT.1,
-                    limits::FIG54_OAT_C.0,
-                    limits::FIG54_OAT_C.1,
-                ),
-                Some(ChartPhase::Landing) => (
-                    limits::TABLE4_PA_FT.0,
-                    limits::TABLE4_PA_FT.1,
-                    CHART_CLAMP_UNSET,
-                    CHART_CLAMP_UNSET,
-                ),
-                Some(ChartPhase::Climb) | None => match mode {
-                    AirfieldInputsMode::Takeoff => (
-                        limits::FIG54_PA_FT.0,
-                        limits::FIG54_PA_FT.1,
-                        limits::FIG54_OAT_C.0,
-                        limits::FIG54_OAT_C.1,
-                    ),
-                    AirfieldInputsMode::Climb => (
-                        limits::FIG52_PA_FT.0,
-                        limits::FIG52_PA_FT.1,
-                        limits::FIG52_OAT_C.0,
-                        limits::FIG52_OAT_C.1,
-                    ),
-                    AirfieldInputsMode::Full | AirfieldInputsMode::Landing => (
-                        limits::FIG52_PA_FT.0,
-                        limits::FIG52_PA_FT.1,
-                        limits::FIG52_OAT_C.0,
-                        limits::FIG52_OAT_C.1,
-                    ),
-                },
-            };
-            let show_oat = !matches!(mode, AirfieldInputsMode::Landing);
             view! {
-                {(!hide_pa_oat).then(|| view! {
-                    <NumField label=move || c.pressure_altitude_ft.to_string()
-                        min=pa_min
-                        max=pa_max
-                        get=move || {
-                            shared_airfield_pressure_altitude_display(&inputs.get(), chart_phase)
-                        }
-                        set=move |v| {
-                            flight_prefs.update(|p| {
-                                inputs.update(|i| {
-                                    shared_airfield_set_pressure_altitude(
-                                        mode,
-                                        chart_phase,
-                                        p,
-                                        i,
-                                        v,
-                                    );
-                                });
-                                if shared_airfield_writes_tab_prefs(mode) {
-                                    p.save();
-                                }
-                            });
-                        }/>
-                    {show_oat.then(|| view! {
-                        <NumField label=move || c.oat.to_string()
-                            min=oat_min
-                            max=oat_max
-                            get=move || inputs.get().oat_c
-                            set=move |v| {
-                                flight_prefs.update(|p| {
-                                    inputs.update(|i| shared_airfield_set_oat_c(mode, p, i, v));
-                                    if shared_airfield_writes_tab_prefs(mode) {
-                                        p.save();
-                                    }
-                                });
-                            }/>
-                    })}
-                })}
-                {(mode == AirfieldInputsMode::Takeoff).then(|| {
-                    view! {
-                        <div class="f">
-                            <label>{c.runway}</label>
-                            <input class="mono" maxlength="3"
-                                prop:value=move || inputs.get().runway.clone()
-                                on:input=move |ev| {
-                                    let raw = input_value(&ev);
-                                    flight_prefs.update(|p| {
-                                        inputs.update(|i| {
-                                            i.runway = raw;
-                                            persist_takeoff_tab_from_inputs(p, i);
-                                        });
-                                    });
-                                }/>
-                            {move || {
-                                let c = copy(locale.get());
-                                match runway_heading_status(&inputs.get().runway) {
-                                    RunwayHeadingStatus::AmbiguousShort => view! {
-                                        <p class="lab field-error">{c.runway_heading_ambiguous}</p>
-                                    }.into_any(),
-                                    RunwayHeadingStatus::Invalid => view! {
-                                        <p class="lab field-error">{c.runway_heading_invalid}</p>
-                                    }.into_any(),
-                                    _ => ().into_any(),
-                                }
-                            }}
-                        </div>
-                        <WindField locale=locale inputs=inputs flight_prefs=flight_prefs/>
-                    }
-                })}
                 {(!override_active).then(|| view! {
                     <p class="lab readout-text">
                         "PA "
@@ -472,6 +407,92 @@ pub fn SharedAirfieldInputs(
                 })}
             }
         }}
+    }
+}
+
+#[component]
+pub fn SharedAirfieldInputs(
+    locale: RwSignal<Locale>,
+    inputs: RwSignal<FlightInputs>,
+    flight_prefs: RwSignal<FlightPrefs>,
+    chart_phase: Option<ChartPhase>,
+    #[prop(default = AirfieldInputsMode::Full)] mode: AirfieldInputsMode,
+    #[prop(default = false)] hide_pa_oat: bool,
+) -> impl IntoView {
+    let (pa_min, pa_max, oat_min, oat_max) = airfield_chart_limits(chart_phase, mode);
+    let show_oat = !matches!(mode, AirfieldInputsMode::Landing);
+    let show_runway_wind = mode == AirfieldInputsMode::Takeoff;
+
+    view! {
+        {(!hide_pa_oat).then(|| view! {
+            <NumField label=move || copy(locale.get()).pressure_altitude_ft.to_string()
+                min=pa_min
+                max=pa_max
+                get=move || {
+                    shared_airfield_pressure_altitude_display(&inputs.get(), chart_phase)
+                }
+                set=move |v| {
+                    flight_prefs.update(|p| {
+                        inputs.update(|i| {
+                            shared_airfield_set_pressure_altitude(mode, chart_phase, p, i, v);
+                        });
+                        if shared_airfield_writes_tab_prefs(mode) {
+                            p.save();
+                        }
+                    });
+                }/>
+        })}
+        <Show when=move || show_oat && !hide_pa_oat>
+            <NumField label=move || copy(locale.get()).oat.to_string()
+                display_fraction_digits=Some(1)
+                min=oat_min
+                max=oat_max
+                get=move || inputs.get().oat_c
+                set=move |v| {
+                    flight_prefs.update(|p| {
+                        inputs.update(|i| shared_airfield_set_oat_c(mode, p, i, v));
+                        if shared_airfield_writes_tab_prefs(mode) {
+                            p.save();
+                        }
+                    });
+                }/>
+        </Show>
+        {show_runway_wind.then(|| view! {
+            <div class="f">
+                <label>{move || copy(locale.get()).runway}</label>
+                <input class="mono" maxlength="3"
+                    prop:value=move || inputs.get().runway.clone()
+                    on:input=move |ev| {
+                        let raw = input_value(&ev);
+                        flight_prefs.update(|p| {
+                            inputs.update(|i| {
+                                i.runway = raw;
+                                persist_takeoff_tab_from_inputs(p, i);
+                            });
+                        });
+                    }/>
+                {move || {
+                    let c = copy(locale.get());
+                    match runway_heading_status(&inputs.get().runway) {
+                        RunwayHeadingStatus::AmbiguousShort => view! {
+                            <p class="lab field-error">{c.runway_heading_ambiguous}</p>
+                        }.into_any(),
+                        RunwayHeadingStatus::Invalid => view! {
+                            <p class="lab field-error">{c.runway_heading_invalid}</p>
+                        }.into_any(),
+                        _ => ().into_any(),
+                    }
+                }}
+            </div>
+            <WindField locale=locale inputs=inputs flight_prefs=flight_prefs/>
+        })}
+        <SharedAirfieldPaReadout
+            locale=locale
+            inputs=inputs
+            flight_prefs=flight_prefs
+            chart_phase=chart_phase
+            mode=mode
+        />
     }
 }
 
