@@ -668,6 +668,60 @@ mod tests {
     }
 
     #[test]
+    fn endurance_mt_8000_55_matches_endurance_tab_cruise_chain() {
+        use crate::phase_state::assemble_endurance_inputs;
+        use crate::prefs::FlightPrefs;
+        use da20_core::cruise::{compute_cruise, isa_temp_c_at_pa};
+        use da20_core::types::{CruiseSolveMode, PropellerKind};
+
+        let data = PerformanceData::production();
+        let pa = 8000.0;
+        let mut prefs = FlightPrefs::default();
+        prefs.propeller = PropellerKind::Mt175R;
+        prefs.endurance.cruise.cruise_pressure_alt_ft = pa;
+        prefs.endurance.cruise.cruise_percent_bhp_saved = Some(55.0);
+        prefs.endurance.cruise.cruise_solve_saved = Some(CruiseSolveMode::SetPercentBhp);
+        prefs.endurance.cruise.cruise_oat_c_saved = Some(isa_temp_c_at_pa(pa));
+        prefs.endurance.cruise.cruise_oat_manual = true;
+
+        let endurance_in = assemble_endurance_inputs(&prefs, &data);
+        let cruise = compute_cruise(&data, &endurance_in).unwrap();
+        let b = compute_all_isolated(&data, &prefs);
+        let e = b.endurance.as_ref().expect("endurance numeric");
+        assert!(!cruise.mt_gph_out_of_chart);
+        assert!((e.fuel_flow_us_gal_h - cruise.fuel_flow_us_gal_h).abs() < 1e-9);
+        assert_eq!(
+            e.provenance.citation.figure_or_table,
+            cruise.provenance.citation.figure_or_table
+        );
+        assert!(cruise.table3_source.is_none());
+    }
+
+    #[test]
+    fn sensenich_endurance_isolated_unchanged_shape() {
+        use crate::prefs::FlightPrefs;
+        use da20_core::cruise::isa_temp_c_at_pa;
+        use da20_core::types::{CruiseSolveMode, PropellerKind};
+
+        let data = PerformanceData::production();
+        let mut prefs = FlightPrefs::default();
+        prefs.propeller = PropellerKind::Sensenich;
+        prefs.endurance.cruise.cruise_pressure_alt_ft = 6500.0;
+        prefs.endurance.cruise.cruise_percent_bhp_saved = Some(65.0);
+        prefs.endurance.cruise.cruise_solve_saved = Some(CruiseSolveMode::SetPercentBhp);
+        prefs.endurance.cruise.cruise_oat_c_saved = Some(isa_temp_c_at_pa(6500.0));
+        prefs.endurance.cruise.cruise_oat_manual = true;
+
+        let b = compute_all_isolated(&data, &prefs);
+        let e = b.endurance.as_ref().expect("sensenich endurance");
+        let ec = b.endurance_cruise.as_ref().unwrap();
+        assert!(ec.table3_source.is_some());
+        assert!((e.fuel_flow_us_gal_h - ec.fuel_flow_us_gal_h).abs() < 1e-9);
+        assert!((e.endurance_h * ec.tas_kt - e.range_nm).abs() < 1e-6);
+        assert!(!ec.provenance.citation.figure_or_table.contains("Fig 4"));
+    }
+
+    #[test]
     fn endurance_partial_when_mt_fig4_gph_ceiling() {
         use crate::prefs::FlightPrefs;
         use da20_core::cruise::isa_temp_c_at_pa;
