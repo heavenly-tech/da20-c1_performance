@@ -69,14 +69,28 @@ pub fn headwind_tailwind_kt(components: &WindComponents) -> (f64, f64) {
 
 const COS_EPS: f64 = 0.05;
 
-/// Keep wind direction fixed; solve speed for a target along-runway headwind (strip/chart drag).
+/// Magnetic wind direction in degrees, 1–360 (never 0).
+fn normalize_wind_dir_deg(deg: f64) -> f64 {
+    let d = deg.rem_euclid(360.0);
+    if d < 1.0 {
+        360.0
+    } else {
+        d
+    }
+}
+
+fn wind_dir_opposite(deg: f64) -> f64 {
+    normalize_wind_dir_deg(deg + 180.0)
+}
+
+/// Solve speed (and direction when crossing HW↔TW) for a target along-runway headwind (strip/chart drag).
 /// Signed along-runway component (kt): positive headwind, negative tailwind.
 pub fn signed_along_runway_kt(inputs: &FlightInputs) -> Option<f64> {
     let rwy = runway_heading_deg(&inputs.runway)?;
     Some(wind_components(inputs.wind_dir_deg, inputs.wind_speed_kt, rwy).along_runway_headwind_kt)
 }
 
-/// Update `FlightInputs` wind speed (keeping direction when possible) for a signed along-runway value.
+/// Update `FlightInputs` wind for a signed along-runway value (direction may flip 180° when crossing zero).
 pub fn apply_signed_along_runway_wind(inputs: &mut FlightInputs, signed_kt: f64) {
     let Some(rwy) = runway_heading_deg(&inputs.runway) else {
         return;
@@ -97,6 +111,9 @@ pub fn back_solve_wind_for_headwind(
     target_headwind_kt: f64,
 ) -> (f64, f64, bool) {
     let target = target_headwind_kt.max(0.0);
+    if target < f64::EPSILON {
+        return (wind_dir_deg, 0.0, false);
+    }
     let angle = (wind_dir_deg - runway_heading_deg).to_radians();
     let cos = angle.cos();
     if cos.abs() > COS_EPS {
@@ -104,7 +121,8 @@ pub fn back_solve_wind_for_headwind(
             let speed = (target / cos).max(0.0);
             (wind_dir_deg, speed, false)
         } else {
-            (wind_dir_deg, 0.0, false)
+            let speed = (target / cos.abs()).max(0.0);
+            (wind_dir_opposite(wind_dir_deg), speed, false)
         }
     } else {
         // Nearly pure crosswind: cannot rotate direction; treat target as speed (crosswind-limited).
@@ -112,13 +130,16 @@ pub fn back_solve_wind_for_headwind(
     }
 }
 
-/// Keep wind direction fixed; solve speed for a target tailwind (strip TW sub-panel drag).
+/// Solve speed (and direction when crossing HW↔TW) for a target tailwind (strip TW sub-panel drag).
 pub fn back_solve_wind_for_tailwind(
     wind_dir_deg: f64,
     runway_heading_deg: f64,
     target_tailwind_kt: f64,
 ) -> (f64, f64, bool) {
     let target = target_tailwind_kt.max(0.0);
+    if target < f64::EPSILON {
+        return (wind_dir_deg, 0.0, false);
+    }
     let angle = (wind_dir_deg - runway_heading_deg).to_radians();
     let cos = angle.cos();
     if cos.abs() > COS_EPS {
@@ -126,7 +147,8 @@ pub fn back_solve_wind_for_tailwind(
             let speed = (target / -cos).max(0.0);
             (wind_dir_deg, speed, false)
         } else {
-            (wind_dir_deg, 0.0, false)
+            let speed = (target / cos).max(0.0);
+            (wind_dir_opposite(wind_dir_deg), speed, false)
         }
     } else {
         (wind_dir_deg, target, true)
@@ -321,5 +343,103 @@ mod tests {
         assert!((after - 3.0).abs() < 0.15);
         apply_signed_along_runway_wind(&mut inputs, before);
         assert!((signed_along_runway_kt(&inputs).unwrap() - before).abs() < 0.15);
+    }
+
+    #[test]
+    fn apply_signed_tailwind_flips_dir_from_default_headwind() {
+        let mut inputs = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 200.0,
+            wind_speed_kt: 8.0,
+            ..Default::default()
+        };
+        apply_signed_along_runway_wind(&mut inputs, -3.0);
+        assert!(
+            (inputs.wind_dir_deg - 20.0).abs() < 0.5,
+            "dir {}",
+            inputs.wind_dir_deg
+        );
+        assert!(inputs.wind_speed_kt > 0.0);
+        let along = signed_along_runway_kt(&inputs).unwrap();
+        assert!((along - (-3.0)).abs() < 0.15, "along {along}");
+    }
+
+    #[test]
+    fn back_solve_zero_kt_keeps_direction_from_both_hw_and_tw() {
+        let rwy = 190.0;
+        let dir_hw = 200.0;
+        let (d_hw, s_hw, _) = back_solve_wind_for_headwind(dir_hw, rwy, 0.0);
+        assert_eq!(d_hw, dir_hw);
+        assert_eq!(s_hw, 0.0);
+        let (d_tw, s_tw, _) = back_solve_wind_for_tailwind(dir_hw, rwy, 0.0);
+        assert_eq!(d_tw, dir_hw);
+        assert_eq!(s_tw, 0.0);
+
+        let dir_tw = 20.0;
+        let (d2, s2, _) = back_solve_wind_for_tailwind(dir_tw, rwy, 0.0);
+        assert_eq!(d2, dir_tw);
+        assert_eq!(s2, 0.0);
+    }
+
+    #[test]
+    fn flip_side_reverses_crosswind_sign() {
+        let rwy = 190.0;
+        let dir = 200.0;
+        let speed = 8.0;
+        let before = wind_components(dir, speed, rwy);
+        assert!(before.crosswind_kt > 0.1);
+        let (dir2, speed2, _) = back_solve_wind_for_tailwind(dir, rwy, 3.0);
+        assert!((dir2 - 20.0).abs() < 0.5);
+        let after = wind_components(dir2, speed2, rwy);
+        assert!(after.crosswind_kt < -0.05);
+        assert!((after.along_runway_headwind_kt - (-3.0)).abs() < 0.15);
+    }
+
+    #[test]
+    fn apply_signed_zero_from_hw_and_tw_same_state() {
+        use crate::data::PerformanceData;
+        use crate::takeoff::compute_takeoff;
+        use crate::types::{ChartPhase, PaOverride};
+
+        let data = PerformanceData::production();
+        let pa = Some(PaOverride {
+            pa_ft: 1000.0,
+            phase: ChartPhase::Takeoff,
+        });
+        let mut from_hw = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 200.0,
+            wind_speed_kt: 6.0,
+            pa_override: pa,
+            oat_c: 21.0,
+            ..Default::default()
+        };
+        apply_signed_along_runway_wind(&mut from_hw, 0.0);
+        let mut from_tw = FlightInputs {
+            runway: "190".into(),
+            wind_dir_deg: 20.0,
+            wind_speed_kt: 4.0,
+            pa_override: pa,
+            oat_c: 21.0,
+            ..Default::default()
+        };
+        apply_signed_along_runway_wind(&mut from_tw, 0.0);
+        assert_eq!(from_hw.wind_speed_kt, 0.0);
+        assert_eq!(from_tw.wind_speed_kt, 0.0);
+        assert_eq!(signed_along_runway_kt(&from_hw).unwrap(), 0.0);
+        assert_eq!(signed_along_runway_kt(&from_tw).unwrap(), 0.0);
+        let t_hw = compute_takeoff(&data, &from_hw).unwrap();
+        let t_tw = compute_takeoff(&data, &from_tw).unwrap();
+        assert!((t_hw.ground_roll_ft - t_tw.ground_roll_ft).abs() < 1e-6);
+        assert!(
+            (t_hw.distance_over_obstacle_raw_ft - t_tw.distance_over_obstacle_raw_ft).abs() < 1e-6
+        );
+    }
+
+    #[test]
+    fn wind_dir_opposite_twice_from_north_is_360_not_000() {
+        let d = wind_dir_opposite(wind_dir_opposite(0.0));
+        assert!((d - 360.0).abs() < 0.01, "dir {d}");
+        assert!(d >= 1.0);
     }
 }

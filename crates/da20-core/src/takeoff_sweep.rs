@@ -164,7 +164,7 @@ fn cartesian_product(axes: &[TakeoffSweepAxis]) -> Result<Vec<[f64; 3]>, Takeoff
     Ok(combos)
 }
 
-/// Apply a signed along-runway wind (kt) to `inputs` without changing wind direction when possible.
+/// Apply a signed along-runway wind (kt) to `inputs` (wind direction may flip 180° when crossing zero).
 pub fn apply_sweep_headwind(inputs: &mut FlightInputs, signed_headwind_kt: f64) {
     use crate::wind::{
         back_solve_wind_for_headwind, back_solve_wind_for_tailwind, runway_heading_deg,
@@ -355,5 +355,44 @@ mod tests {
     fn sweep_invalid_range_direction() {
         let err = build_value_series(30.0, 10.0, 1.0).unwrap_err();
         assert_eq!(err, TakeoffSweepError::RangeDirection);
+    }
+
+    #[test]
+    fn sweep_signed_hw_crosses_zero_headwind_to_tailwind() {
+        let data = PerformanceData::production();
+        let mut base = base_inputs();
+        base.runway = "190".into();
+        base.wind_dir_deg = 200.0;
+        base.wind_speed_kt = 8.0;
+        let axes = vec![
+            TakeoffSweepAxis {
+                var: TakeoffSweepVar::SignedHeadwindKt,
+                start: -3.0,
+                end: 4.0,
+                step: 1.0,
+            },
+            TakeoffSweepAxis {
+                var: TakeoffSweepVar::OatC,
+                start: 21.0,
+                end: 21.0,
+                step: 1.0,
+            },
+        ];
+        let rows = compute_takeoff_sweep(&data, &base, &axes, 4.0).unwrap();
+        assert_eq!(rows.len(), 8);
+        for row in &rows {
+            assert!(row.result.is_some(), "hw={}", row.signed_headwind_kt);
+            let mut inputs = base.clone();
+            apply_sweep_headwind(&mut inputs, row.signed_headwind_kt);
+            let along = signed_along_runway_kt(&inputs).unwrap();
+            assert!(
+                (along - row.signed_headwind_kt).abs() < 0.15,
+                "requested {} along {}",
+                row.signed_headwind_kt,
+                along
+            );
+        }
+        assert_eq!(rows.first().unwrap().signed_headwind_kt, -3.0);
+        assert_eq!(rows.last().unwrap().signed_headwind_kt, 4.0);
     }
 }

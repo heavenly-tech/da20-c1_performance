@@ -352,7 +352,7 @@ const ES: Copy = Copy {
     wind_tail: "Viento de cola",
     wind_cross: "Viento cruzado",
     wind_strip_crosswind_note:
-        "Viento casi cruzado: en la franja de viento solo se ajusta la intensidad (kt), no la dirección.",
+        "Viento casi cruzado: solo se ajusta la intensidad (kt), no la dirección. Al pasar por cero frente/cola se invierte la dirección del viento.",
     results_runway_required: "Ingrese rumbo de pista válido (001–360) para ver resultados.",
     weight: "Peso (lb)",
     cruise_pa: "PA crucero (ft)",
@@ -559,7 +559,7 @@ const EN: Copy = Copy {
     wind_tail: "Tailwind",
     wind_cross: "Crosswind",
     wind_strip_crosswind_note:
-        "Nearly pure crosswind: strip wind drag adjusts speed (kt) only, not direction.",
+        "Nearly pure crosswind: drag adjusts speed (kt) only, not direction. Crossing zero headwind/tailwind reverses wind direction.",
     results_runway_required: "Enter a valid runway heading (001–360) to show results.",
     weight: "Weight (lb)",
     cruise_pa: "Cruise PA (ft)",

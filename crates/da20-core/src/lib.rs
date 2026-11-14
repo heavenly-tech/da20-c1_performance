@@ -20,6 +20,8 @@ pub mod poh_harness;
 pub mod pressure;
 pub mod provenance;
 pub mod rev29;
+#[cfg(test)]
+mod solver_regression;
 pub mod takeoff;
 pub mod takeoff_rounding;
 pub mod takeoff_sweep;
