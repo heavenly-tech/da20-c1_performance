@@ -7,8 +7,8 @@ use da20_core::climb_sweep::{
     CLIMB_SWEEP_DEFAULT_STEP_FT,
 };
 use da20_core::cruise_sweep::{
-    compute_cruise_altitude_sweep, CruiseSweepParams, CruiseSweepResult,
-    CRUISE_SWEEP_DEFAULT_STEP_FT,
+    compute_cruise_altitude_sweep, default_cruise_sweep_to_pa, CruiseSweepParams,
+    CruiseSweepResult, CRUISE_SWEEP_DEFAULT_STEP_FT,
 };
 use da20_core::types::{ChartPhase, CruiseSolveMode, FlightInputs};
 use da20_core::PerformanceData;
@@ -32,9 +32,13 @@ pub struct LapseDraft {
 impl Default for LapseDraft {
     fn default() -> Self {
         Self {
-            per_1000_ft: DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT * 1000.0,
+            per_1000_ft: round_lapse_display(DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT * 1000.0),
         }
     }
+}
+
+pub fn round_lapse_display(per_1000_ft: f64) -> f64 {
+    (per_1000_ft * 100.0).round() / 100.0
 }
 
 pub fn lapse_c_per_ft(d: LapseDraft) -> f64 {
@@ -46,6 +50,23 @@ pub fn format_min_sec(seconds: f64) -> String {
     let min = total / 60;
     let sec = total % 60;
     format!("{min}:{sec:02}")
+}
+
+fn signed_step_mag(step: f64) -> f64 {
+    let mag = step.abs();
+    if mag < 1e-9 {
+        return CLIMB_SWEEP_DEFAULT_STEP_FT;
+    }
+    mag
+}
+
+fn step_with_direction(from: f64, to: f64, step: f64) -> f64 {
+    let mag = signed_step_mag(step);
+    if to + 1e-9 < from {
+        -mag
+    } else {
+        mag
+    }
 }
 
 pub fn format_altitude_sweep_err(locale: Locale, err: AltitudeSweepRangeError) -> String {
@@ -81,23 +102,31 @@ fn AltitudePaSweepFields(
 ) -> impl IntoView {
     view! {
         <div class="sweep-range">
-            <NumField label=move || copy(locale.get()).takeoff_sweep_start.to_string()
+            <NumField label=move || copy(locale.get()).altitude_sweep_from_ft.to_string()
                 min=pa_min
                 max=pa_max
                 get=move || range.get().from
-                set=move |v| range.update(|d| d.from = v)/>
-            <NumField label=move || copy(locale.get()).takeoff_sweep_end.to_string()
+                set=move |v| range.update(|d| {
+                    d.from = v;
+                    d.step = step_with_direction(d.from, d.to, d.step);
+                })/>
+            <NumField label=move || copy(locale.get()).altitude_sweep_to_ft.to_string()
                 min=pa_min
                 max=pa_max
                 get=move || range.get().to
-                set=move |v| range.update(|d| d.to = v)/>
-            <NumField label=move || copy(locale.get()).takeoff_sweep_step.to_string()
-                get=move || range.get().step
-                set=move |v| range.update(|d| d.step = v)/>
+                set=move |v| range.update(|d| {
+                    d.to = v;
+                    d.step = step_with_direction(d.from, d.to, d.step);
+                })/>
+            <NumField label=move || copy(locale.get()).altitude_sweep_step_ft.to_string()
+                get=move || range.get().step.abs()
+                set=move |v| range.update(|d| {
+                    d.step = step_with_direction(d.from, d.to, v);
+                })/>
         </div>
         <NumField label=move || copy(locale.get()).altitude_sweep_lapse_label.to_string()
-            get=move || lapse.get().per_1000_ft
-            set=move |v| lapse.update(|d| d.per_1000_ft = v)/>
+            get=move || round_lapse_display(lapse.get().per_1000_ft)
+            set=move |v| lapse.update(|d| d.per_1000_ft = round_lapse_display(v))/>
         <p class="lab results-muted">{move || copy(locale.get()).altitude_sweep_lapse_note.to_string()}</p>
     }
 }
@@ -117,14 +146,19 @@ pub fn ClimbRocSweepPanel(
         let i = inputs.get_untracked();
         let from = effective_pressure_altitude_ft(&i, Some(ChartPhase::Climb));
         let to = i.cruise_pressure_alt_ft;
-        let step = if to >= from {
-            CLIMB_SWEEP_DEFAULT_STEP_FT
-        } else {
-            -CLIMB_SWEEP_DEFAULT_STEP_FT
-        };
+        let step = step_with_direction(from, to, CLIMB_SWEEP_DEFAULT_STEP_FT);
         range.set(PaSweepDraft { from, to, step });
     };
     init_defaults();
+
+    Effect::new(move |_| {
+        let i = inputs.get();
+        let from = effective_pressure_altitude_ft(&i, Some(ChartPhase::Climb));
+        range.update(|d| {
+            d.from = from;
+            d.step = step_with_direction(d.from, d.to, d.step);
+        });
+    });
 
     let run = move |_| {
         error.set(None);
@@ -234,12 +268,22 @@ pub fn CruiseAltitudeSweepPanel(
 
     let init_defaults = move || {
         let i = inputs.get_untracked();
+        let d = data.get_untracked();
         let from = i.cruise_pressure_alt_ft;
-        let to = (from + 4000.0).min(da20_core::chart_bounds::limits::TABLE3_PA_FT.1);
-        let step = CRUISE_SWEEP_DEFAULT_STEP_FT;
+        let to = default_cruise_sweep_to_pa(&d, from);
+        let step = step_with_direction(from, to, CRUISE_SWEEP_DEFAULT_STEP_FT);
         range.set(PaSweepDraft { from, to, step });
     };
     init_defaults();
+
+    Effect::new(move |_| {
+        let i = inputs.get();
+        let from = i.cruise_pressure_alt_ft;
+        range.update(|d| {
+            d.from = from;
+            d.step = step_with_direction(d.from, d.to, d.step);
+        });
+    });
 
     let run = move |_| {
         error.set(None);
@@ -269,6 +313,25 @@ pub fn CruiseAltitudeSweepPanel(
             {move || error.get().map(|e| view! { <p class="lab field-error">{e}</p> })}
             <CruiseSweepTable locale=locale result=result inputs=inputs/>
         </div>
+    }
+}
+
+fn cruise_row_marker(
+    idx: usize,
+    best_tas: Option<usize>,
+    best_nm: Option<usize>,
+    c: &'static crate::i18n::Copy,
+) -> String {
+    let tas = best_tas == Some(idx);
+    let nm = best_nm == Some(idx);
+    if tas && nm {
+        format!(" [{}]", c.cruise_sweep_best_both)
+    } else if tas {
+        format!(" [{}]", c.cruise_sweep_best_tas)
+    } else if nm {
+        format!(" [{}]", c.cruise_sweep_best_efficiency)
+    } else {
+        String::new()
     }
 }
 
@@ -307,19 +370,15 @@ fn CruiseSweepTable(
                         </thead>
                         <tbody>
                             {res.rows.iter().enumerate().map(|(idx, row)| {
-                                let marker = if Some(idx) == best_tas {
-                                    format!(" [{}]", c.cruise_sweep_best_tas)
-                                } else if Some(idx) == best_nm {
-                                    format!(" [{}]", c.cruise_sweep_best_efficiency)
-                                } else {
-                                    String::new()
-                                };
+                                let marker = cruise_row_marker(idx, best_tas, best_nm, c);
                                 if row.off_chart {
+                                    let da = row.density_altitude_ft.map(|v| format!("{:.0}", v.round()));
                                     return view! {
                                         <tr>
                                             <td>{format!("{:.0}", row.pa_ft.round())}</td>
                                             <td>{format!("{:.1}", row.oat_c)}</td>
                                             <td>{format!("{:.1}", row.isa_dev_c)}</td>
+                                            <td>{da.unwrap_or_else(|| oob.into())}</td>
                                             <td colspan="4">{oob}{marker}</td>
                                         </tr>
                                     }.into_any();

@@ -48,7 +48,9 @@ async function runSweep(page, tabLabel) {
 async function main() {
   await mkdir(outDir, { recursive: true });
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  const wideVp = { width: 1400, height: 1000 };
+  const narrowVp = { width: 390, height: 900 };
+  const page = await browser.newPage({ viewport: wideVp });
   await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 120_000 });
 
   const climbTab = { Es: "Ascenso", En: "Climb" };
@@ -62,6 +64,13 @@ async function main() {
         path: path.join(outDir, `climb_sweep_${loc.toLowerCase()}_${theme}.png`),
         fullPage: true,
       });
+      await page.setViewportSize(narrowVp);
+      await page.waitForTimeout(400);
+      await page.screenshot({
+        path: path.join(outDir, `climb_sweep_${loc.toLowerCase()}_${theme}_390px.png`),
+        fullPage: true,
+      });
+      await page.setViewportSize(wideVp);
       await runSweep(page, cruiseTab[loc]);
       await page.screenshot({
         path: path.join(outDir, `cruise_sensenich_sweep_${loc.toLowerCase()}_${theme}.png`),

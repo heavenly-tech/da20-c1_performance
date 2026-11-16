@@ -2,8 +2,8 @@
 
 use crate::altitude::isa_troposphere_density_altitude_ft;
 use crate::altitude_sweep::{
-    build_altitude_series, oat_at_pa_with_lapse, AltitudeSweepRangeError,
-    DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT,
+    build_altitude_series, oat_at_pa_with_lapse, sweep_pa_series_with_terminal,
+    AltitudeSweepRangeError, DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT,
 };
 use crate::cruise::{compute_cruise, disa_c, CruiseError};
 use crate::data::PerformanceData;
@@ -54,6 +54,23 @@ pub struct CruiseSweepResult {
 
 pub type CruiseSweepError = AltitudeSweepRangeError;
 
+/// Next tabulated Table 3 PA above `from_pa_ft`, or the highest node if none.
+pub fn default_cruise_sweep_to_pa(data: &PerformanceData, from_pa_ft: f64) -> f64 {
+    let rows = &data.inner().cruise_table.value.rows;
+    let mut pas: Vec<f64> = rows
+        .iter()
+        .filter(|r| !r.is_empty())
+        .map(|r| r[0])
+        .collect();
+    pas.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    pas.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+    pas.iter()
+        .copied()
+        .find(|&pa| pa > from_pa_ft + 0.5)
+        .or_else(|| pas.last().copied())
+        .unwrap_or(from_pa_ft)
+}
+
 fn row_off_chart(res: &Result<crate::types::CruiseResult, CruiseError>) -> bool {
     matches!(
         res,
@@ -79,10 +96,14 @@ pub fn compute_cruise_altitude_sweep(
     base: &FlightInputs,
     params: &CruiseSweepParams,
 ) -> Result<CruiseSweepResult, CruiseSweepError> {
-    let pa_series = build_altitude_series(
-        params.from_pa_ft,
+    let pa_series = sweep_pa_series_with_terminal(
+        build_altitude_series(
+            params.from_pa_ft,
+            params.to_pa_ft,
+            params.step_ft,
+            CRUISE_SWEEP_MAX_ROWS,
+        )?,
         params.to_pa_ft,
-        params.step_ft,
         CRUISE_SWEEP_MAX_ROWS,
     )?;
     let pa_start_ft = base.cruise_pressure_alt_ft;
@@ -102,7 +123,7 @@ pub fn compute_cruise_altitude_sweep(
                 pa_ft,
                 oat_c,
                 isa_dev_c,
-                density_altitude_ft: None,
+                density_altitude_ft: Some(isa_troposphere_density_altitude_ft(pa_ft, oat_c)),
                 rpm: None,
                 percent_bhp: None,
                 tas_kt: None,
@@ -116,6 +137,24 @@ pub fn compute_cruise_altitude_sweep(
         let Ok(cr) = res else {
             continue;
         };
+        if cr.mt_gph_out_of_chart {
+            let da = cr
+                .density_altitude_ft
+                .unwrap_or_else(|| isa_troposphere_density_altitude_ft(pa_ft, oat_c));
+            rows.push(CruiseSweepRow {
+                pa_ft,
+                oat_c,
+                isa_dev_c,
+                density_altitude_ft: Some(da),
+                rpm: None,
+                percent_bhp: None,
+                tas_kt: None,
+                fuel_flow_us_gal_h: None,
+                nm_per_gal: None,
+                off_chart: true,
+            });
+            continue;
+        }
         let da = match cr.density_altitude_ft {
             Some(d) => Some(d),
             None => Some(isa_troposphere_density_altitude_ft(pa_ft, oat_c)),

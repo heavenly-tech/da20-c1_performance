@@ -81,6 +81,31 @@ pub fn build_altitude_series(
     Ok(values)
 }
 
+/// Climb/cruise sweeps only (not takeoff): append `terminal_pa_ft` when the step grid
+/// does not land on it, respecting `max_rows` (replace last sample if at cap).
+pub fn sweep_pa_series_with_terminal(
+    mut series: Vec<f64>,
+    terminal_pa_ft: f64,
+    max_rows: usize,
+) -> Result<Vec<f64>, AltitudeSweepRangeError> {
+    const TOL_FT: f64 = 1e-3;
+    let needs_terminal = series
+        .last()
+        .map(|last| (last - terminal_pa_ft).abs() > TOL_FT)
+        .unwrap_or(true);
+    if needs_terminal {
+        if series.len() < max_rows {
+            series.push(terminal_pa_ft);
+        } else if let Some(last) = series.last_mut() {
+            *last = terminal_pa_ft;
+        }
+    }
+    if series.len() > max_rows {
+        return Err(AltitudeSweepRangeError::TooManyRows { max: max_rows });
+    }
+    Ok(series)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,5 +123,13 @@ mod tests {
     #[test]
     fn default_lapse_matches_isa_export() {
         assert!((DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT - ISA_LAPSE_RATE_C_PER_FT).abs() < 1e-12);
+    }
+
+    #[test]
+    fn terminal_appended_when_step_grid_misses_end() {
+        let grid = build_altitude_series(2130.0, 6500.0, 500.0, 60).unwrap();
+        assert!((grid.last().unwrap() - 6130.0).abs() < 1e-3);
+        let with_end = sweep_pa_series_with_terminal(grid, 6500.0, 60).unwrap();
+        assert!((with_end.last().unwrap() - 6500.0).abs() < 1e-3);
     }
 }

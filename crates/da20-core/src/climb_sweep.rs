@@ -3,8 +3,8 @@
 use crate::altitude::clear_pa_override;
 use crate::altitude::{effective_pressure_altitude_ft, isa_troposphere_density_altitude_ft};
 use crate::altitude_sweep::{
-    build_altitude_series, oat_at_pa_with_lapse, AltitudeSweepRangeError,
-    DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT,
+    build_altitude_series, oat_at_pa_with_lapse, sweep_pa_series_with_terminal,
+    AltitudeSweepRangeError, DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT,
 };
 use crate::climb::compute_climb;
 use crate::cruise::disa_c;
@@ -138,10 +138,14 @@ pub fn compute_climb_roc_sweep(
     base: &FlightInputs,
     params: &ClimbSweepParams,
 ) -> Result<ClimbSweepResult, ClimbSweepError> {
-    let pa_series = build_altitude_series(
-        params.from_pa_ft,
+    let pa_series = sweep_pa_series_with_terminal(
+        build_altitude_series(
+            params.from_pa_ft,
+            params.to_pa_ft,
+            params.step_ft,
+            CLIMB_SWEEP_MAX_ROWS,
+        )?,
         params.to_pa_ft,
-        params.step_ft,
         CLIMB_SWEEP_MAX_ROWS,
     )?;
     let pa_start_ft = effective_pressure_altitude_ft(base, Some(ChartPhase::Climb));
@@ -216,7 +220,7 @@ pub fn compute_climb_roc_sweep(
             pa_ft: *pa_ft,
             oat_c,
             isa_dev_c,
-            density_altitude_ft: if row_valid { Some(da) } else { None },
+            density_altitude_ft: Some(da),
             rate_of_climb_fpm,
             cumulative_time_s,
         });
@@ -232,7 +236,7 @@ pub fn compute_climb_roc_sweep(
                     pa_ft: *rest,
                     oat_c,
                     isa_dev_c: disa_c(oat_c, *rest),
-                    density_altitude_ft: None,
+                    density_altitude_ft: Some(isa_troposphere_density_altitude_ft(*rest, oat_c)),
                     rate_of_climb_fpm: None,
                     cumulative_time_s: None,
                 });
@@ -404,5 +408,42 @@ mod tests {
         )
         .unwrap();
         assert!(sweep.rows.iter().any(|r| r.rate_of_climb_fpm.is_none()));
+    }
+
+    #[test]
+    fn sweep_2130_to_6500_includes_terminal_and_total_time_matches_integral() {
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            pressure_altitude_input_ft: 2130.0,
+            oat_c: 20.0,
+            cruise_pressure_alt_ft: 6500.0,
+            ..Default::default()
+        };
+        let lapse = DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT;
+        let sweep = compute_climb_roc_sweep(
+            &data,
+            &inputs,
+            &ClimbSweepParams {
+                from_pa_ft: 2130.0,
+                to_pa_ft: 6500.0,
+                step_ft: 500.0,
+                lapse_rate_c_per_ft: lapse,
+            },
+        )
+        .unwrap();
+        assert!(
+            sweep.rows.iter().any(|r| (r.pa_ft - 6500.0).abs() < 1e-3),
+            "last pas: {:?}",
+            sweep.rows.iter().map(|r| r.pa_ft).collect::<Vec<_>>()
+        );
+        let ref_min =
+            integrate_segment_time_min(&data, &inputs, 2130.0, 20.0, lapse, 6500.0, 2130.0, 6500.0)
+                .expect("reference integral");
+        let ref_s = ref_min * 60.0;
+        let total = sweep.total_time_s.expect("total time");
+        assert!(
+            (total - ref_s).abs() < 1.0,
+            "sweep total {total}s vs reference {ref_s}s"
+        );
     }
 }
