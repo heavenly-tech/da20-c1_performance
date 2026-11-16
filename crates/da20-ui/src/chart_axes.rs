@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use crate::chart_guides::{guide_line_label, LabelAnchor};
-use crate::i18n::{copy, Copy, Locale};
+use crate::i18n::Copy;
 use da20_core::rev29::charts::map_to_svg;
 use da20_core::rev29::hand_plot::{
     x_headwind_kt, x_oat, x_obstacle_m, x_roc_fpm, x_tailwind_kt, x_weight_kg, y_dist, y_ea_ft,
@@ -21,81 +21,8 @@ const OBS_TICKS_M: [f64; 4] = [0.0, 5.0, 10.0, 15.0];
 const EA_TICKS_FT: [f64; 5] = [0.0, 3500.0, 7000.0, 10_500.0, 14_000.0];
 const ROC_TICKS_FPM: [f64; 5] = [0.0, 275.0, 550.0, 825.0, 1100.0];
 
-/// Match `strip_plot` Fig 5.4 SVG viewBox (layout tests).
-pub(crate) const STRIP_SVG_VIEWBOX_W: f64 = 1320.0;
-pub(crate) const STRIP_SVG_VIEWBOX_H: f64 = 560.0;
 /// Y-axis titles sit above the strip, left-aligned with the panel (inside viewBox).
 pub(crate) const STRIP_Y_AXIS_TITLE_Y: f64 = 22.0;
-pub(crate) const STRIP_DISTANCE_TICK_LABEL_X: f64 = TAKEOFF_OAT.x - 3.0;
-const AXIS_TITLE_EST_CHAR_PX: f64 = 6.2;
-const TICK_LABEL_EST_CHAR_PX: f64 = 5.0;
-const AXIS_TITLE_FONT_PX: f64 = 11.0;
-const TICK_LABEL_FONT_PX: f64 = 9.0;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct TextBox {
-    pub x0: f64,
-    pub y0: f64,
-    pub x1: f64,
-    pub y1: f64,
-}
-
-impl TextBox {
-    fn in_viewbox(self, w: f64, h: f64) -> bool {
-        self.x0 >= 0.0 && self.y0 >= 0.0 && self.x1 <= w && self.y1 <= h
-    }
-
-    fn overlaps(self, other: Self) -> bool {
-        self.x0 < other.x1 && other.x0 < self.x1 && self.y0 < other.y1 && other.y0 < self.y1
-    }
-}
-
-fn start_anchored_title_box(anchor_x: f64, y: f64, text: &str) -> TextBox {
-    let w = text.len() as f64 * AXIS_TITLE_EST_CHAR_PX;
-    TextBox {
-        x0: anchor_x,
-        y0: y - AXIS_TITLE_FONT_PX,
-        x1: anchor_x + w,
-        y1: y,
-    }
-}
-
-fn end_anchored_tick_box(anchor_x: f64, y: f64, text: &str) -> TextBox {
-    let w = text.len() as f64 * TICK_LABEL_EST_CHAR_PX;
-    let half = TICK_LABEL_FONT_PX * 0.5;
-    TextBox {
-        x0: anchor_x - w,
-        y0: y - half,
-        x1: anchor_x,
-        y1: y + half,
-    }
-}
-
-pub(crate) fn takeoff_distance_y_axis_title_box(locale: Locale) -> TextBox {
-    start_anchored_title_box(
-        TAKEOFF_OAT.x,
-        STRIP_Y_AXIS_TITLE_Y,
-        copy(locale).strip_takeoff_dist_y_axis,
-    )
-}
-
-pub(crate) fn climb_equivalent_altitude_y_axis_title_box(locale: Locale) -> TextBox {
-    start_anchored_title_box(
-        CLIMB_EQ.x,
-        STRIP_Y_AXIS_TITLE_Y,
-        copy(locale).strip_climb_roc_ea_y_axis,
-    )
-}
-
-pub(crate) fn takeoff_distance_tick_label_boxes() -> Vec<TextBox> {
-    (0..=8)
-        .map(|i| {
-            let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
-            let label = format!("{m:.0} m");
-            end_anchored_tick_box(STRIP_DISTANCE_TICK_LABEL_X, y_dist(m), &label)
-        })
-        .collect()
-}
 
 fn major_vline(x: f64, y0: f64, y1: f64) -> impl IntoView {
     view! {
@@ -345,6 +272,79 @@ pub fn climb_strip_panel_titles(c: &Copy, roc_title: &'static str) -> impl IntoV
 mod tests {
     use super::*;
     use crate::i18n::{copy, Locale};
+
+    const STRIP_SVG_VIEWBOX_W: f64 = 1320.0;
+    const STRIP_SVG_VIEWBOX_H: f64 = 560.0;
+    const STRIP_DISTANCE_TICK_LABEL_X: f64 = TAKEOFF_OAT.x - 3.0;
+    const AXIS_TITLE_EST_CHAR_PX: f64 = 6.2;
+    const TICK_LABEL_EST_CHAR_PX: f64 = 5.0;
+    const AXIS_TITLE_FONT_PX: f64 = 11.0;
+    const TICK_LABEL_FONT_PX: f64 = 9.0;
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    struct TextBox {
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+    }
+
+    impl TextBox {
+        fn in_viewbox(self, w: f64, h: f64) -> bool {
+            self.x0 >= 0.0 && self.y0 >= 0.0 && self.x1 <= w && self.y1 <= h
+        }
+
+        fn overlaps(self, other: Self) -> bool {
+            self.x0 < other.x1 && other.x0 < self.x1 && self.y0 < other.y1 && other.y0 < self.y1
+        }
+    }
+
+    fn start_anchored_title_box(anchor_x: f64, y: f64, text: &str) -> TextBox {
+        let w = text.len() as f64 * AXIS_TITLE_EST_CHAR_PX;
+        TextBox {
+            x0: anchor_x,
+            y0: y - AXIS_TITLE_FONT_PX,
+            x1: anchor_x + w,
+            y1: y,
+        }
+    }
+
+    fn end_anchored_tick_box(anchor_x: f64, y: f64, text: &str) -> TextBox {
+        let w = text.len() as f64 * TICK_LABEL_EST_CHAR_PX;
+        let half = TICK_LABEL_FONT_PX * 0.5;
+        TextBox {
+            x0: anchor_x - w,
+            y0: y - half,
+            x1: anchor_x,
+            y1: y + half,
+        }
+    }
+
+    fn takeoff_distance_y_axis_title_box(locale: Locale) -> TextBox {
+        start_anchored_title_box(
+            TAKEOFF_OAT.x,
+            STRIP_Y_AXIS_TITLE_Y,
+            copy(locale).strip_takeoff_dist_y_axis,
+        )
+    }
+
+    fn climb_equivalent_altitude_y_axis_title_box(locale: Locale) -> TextBox {
+        start_anchored_title_box(
+            CLIMB_EQ.x,
+            STRIP_Y_AXIS_TITLE_Y,
+            copy(locale).strip_climb_roc_ea_y_axis,
+        )
+    }
+
+    fn takeoff_distance_tick_label_boxes() -> Vec<TextBox> {
+        (0..=8)
+            .map(|i| {
+                let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
+                let label = format!("{m:.0} m");
+                end_anchored_tick_box(STRIP_DISTANCE_TICK_LABEL_X, y_dist(m), &label)
+            })
+            .collect()
+    }
 
     #[test]
     fn tw_subpanel_ticks_use_tailwind_x_mapper() {
