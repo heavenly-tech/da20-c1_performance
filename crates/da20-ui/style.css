@@ -588,9 +588,14 @@ button {
 
 .f {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   margin: 7px 0;
+}
+
+.f .wind-components {
+  flex-basis: 100%;
 }
 
 .f label {

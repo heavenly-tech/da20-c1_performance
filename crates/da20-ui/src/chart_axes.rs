@@ -133,7 +133,7 @@ fn interactive_tick_values(kind: crate::interactive_chart::ChartKind) -> (Vec<f6
 }
 
 /// Fig 5.4 strip — x-axis ticks on every panel (incl. TW sub-panel).
-pub fn takeoff_strip_x_axis_ticks(c: &Copy) -> impl IntoView {
+pub fn takeoff_strip_x_axis_ticks(_c: &Copy) -> impl IntoView {
     view! {
         {OAT_TICKS_C.into_iter().map(|t| {
             strip_tick(x_oat(t), STRIP_TICK_Y, format!("{t:.0} °C"))
@@ -159,16 +159,11 @@ pub fn takeoff_strip_x_axis_ticks(c: &Copy) -> impl IntoView {
                 LabelAnchor::End,
             )
         }).collect_view()}
-        {strip_tick(
-            TAKEOFF_OAT.x - 18.0,
-            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.axis_dist_m.to_string(),
-        )}
     }
 }
 
 /// Climb strip — OAT (°C) on fan panel; shared EA (ft) on Y; ROC (fpm) on ROC panel X.
-pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
+pub fn climb_strip_axis_ticks(_c: &Copy) -> impl IntoView {
     view! {
         {OAT_TICKS_C.into_iter().map(|t| {
             let x = CLIMB_EQ.x + (t + 20.0) / 75.0 * CLIMB_EQ.w;
@@ -193,16 +188,6 @@ pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
         {ROC_TICKS_FPM.into_iter().map(|roc| {
             strip_tick(x_roc_fpm(roc), STRIP_TICK_Y, format!("{roc:.0} fpm"))
         }).collect_view()}
-        {strip_tick(
-            CLIMB_EQ.x - 18.0,
-            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.strip_climb_roc_ea_y_axis.to_string(),
-        )}
-        {strip_tick(
-            CLIMB_ROC.x + CLIMB_ROC.w + 18.0,
-            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.strip_climb_roc_ea_y_axis.to_string(),
-        )}
     }
 }
 
@@ -242,6 +227,7 @@ pub fn interactive_chart_axis_ticks(
 
 pub fn takeoff_strip_panel_titles(c: &Copy) -> impl IntoView {
     view! {
+        <text x=TAKEOFF_OAT.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.strip_takeoff_dist_y_axis}</text>
         <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_oat_pa}</text>
         <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_weight_kg}</text>
         <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_wind}</text>
@@ -305,6 +291,17 @@ mod tests {
         assert_eq!(
             copy(Locale::En).strip_climb_roc_x_axis,
             "Rate of climb (fpm)"
+        );
+    }
+
+    #[test]
+    fn takeoff_y_distance_ticks_do_not_share_mid_strip_with_axis_title() {
+        let mid_y = (STRIP_BOTTOM + STRIP_TOP) / 2.0;
+        let m_575 = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * 4.0 / 8.0;
+        assert!((m_575 - 575.0).abs() < 0.01);
+        assert!(
+            (y_dist(m_575) - mid_y).abs() < 0.5,
+            "575 m tick sits at strip mid-Y where a redundant unit title used to overlap"
         );
     }
 

@@ -33,8 +33,8 @@ use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
     copy, format_climb_readout_interactive_pair, format_out_of_chart, format_strip_chart_roll_obs,
-    format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
-    format_takeoff_strip_pa_trace_label, Locale,
+    format_takeoff_conservative_estimate, format_takeoff_fig54_base_header,
+    format_takeoff_over_obstacle_result, format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::inputs::{
     shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
@@ -699,7 +699,7 @@ fn render_takeoff_strip(
         {takeoff_strip_x_axis_ticks(c)}
         <text x="70" y="28" fill="var(--chart-label)" font-size="11"
             opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
-            {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
+            {format_takeoff_fig54_base_header(locale, base)}
         </text>
         <text x="520" y="28" fill="var(--chart-label)" font-size="11"
             opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
@@ -1638,6 +1638,32 @@ mod strip_drag_tests {
         assert!((x_tailwind_kt(5.0) - TAKEOFF_TW.x).abs() < 1e-6);
         assert!((x_tailwind_kt(0.0) - (TAKEOFF_TW.x + TAKEOFF_TW.w)).abs() < 1e-6);
         assert!((x_headwind_kt(20.0) - (TAKEOFF_HW.x + TAKEOFF_HW.w)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn takeoff_fig54_base_header_off_chart_past_pa_isoline_oat() {
+        use crate::i18n::format_takeoff_fig54_base_header;
+        use da20_core::rev29::hand_plot::chart_read_takeoff_base_m;
+        use da20_core::types::{ChartPhase, FlightInputs, PaOverride};
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            oat_c: 22.0,
+            pa_override: Some(PaOverride {
+                pa_ft: 10_000.0,
+                phase: ChartPhase::Takeoff,
+            }),
+            ..Default::default()
+        };
+        let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Takeoff));
+        let base = chart_read_takeoff_base_m(data.inner(), pa, inputs.oat_c);
+        assert!(!base.is_finite(), "10000 ft row ends below 22 °C OAT");
+        let es = format_takeoff_fig54_base_header(Locale::Es, base);
+        let en = format_takeoff_fig54_base_header(Locale::En, base);
+        assert!(!es.contains("NaN"));
+        assert!(!en.contains("NaN"));
+        assert!(es.contains("Fuera de carta"));
+        assert!(en.contains("Off chart"));
     }
 
     #[test]
