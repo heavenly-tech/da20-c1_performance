@@ -24,7 +24,7 @@ use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
     afm_lookup_tag_label, copy, format_climb_readout_interactive_pair, format_out_of_chart,
-    format_takeoff_strip_pa_trace_label, off_chart_label, Locale,
+    format_takeoff_interactive_chart_readout, format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::inputs::{set_chart_pa, shared_airfield_set_pressure_altitude, AirfieldInputsMode};
 use crate::phases::Phase;
@@ -462,11 +462,7 @@ pub(crate) fn readout_pair(
             let inner = data.inner();
             let pa = effective_pressure_altitude_ft(inputs, Some(ChartPhase::Takeoff));
             let base_m = sample_takeoff_base_m(inner, pa, inputs.oat_c);
-            let chart = if base_m.is_finite() {
-                format!("{:.0} m base", base_m)
-            } else {
-                off_chart_label(locale).to_string()
-            };
+            let chart = format_takeoff_interactive_chart_readout(locale, base_m);
             let core = bundle
                 .takeoff
                 .map(|t| format!("{:.0} ft roll", t.ground_roll_ft))
@@ -817,24 +813,24 @@ mod tests {
     }
 
     #[test]
-    fn readout_takeoff_past_pa_isoline_shows_off_chart_not_nan() {
-        use da20_core::types::PaOverride;
+    fn takeoff_interactive_readout_finite_base_formats_distance() {
+        use crate::i18n::format_takeoff_interactive_chart_readout;
 
-        let data = PerformanceData::production();
-        let inputs = FlightInputs {
-            oat_c: 22.0,
-            pa_override: Some(PaOverride {
-                pa_ft: 10_000.0,
-                phase: ChartPhase::Takeoff,
-            }),
-            ..Default::default()
-        };
-        let (chart, _core) = readout_pair(Locale::En, ChartKind::Takeoff, &data, &inputs);
+        let chart = format_takeoff_interactive_chart_readout(Locale::En, 412.0);
+        assert_eq!(chart, "412 m base");
         assert!(!chart.contains("NaN"));
-        assert!(
-            chart.contains("chart") && !chart.contains("NaN"),
-            "expected off-chart or numeric readout: {chart}"
-        );
+    }
+
+    #[test]
+    fn takeoff_interactive_readout_non_finite_base_is_off_chart() {
+        use crate::i18n::format_takeoff_interactive_chart_readout;
+
+        let en = format_takeoff_interactive_chart_readout(Locale::En, f64::NAN);
+        let es = format_takeoff_interactive_chart_readout(Locale::Es, f64::NAN);
+        assert_eq!(en, "Off chart");
+        assert_eq!(es, "Fuera de carta");
+        assert!(!en.contains("NaN"));
+        assert!(!es.contains("NaN"));
     }
 
     #[test]

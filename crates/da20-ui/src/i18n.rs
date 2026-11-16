@@ -900,6 +900,9 @@ pub fn format_landing_ground_idle_breakdown(
 }
 
 pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> String {
+    if !ft.is_finite() || !m.is_finite() {
+        return off_chart_label(locale).to_string();
+    }
     let ft_i = ft.round() as i64;
     let m_i = m.round() as i64;
     let _ = locale;
@@ -907,6 +910,9 @@ pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> S
 }
 
 pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> String {
+    if !ft.is_finite() || !m.is_finite() {
+        return off_chart_label(locale).to_string();
+    }
     let ft_i = ft.round() as i64;
     let m_i = m.round() as i64;
     match locale {
@@ -932,6 +938,14 @@ pub fn format_takeoff_fig54_base_header(locale: Locale, base_m: f64) -> String {
         format!("{} {:.0} m", c.strip_fig54_base, base_m.round())
     } else {
         format!("{} {}", c.strip_fig54_base, off_chart_label(locale))
+    }
+}
+
+pub fn format_takeoff_interactive_chart_readout(locale: Locale, base_m: f64) -> String {
+    if base_m.is_finite() {
+        format!("{:.0} m base", base_m)
+    } else {
+        off_chart_label(locale).to_string()
     }
 }
 
