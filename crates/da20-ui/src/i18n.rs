@@ -500,8 +500,8 @@ const ES: Copy = Copy {
     takeoff_sweep_title: "Barrido de despegue",
     takeoff_sweep_run: "Calcular tabla",
     takeoff_sweep_var_oat: "OAT (°C)",
-    takeoff_sweep_var_hw: "Viento en pista (kt)",
-    takeoff_sweep_var_obs: "Obstáculo",
+    takeoff_sweep_var_hw: "Viento de frente (kt)",
+    takeoff_sweep_var_obs: "Obstáculo (m)",
     takeoff_sweep_start: "Desde",
     takeoff_sweep_end: "Hasta",
     takeoff_sweep_step: "Paso",
@@ -707,8 +707,8 @@ const EN: Copy = Copy {
     takeoff_sweep_title: "Takeoff sweep",
     takeoff_sweep_run: "Build table",
     takeoff_sweep_var_oat: "OAT (°C)",
-    takeoff_sweep_var_hw: "Along-runway wind (kt)",
-    takeoff_sweep_var_obs: "Obstacle",
+    takeoff_sweep_var_hw: "Headwind (kt)",
+    takeoff_sweep_var_obs: "Obstacle (m)",
     takeoff_sweep_start: "From",
     takeoff_sweep_end: "To",
     takeoff_sweep_step: "Step",
@@ -1354,6 +1354,18 @@ mod i18n_display_tests {
         let en = copy(Locale::En);
         assert_eq!(es.pressure_altitude_ft, "Altitud de presión (ft)");
         assert_eq!(en.pressure_altitude_ft, "Pressure altitude (ft)");
+    }
+
+    #[test]
+    fn takeoff_sweep_axis_labels_include_units_and_headwind_wording() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.takeoff_sweep_var_hw, "Viento de frente (kt)");
+        assert_eq!(es.takeoff_sweep_var_obs, "Obstáculo (m)");
+        assert_eq!(en.takeoff_sweep_var_hw, "Headwind (kt)");
+        assert_eq!(en.takeoff_sweep_var_obs, "Obstacle (m)");
+        assert_ne!(es.takeoff_sweep_var_hw, es.takeoff_signed_headwind);
+        assert_ne!(en.takeoff_sweep_var_hw, en.takeoff_signed_headwind);
     }
 
     #[test]
