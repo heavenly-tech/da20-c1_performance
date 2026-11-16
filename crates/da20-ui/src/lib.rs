@@ -1,5 +1,6 @@
 use leptos::prelude::*;
 
+mod altitude_sweep_panel;
 mod app;
 mod chart_axes;
 mod chart_guides;

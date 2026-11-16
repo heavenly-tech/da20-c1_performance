@@ -6,7 +6,8 @@
 use crate::pressure::ISA_SEA_LEVEL_PRESSURE_HPA;
 use crate::types::{ChartPhase, FlightInputs, PaOverride};
 
-const ISA_LAPSE_RATE_C_PER_FT: f64 = 0.0019812;
+/// ISA troposphere lapse (°C per ft); 1.9812 °C per 1000 ft.
+pub const ISA_LAPSE_RATE_C_PER_FT: f64 = 0.0019812;
 
 /// Physical pressure altitude (ft) from field elevation and QNH (hPa) — retained for tests only.
 pub fn pressure_altitude_ft_from_qnh(field_elevation_ft: f64, qnh_hpa: f64) -> f64 {
