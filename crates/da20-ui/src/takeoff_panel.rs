@@ -11,7 +11,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::i18n::{afm_lookup_tag_label, copy, format_takeoff_sweep_var_obs, Locale};
-use crate::inputs::{input_value, NumField};
+use crate::inputs::{format_num_display, input_value, NumField};
 use crate::prefs::{
     persist_takeoff_tab_from_inputs, FlightPrefs, ObstacleUnit, TakeoffPrefs, WeightUnit,
 };
@@ -81,6 +81,27 @@ pub fn obstacle_sweep_commit_display(display: f64, unit: ObstacleUnit) -> f64 {
         ObstacleUnit::Feet => ft_to_m(display),
     };
     m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M)
+}
+
+/// Max shown in obstacle labels/errors (matches `TakeoffObstacleUnitField` 0–15 m / 0–50 ft).
+pub fn obstacle_unit_range_display_max(unit: ObstacleUnit) -> f64 {
+    match unit {
+        ObstacleUnit::Meters => defaults::OBSTACLE_HEIGHT_MAX_M,
+        ObstacleUnit::Feet => 50.0,
+    }
+}
+
+/// Avoid re-committing a 1-decimal display value on blur (ft→m drift).
+pub fn obstacle_sweep_commit_if_changed(current_m: f64, display: f64, unit: ObstacleUnit) -> f64 {
+    let current_display = obstacle_sweep_display_value(current_m, unit);
+    let formatted = format_num_display(current_display, Some(1));
+    let Ok(formatted_val) = formatted.parse::<f64>() else {
+        return obstacle_sweep_commit_display(display, unit);
+    };
+    if (display - formatted_val).abs() < 1e-9 {
+        return current_m;
+    }
+    obstacle_sweep_commit_display(display, unit)
 }
 
 pub fn format_sweep_obstacle_cell(value_m: f64, unit: ObstacleUnit) -> String {
@@ -523,7 +544,8 @@ fn ObstacleSweepVarRow(
                             }
                             set=move |display| {
                                 draft.update(|d| {
-                                    d.start = obstacle_sweep_commit_display(
+                                    d.start = obstacle_sweep_commit_if_changed(
+                                        d.start,
                                         display,
                                         prefs.get_untracked().obstacle,
                                     );
@@ -538,7 +560,8 @@ fn ObstacleSweepVarRow(
                             }
                             set=move |display| {
                                 draft.update(|d| {
-                                    d.end = obstacle_sweep_commit_display(
+                                    d.end = obstacle_sweep_commit_if_changed(
+                                        d.end,
                                         display,
                                         prefs.get_untracked().obstacle,
                                     );
@@ -551,7 +574,8 @@ fn ObstacleSweepVarRow(
                             }
                             set=move |display| {
                                 draft.update(|d| {
-                                    d.step = obstacle_sweep_commit_display(
+                                    d.step = obstacle_sweep_commit_if_changed(
+                                        d.step,
                                         display,
                                         prefs.get_untracked().obstacle,
                                     );
@@ -684,8 +708,7 @@ fn TakeoffSweepTable(
 }
 
 fn sweep_err_msg(locale: Locale, err: TakeoffSweepError, obstacle_unit: ObstacleUnit) -> String {
-    let obs_max_display =
-        obstacle_sweep_display_value(defaults::OBSTACLE_HEIGHT_MAX_M, obstacle_unit);
+    let obs_max_display = obstacle_unit_range_display_max(obstacle_unit);
     let obs_unit_suffix = match obstacle_unit {
         ObstacleUnit::Meters => "m",
         ObstacleUnit::Feet => "ft",
@@ -880,6 +903,42 @@ mod tests {
         ));
         let restored = takeoff_weight_field_display(false, "", other, WeightUnit::Lb);
         assert_eq!(restored, back);
+    }
+
+    #[test]
+    fn obstacle_sweep_blur_without_edit_keeps_exact_metres() {
+        let m = 5.0;
+        let display_ft =
+            format_num_display(obstacle_sweep_display_value(m, ObstacleUnit::Feet), Some(1))
+                .parse::<f64>()
+                .unwrap();
+        let after = obstacle_sweep_commit_if_changed(m, display_ft, ObstacleUnit::Feet);
+        assert_eq!(after, m);
+        let naive = obstacle_sweep_commit_display(display_ft, ObstacleUnit::Feet);
+        assert!(
+            (naive - m).abs() > 1e-6,
+            "naive commit drifts: {naive} vs {m}"
+        );
+    }
+
+    #[test]
+    fn obstacle_sweep_oob_error_max_matches_main_field_labels() {
+        let es_ft = sweep_err_msg(
+            Locale::Es,
+            TakeoffSweepError::ObstacleOutOfRange {
+                max: defaults::OBSTACLE_HEIGHT_MAX_M,
+            },
+            ObstacleUnit::Feet,
+        );
+        assert!(es_ft.contains("0–50 ft"), "{es_ft}");
+        let en_m = sweep_err_msg(
+            Locale::En,
+            TakeoffSweepError::ObstacleOutOfRange {
+                max: defaults::OBSTACLE_HEIGHT_MAX_M,
+            },
+            ObstacleUnit::Meters,
+        );
+        assert!(en_m.contains("0–15 m"), "{en_m}");
     }
 
     #[test]
