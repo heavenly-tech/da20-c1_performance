@@ -33,8 +33,8 @@ use crate::chart_guides::{guide_line_label, LabelAnchor};
 use crate::chart_inputs::round_after_chart_drag;
 use crate::i18n::{
     copy, format_climb_readout_interactive_pair, format_out_of_chart, format_strip_chart_roll_obs,
-    format_takeoff_conservative_estimate, format_takeoff_over_obstacle_result,
-    format_takeoff_strip_pa_trace_label, Locale,
+    format_takeoff_conservative_estimate, format_takeoff_fig54_base_header,
+    format_takeoff_over_obstacle_result, format_takeoff_strip_pa_trace_label, Locale,
 };
 use crate::inputs::{
     shared_airfield_set_oat_c, shared_airfield_set_pressure_altitude,
@@ -47,6 +47,23 @@ use crate::storage::compute_all;
 use crate::storage::ReadingsStore;
 
 const STRIP_INPUT_CURSOR_DASH: &str = "5 4";
+const STRIP_PANEL_JOIN_MARKER_EPS: f64 = 0.6;
+
+/// Drop turn-marker dots that sit on a panel join (e.g. EA horizontal at fan → ROC edge).
+pub(crate) fn strip_path_markers_visible(
+    kind: StripKind,
+    markers: &[(f64, f64)],
+) -> Vec<(f64, f64)> {
+    let join_x = match kind {
+        StripKind::Takeoff => TAKEOFF_OAT.x + TAKEOFF_OAT.w,
+        StripKind::Climb => CLIMB_EQ.x + CLIMB_EQ.w,
+    };
+    markers
+        .iter()
+        .copied()
+        .filter(|(x, _)| (*x - join_x).abs() >= STRIP_PANEL_JOIN_MARKER_EPS)
+        .collect()
+}
 const OBSTACLE_GUIDE_LABEL_MIN_DY: f64 = 12.0;
 
 /// Skip obstacle-panel `{NNN} m` labels that would stack on the same strip y.
@@ -671,9 +688,12 @@ fn render_takeoff_strip(
             phase_key,
             overlay_ids,
         )}
-        {path.markers.iter().map(|(x,y)| view! {
-            <circle cx=*x cy=*y r="6" class="chart-marker"/>
-        }).collect_view()}
+        {strip_path_markers_visible(StripKind::Takeoff, &path.markers)
+            .iter()
+            .map(|(x, y)| view! {
+                <circle cx=*x cy=*y r="6" class="chart-marker"/>
+            })
+            .collect_view()}
         {guide_line_label(
             x_weight_kg(defaults::TAKEOFF_CHART_WEIGHT_KG),
             STRIP_TOP + 14.0,
@@ -699,7 +719,7 @@ fn render_takeoff_strip(
         {takeoff_strip_x_axis_ticks(c)}
         <text x="70" y="28" fill="var(--chart-label)" font-size="11"
             opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
-            {c.strip_fig54_base}" "{format!("{base:.0}")}" m"
+            {format_takeoff_fig54_base_header(locale, base)}
         </text>
         <text x="520" y="28" fill="var(--chart-label)" font-size="11"
             opacity=move || if rwy_valid { 1.0 } else { 0.45 }>
@@ -797,9 +817,14 @@ fn render_climb_strip(
                 <polyline points=pts class="chart-stroke-user-path"/>
             </>
         })}
-        {path.map(|p| p.markers.iter().map(|(x,y)| view! {
-            <circle cx=*x cy=*y r="6" class="chart-marker"/>
-        }).collect_view())}
+        {path.map(|p| {
+            strip_path_markers_visible(StripKind::Climb, &p.markers)
+                .iter()
+                .map(|(x, y)| view! {
+                    <circle cx=*x cy=*y r="6" class="chart-marker"/>
+                })
+                .collect_view()
+        })}
         {climb_strip_axis_ticks(c)}
     }
 }
@@ -1638,6 +1663,89 @@ mod strip_drag_tests {
         assert!((x_tailwind_kt(5.0) - TAKEOFF_TW.x).abs() < 1e-6);
         assert!((x_tailwind_kt(0.0) - (TAKEOFF_TW.x + TAKEOFF_TW.w)).abs() < 1e-6);
         assert!((x_headwind_kt(20.0) - (TAKEOFF_HW.x + TAKEOFF_HW.w)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn climb_strip_markers_omit_fan_panel_right_join() {
+        use super::strip_path_markers_visible;
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            oat_c: 20.0,
+            pressure_altitude_input_ft: 2130.0,
+            ..Default::default()
+        };
+        let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Climb));
+        let path = climb_hand_path(data.inner(), &inputs, pa).expect("climb path");
+        let join_x = CLIMB_EQ.x + CLIMB_EQ.w;
+        assert!(
+            path.markers
+                .iter()
+                .any(|(x, _)| (*x - join_x).abs() < STRIP_PANEL_JOIN_MARKER_EPS),
+            "hand path still includes panel-join vertex for the polyline"
+        );
+        let visible = strip_path_markers_visible(StripKind::Climb, &path.markers);
+        assert!(
+            visible
+                .iter()
+                .all(|(x, _)| (*x - join_x).abs() >= STRIP_PANEL_JOIN_MARKER_EPS),
+            "display markers must not include fan→ROC join"
+        );
+        let oat_x = x_oat(20.0);
+        assert!(
+            visible.iter().any(|(x, _)| (*x - oat_x).abs() < 0.5),
+            "OAT-axis marker must remain"
+        );
+        assert!(
+            visible.iter().any(|(x, _)| *x > CLIMB_ROC.x),
+            "ROC-panel marker must remain"
+        );
+    }
+
+    #[test]
+    fn takeoff_strip_markers_omit_oat_panel_right_join_if_present() {
+        use super::strip_path_markers_visible;
+
+        let data = PerformanceData::production();
+        let pa = 2500.0;
+        let inputs = FlightInputs {
+            oat_c: 20.0,
+            weight_lb: defaults::WEIGHT_LB,
+            ..Default::default()
+        };
+        let path = takeoff_hand_path(data.inner(), &inputs, pa);
+        let join_x = TAKEOFF_OAT.x + TAKEOFF_OAT.w;
+        let visible = strip_path_markers_visible(StripKind::Takeoff, &path.markers);
+        assert!(visible
+            .iter()
+            .all(|(x, _)| (*x - join_x).abs() >= STRIP_PANEL_JOIN_MARKER_EPS));
+        assert!(!visible.is_empty());
+    }
+
+    #[test]
+    fn takeoff_fig54_base_header_off_chart_past_pa_isoline_oat() {
+        use crate::i18n::format_takeoff_fig54_base_header;
+        use da20_core::rev29::hand_plot::chart_read_takeoff_base_m;
+        use da20_core::types::{ChartPhase, FlightInputs, PaOverride};
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            oat_c: 22.0,
+            pa_override: Some(PaOverride {
+                pa_ft: 10_000.0,
+                phase: ChartPhase::Takeoff,
+            }),
+            ..Default::default()
+        };
+        let pa = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Takeoff));
+        let base = chart_read_takeoff_base_m(data.inner(), pa, inputs.oat_c);
+        assert!(!base.is_finite(), "10000 ft row ends below 22 °C OAT");
+        let es = format_takeoff_fig54_base_header(Locale::Es, base);
+        let en = format_takeoff_fig54_base_header(Locale::En, base);
+        assert!(!es.contains("NaN"));
+        assert!(!en.contains("NaN"));
+        assert!(es.contains("Fuera de carta"));
+        assert!(en.contains("Off chart"));
     }
 
     #[test]

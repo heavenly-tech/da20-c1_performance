@@ -21,6 +21,9 @@ const OBS_TICKS_M: [f64; 4] = [0.0, 5.0, 10.0, 15.0];
 const EA_TICKS_FT: [f64; 5] = [0.0, 3500.0, 7000.0, 10_500.0, 14_000.0];
 const ROC_TICKS_FPM: [f64; 5] = [0.0, 275.0, 550.0, 825.0, 1100.0];
 
+/// Y-axis titles sit above the strip, left-aligned with the panel (inside viewBox).
+pub(crate) const STRIP_Y_AXIS_TITLE_Y: f64 = 22.0;
+
 fn major_vline(x: f64, y0: f64, y1: f64) -> impl IntoView {
     view! {
         <line x1=x y1=y0 x2=x y2=y1 class="chart-stroke-grid-major"/>
@@ -133,7 +136,7 @@ fn interactive_tick_values(kind: crate::interactive_chart::ChartKind) -> (Vec<f6
 }
 
 /// Fig 5.4 strip — x-axis ticks on every panel (incl. TW sub-panel).
-pub fn takeoff_strip_x_axis_ticks(c: &Copy) -> impl IntoView {
+pub fn takeoff_strip_x_axis_ticks(_c: &Copy) -> impl IntoView {
     view! {
         {OAT_TICKS_C.into_iter().map(|t| {
             strip_tick(x_oat(t), STRIP_TICK_Y, format!("{t:.0} °C"))
@@ -159,16 +162,11 @@ pub fn takeoff_strip_x_axis_ticks(c: &Copy) -> impl IntoView {
                 LabelAnchor::End,
             )
         }).collect_view()}
-        {strip_tick(
-            TAKEOFF_OAT.x - 18.0,
-            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.axis_dist_m.to_string(),
-        )}
     }
 }
 
 /// Climb strip — OAT (°C) on fan panel; shared EA (ft) on Y; ROC (fpm) on ROC panel X.
-pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
+pub fn climb_strip_axis_ticks(_c: &Copy) -> impl IntoView {
     view! {
         {OAT_TICKS_C.into_iter().map(|t| {
             let x = CLIMB_EQ.x + (t + 20.0) / 75.0 * CLIMB_EQ.w;
@@ -193,16 +191,6 @@ pub fn climb_strip_axis_ticks(c: &Copy) -> impl IntoView {
         {ROC_TICKS_FPM.into_iter().map(|roc| {
             strip_tick(x_roc_fpm(roc), STRIP_TICK_Y, format!("{roc:.0} fpm"))
         }).collect_view()}
-        {strip_tick(
-            CLIMB_EQ.x - 18.0,
-            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.strip_climb_roc_ea_y_axis.to_string(),
-        )}
-        {strip_tick(
-            CLIMB_ROC.x + CLIMB_ROC.w + 18.0,
-            (STRIP_BOTTOM + STRIP_TOP) / 2.0,
-            c.strip_climb_roc_ea_y_axis.to_string(),
-        )}
     }
 }
 
@@ -242,6 +230,14 @@ pub fn interactive_chart_axis_ticks(
 
 pub fn takeoff_strip_panel_titles(c: &Copy) -> impl IntoView {
     view! {
+        <text
+            x=TAKEOFF_OAT.x
+            y=STRIP_Y_AXIS_TITLE_Y
+            class="chart-axis-title"
+            text-anchor="start"
+        >
+            {c.strip_takeoff_dist_y_axis}
+        </text>
         <text x=TAKEOFF_OAT.x+TAKEOFF_OAT.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_oat_pa}</text>
         <text x=TAKEOFF_WEIGHT.x+TAKEOFF_WEIGHT.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_weight_kg}</text>
         <text x=TAKEOFF_WIND.x+TAKEOFF_WIND.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_panel_wind}</text>
@@ -253,8 +249,22 @@ pub fn climb_strip_panel_titles(c: &Copy, roc_title: &'static str) -> impl IntoV
     view! {
         <text x=CLIMB_EQ.x+CLIMB_EQ.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.axis_oat_c}</text>
         <text x=CLIMB_ROC.x+CLIMB_ROC.w/2.0 y="538" class="chart-axis-title" text-anchor="middle">{c.strip_climb_roc_x_axis}</text>
-        <text x=CLIMB_EQ.x - 8.0 y="36" class="chart-axis-title" text-anchor="end">{c.strip_climb_roc_ea_y_axis}</text>
-        <text x=CLIMB_ROC.x + 8.0 y="36" class="chart-axis-title" text-anchor="start">{roc_title}</text>
+        <text
+            x=CLIMB_EQ.x
+            y=STRIP_Y_AXIS_TITLE_Y
+            class="chart-axis-title"
+            text-anchor="start"
+        >
+            {c.strip_climb_roc_ea_y_axis}
+        </text>
+        <text
+            x=CLIMB_ROC.x
+            y=STRIP_Y_AXIS_TITLE_Y
+            class="chart-axis-title"
+            text-anchor="start"
+        >
+            {roc_title}
+        </text>
     }
 }
 
@@ -262,6 +272,79 @@ pub fn climb_strip_panel_titles(c: &Copy, roc_title: &'static str) -> impl IntoV
 mod tests {
     use super::*;
     use crate::i18n::{copy, Locale};
+
+    const STRIP_SVG_VIEWBOX_W: f64 = 1320.0;
+    const STRIP_SVG_VIEWBOX_H: f64 = 560.0;
+    const STRIP_DISTANCE_TICK_LABEL_X: f64 = TAKEOFF_OAT.x - 3.0;
+    const AXIS_TITLE_EST_CHAR_PX: f64 = 6.2;
+    const TICK_LABEL_EST_CHAR_PX: f64 = 5.0;
+    const AXIS_TITLE_FONT_PX: f64 = 11.0;
+    const TICK_LABEL_FONT_PX: f64 = 9.0;
+
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    struct TextBox {
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+    }
+
+    impl TextBox {
+        fn in_viewbox(self, w: f64, h: f64) -> bool {
+            self.x0 >= 0.0 && self.y0 >= 0.0 && self.x1 <= w && self.y1 <= h
+        }
+
+        fn overlaps(self, other: Self) -> bool {
+            self.x0 < other.x1 && other.x0 < self.x1 && self.y0 < other.y1 && other.y0 < self.y1
+        }
+    }
+
+    fn start_anchored_title_box(anchor_x: f64, y: f64, text: &str) -> TextBox {
+        let w = text.len() as f64 * AXIS_TITLE_EST_CHAR_PX;
+        TextBox {
+            x0: anchor_x,
+            y0: y - AXIS_TITLE_FONT_PX,
+            x1: anchor_x + w,
+            y1: y,
+        }
+    }
+
+    fn end_anchored_tick_box(anchor_x: f64, y: f64, text: &str) -> TextBox {
+        let w = text.len() as f64 * TICK_LABEL_EST_CHAR_PX;
+        let half = TICK_LABEL_FONT_PX * 0.5;
+        TextBox {
+            x0: anchor_x - w,
+            y0: y - half,
+            x1: anchor_x,
+            y1: y + half,
+        }
+    }
+
+    fn takeoff_distance_y_axis_title_box(locale: Locale) -> TextBox {
+        start_anchored_title_box(
+            TAKEOFF_OAT.x,
+            STRIP_Y_AXIS_TITLE_Y,
+            copy(locale).strip_takeoff_dist_y_axis,
+        )
+    }
+
+    fn climb_equivalent_altitude_y_axis_title_box(locale: Locale) -> TextBox {
+        start_anchored_title_box(
+            CLIMB_EQ.x,
+            STRIP_Y_AXIS_TITLE_Y,
+            copy(locale).strip_climb_roc_ea_y_axis,
+        )
+    }
+
+    fn takeoff_distance_tick_label_boxes() -> Vec<TextBox> {
+        (0..=8)
+            .map(|i| {
+                let m = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * i as f64 / 8.0;
+                let label = format!("{m:.0} m");
+                end_anchored_tick_box(STRIP_DISTANCE_TICK_LABEL_X, y_dist(m), &label)
+            })
+            .collect()
+    }
 
     #[test]
     fn tw_subpanel_ticks_use_tailwind_x_mapper() {
@@ -306,6 +389,52 @@ mod tests {
             copy(Locale::En).strip_climb_roc_x_axis,
             "Rate of climb (fpm)"
         );
+    }
+
+    #[test]
+    fn takeoff_y_distance_ticks_do_not_share_mid_strip_with_axis_title() {
+        let mid_y = (STRIP_BOTTOM + STRIP_TOP) / 2.0;
+        let m_575 = DIST_MIN_M + (DIST_MAX_M - DIST_MIN_M) * 4.0 / 8.0;
+        assert!((m_575 - 575.0).abs() < 0.01);
+        assert!(
+            (y_dist(m_575) - mid_y).abs() < 0.5,
+            "575 m tick sits at strip mid-Y where a redundant unit title used to overlap"
+        );
+    }
+
+    #[test]
+    fn takeoff_distance_y_axis_title_inside_viewbox_es_en() {
+        for locale in [Locale::Es, Locale::En] {
+            let title = takeoff_distance_y_axis_title_box(locale);
+            assert!(
+                title.in_viewbox(STRIP_SVG_VIEWBOX_W, STRIP_SVG_VIEWBOX_H),
+                "{locale:?} title box {title:?} must fit viewBox"
+            );
+        }
+    }
+
+    #[test]
+    fn takeoff_distance_y_axis_title_clear_of_tick_labels() {
+        for locale in [Locale::Es, Locale::En] {
+            let title = takeoff_distance_y_axis_title_box(locale);
+            for (i, tick) in takeoff_distance_tick_label_boxes().into_iter().enumerate() {
+                assert!(
+                    !title.overlaps(tick),
+                    "{locale:?} title must not overlap distance tick {i}: title {title:?} tick {tick:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn climb_ea_y_axis_title_inside_viewbox_es_en() {
+        for locale in [Locale::Es, Locale::En] {
+            let title = climb_equivalent_altitude_y_axis_title_box(locale);
+            assert!(
+                title.in_viewbox(STRIP_SVG_VIEWBOX_W, STRIP_SVG_VIEWBOX_H),
+                "{locale:?} climb EA title {title:?} must fit viewBox"
+            );
+        }
     }
 
     #[test]

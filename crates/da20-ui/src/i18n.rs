@@ -218,6 +218,8 @@ pub struct Copy {
     pub strip_climb_roc_x_axis: &'static str,
     /// ROC panel right edge: shared equivalent altitude axis (same scale as fan chart).
     pub strip_climb_roc_ea_y_axis: &'static str,
+    /// Fig 5.4 strip left Y-axis title (distance); ticks already include "m".
+    pub strip_takeoff_dist_y_axis: &'static str,
     pub strip_fig52_ea: &'static str,
     pub strip_fig55_roc: &'static str,
     pub strip_fig56_roc: &'static str,
@@ -476,6 +478,7 @@ const ES: Copy = Copy {
     strip_panel_obstacle: "Obstáculo",
     strip_climb_roc_x_axis: "Razón de ascenso (fpm)",
     strip_climb_roc_ea_y_axis: "Altitud equivalente (ft)",
+    strip_takeoff_dist_y_axis: "Distancia (m)",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
     strip_fig56_roc: "Fig 5.6 ROC",
@@ -497,8 +500,8 @@ const ES: Copy = Copy {
     takeoff_sweep_title: "Barrido de despegue",
     takeoff_sweep_run: "Calcular tabla",
     takeoff_sweep_var_oat: "OAT (°C)",
-    takeoff_sweep_var_hw: "Viento en pista (kt)",
-    takeoff_sweep_var_obs: "Obstáculo",
+    takeoff_sweep_var_hw: "Viento de frente (kt)",
+    takeoff_sweep_var_obs: "Obstáculo (m)",
     takeoff_sweep_start: "Desde",
     takeoff_sweep_end: "Hasta",
     takeoff_sweep_step: "Paso",
@@ -682,6 +685,7 @@ const EN: Copy = Copy {
     strip_panel_obstacle: "Obstacle",
     strip_climb_roc_x_axis: "Rate of climb (fpm)",
     strip_climb_roc_ea_y_axis: "Equivalent altitude (ft)",
+    strip_takeoff_dist_y_axis: "Distance (m)",
     strip_fig52_ea: "Fig 5.2 EA",
     strip_fig55_roc: "Fig 5.5 ROC",
     strip_fig56_roc: "Fig 5.6 ROC",
@@ -703,8 +707,8 @@ const EN: Copy = Copy {
     takeoff_sweep_title: "Takeoff sweep",
     takeoff_sweep_run: "Build table",
     takeoff_sweep_var_oat: "OAT (°C)",
-    takeoff_sweep_var_hw: "Along-runway wind (kt)",
-    takeoff_sweep_var_obs: "Obstacle",
+    takeoff_sweep_var_hw: "Headwind (kt)",
+    takeoff_sweep_var_obs: "Obstacle (m)",
     takeoff_sweep_start: "From",
     takeoff_sweep_end: "To",
     takeoff_sweep_step: "Step",
@@ -896,6 +900,9 @@ pub fn format_landing_ground_idle_breakdown(
 }
 
 pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> String {
+    if !ft.is_finite() || !m.is_finite() {
+        return off_chart_label(locale).to_string();
+    }
     let ft_i = ft.round() as i64;
     let m_i = m.round() as i64;
     let _ = locale;
@@ -903,6 +910,9 @@ pub fn format_takeoff_over_obstacle_result(locale: Locale, ft: f64, m: f64) -> S
 }
 
 pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> String {
+    if !ft.is_finite() || !m.is_finite() {
+        return off_chart_label(locale).to_string();
+    }
     let ft_i = ft.round() as i64;
     let m_i = m.round() as i64;
     match locale {
@@ -915,7 +925,34 @@ pub fn format_takeoff_conservative_estimate(locale: Locale, ft: f64, m: f64) -> 
     }
 }
 
+pub fn off_chart_label(locale: Locale) -> &'static str {
+    match locale {
+        Locale::Es => "Fuera de carta",
+        Locale::En => "Off chart",
+    }
+}
+
+pub fn format_takeoff_fig54_base_header(locale: Locale, base_m: f64) -> String {
+    let c = copy(locale);
+    if base_m.is_finite() {
+        format!("{} {:.0} m", c.strip_fig54_base, base_m.round())
+    } else {
+        format!("{} {}", c.strip_fig54_base, off_chart_label(locale))
+    }
+}
+
+pub fn format_takeoff_interactive_chart_readout(locale: Locale, base_m: f64) -> String {
+    if base_m.is_finite() {
+        format!("{:.0} m base", base_m)
+    } else {
+        off_chart_label(locale).to_string()
+    }
+}
+
 pub fn format_strip_chart_roll_obs(locale: Locale, roll_m: f64, obs_m: f64) -> String {
+    if !roll_m.is_finite() || !obs_m.is_finite() {
+        return off_chart_label(locale).to_string();
+    }
     match locale {
         Locale::Es => format!(
             "{:.0} m rodaje / {:.0} m obst.",
@@ -1317,6 +1354,18 @@ mod i18n_display_tests {
         let en = copy(Locale::En);
         assert_eq!(es.pressure_altitude_ft, "Altitud de presión (ft)");
         assert_eq!(en.pressure_altitude_ft, "Pressure altitude (ft)");
+    }
+
+    #[test]
+    fn takeoff_sweep_axis_labels_include_units_and_headwind_wording() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.takeoff_sweep_var_hw, "Viento de frente (kt)");
+        assert_eq!(es.takeoff_sweep_var_obs, "Obstáculo (m)");
+        assert_eq!(en.takeoff_sweep_var_hw, "Headwind (kt)");
+        assert_eq!(en.takeoff_sweep_var_obs, "Obstacle (m)");
+        assert_ne!(es.takeoff_sweep_var_hw, es.takeoff_signed_headwind);
+        assert_ne!(en.takeoff_sweep_var_hw, en.takeoff_signed_headwind);
     }
 
     #[test]
