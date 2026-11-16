@@ -184,12 +184,14 @@ mod tests {
     #[test]
     fn start_row_matches_cruise_readout_sensenich() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.propeller = PropellerKind::Sensenich;
-        inputs.cruise_pressure_alt_ft = 6500.0;
-        inputs.cruise_rpm = 2600.0;
-        inputs.cruise_oat_c = isa_temp_c_at_pa(6500.0);
-        inputs.cruise_solve_mode = CruiseSolveMode::SetRpm;
+        let inputs = FlightInputs {
+            propeller: PropellerKind::Sensenich,
+            cruise_pressure_alt_ft: 6500.0,
+            cruise_rpm: 2600.0,
+            cruise_oat_c: isa_temp_c_at_pa(6500.0),
+            cruise_solve_mode: CruiseSolveMode::SetRpm,
+            ..Default::default()
+        };
         let readout = compute_cruise(&data, &inputs).unwrap();
         let sweep = compute_cruise_altitude_sweep(
             &data,
@@ -210,12 +212,14 @@ mod tests {
     #[test]
     fn start_row_matches_cruise_readout_mt() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.propeller = PropellerKind::Mt175R;
-        inputs.cruise_pressure_alt_ft = 6000.0;
-        inputs.cruise_solve_mode = CruiseSolveMode::SetPercentBhp;
-        inputs.cruise_percent_bhp = 65.0;
-        inputs.cruise_oat_c = isa_temp_c_at_pa(6000.0);
+        let inputs = FlightInputs {
+            propeller: PropellerKind::Mt175R,
+            cruise_pressure_alt_ft: 6000.0,
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            cruise_percent_bhp: 65.0,
+            cruise_oat_c: isa_temp_c_at_pa(6000.0),
+            ..Default::default()
+        };
         let readout = compute_cruise(&data, &inputs).unwrap();
         let sweep = compute_cruise_altitude_sweep(
             &data,
@@ -235,9 +239,11 @@ mod tests {
     #[test]
     fn lapse_zero_constant_oat() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.cruise_oat_c = 18.0;
-        inputs.cruise_pressure_alt_ft = 4000.0;
+        let inputs = FlightInputs {
+            cruise_oat_c: 18.0,
+            cruise_pressure_alt_ft: 4000.0,
+            ..Default::default()
+        };
         let sweep = compute_cruise_altitude_sweep(
             &data,
             &inputs,
@@ -259,11 +265,13 @@ mod tests {
     #[test]
     fn bhp_not_achievable_marked_off_chart() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.cruise_pressure_alt_ft = 10_000.0;
-        inputs.cruise_solve_mode = CruiseSolveMode::SetPercentBhp;
-        inputs.cruise_percent_bhp = 95.0;
-        inputs.cruise_oat_c = isa_temp_c_at_pa(10_000.0);
+        let inputs = FlightInputs {
+            cruise_pressure_alt_ft: 10_000.0,
+            cruise_solve_mode: CruiseSolveMode::SetPercentBhp,
+            cruise_percent_bhp: 95.0,
+            cruise_oat_c: isa_temp_c_at_pa(10_000.0),
+            ..Default::default()
+        };
         let sweep = compute_cruise_altitude_sweep(
             &data,
             &inputs,

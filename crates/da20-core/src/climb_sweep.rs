@@ -300,9 +300,11 @@ mod tests {
     #[test]
     fn start_row_matches_climb_readout() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.pressure_altitude_input_ft = 2000.0;
-        inputs.oat_c = 20.0;
+        let inputs = FlightInputs {
+            pressure_altitude_input_ft: 2000.0,
+            oat_c: 20.0,
+            ..Default::default()
+        };
         let target = 8000.0;
         let readout = compute_climb(&data, &inputs, target).unwrap();
         let pa_start = effective_pressure_altitude_ft(&inputs, Some(ChartPhase::Climb));
@@ -323,9 +325,11 @@ mod tests {
     fn isa_day_sweep_0_to_10k_monotone_decreasing_roc() {
         let data = PerformanceData::production();
         let pa0 = 0.0;
-        let mut inputs = FlightInputs::default();
-        inputs.pressure_altitude_input_ft = pa0;
-        inputs.oat_c = isa_temp_c_at_pa(pa0);
+        let inputs = FlightInputs {
+            pressure_altitude_input_ft: pa0,
+            oat_c: isa_temp_c_at_pa(pa0),
+            ..Default::default()
+        };
         let params = ClimbSweepParams {
             from_pa_ft: 0.0,
             to_pa_ft: 10_000.0,
@@ -346,9 +350,11 @@ mod tests {
     #[test]
     fn downward_sweep_mirrors_upward_at_same_pas() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.pressure_altitude_input_ft = 6000.0;
-        inputs.oat_c = 10.0;
+        let inputs = FlightInputs {
+            pressure_altitude_input_ft: 6000.0,
+            oat_c: 10.0,
+            ..Default::default()
+        };
         let up = compute_climb_roc_sweep(
             &data,
             &inputs,
@@ -381,9 +387,11 @@ mod tests {
     #[test]
     fn out_of_chart_row_has_no_roc() {
         let data = PerformanceData::production();
-        let mut inputs = FlightInputs::default();
-        inputs.pressure_altitude_input_ft = 17_000.0;
-        inputs.oat_c = 15.0;
+        let inputs = FlightInputs {
+            pressure_altitude_input_ft: 17_000.0,
+            oat_c: 15.0,
+            ..Default::default()
+        };
         let sweep = compute_climb_roc_sweep(
             &data,
             &inputs,
