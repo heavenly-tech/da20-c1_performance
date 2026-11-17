@@ -1,4 +1,4 @@
-//! AFM §5.3.1 Figure 5.1 airspeed calibration (KIAS → KCAS at max weight).
+//! AFM §5.3.1 Table 1 airspeed calibration (KIAS → KCAS at max weight).
 
 use crate::interpolation::lerp;
 use crate::types::ClimbFigure;
@@ -9,7 +9,7 @@ struct Table1Curve {
     kcas: &'static [f64],
 }
 
-/// Flaps CRUISE (Fig 5.1 upper curve).
+/// Flaps CRUISE (Table 1 upper curve).
 const FLAPS_CRUISE: Table1Curve = Table1Curve {
     kias: &[42.0, 50.0, 55.0, 60.0, 65.0, 70.0, 75.0, 80.0, 90.0, 100.0],
     kcas: &[52.0, 58.0, 62.0, 66.0, 70.0, 75.0, 79.0, 83.0, 92.0, 101.0],
@@ -39,7 +39,7 @@ fn curve_for_figure(figure: ClimbFigure) -> &'static Table1Curve {
     }
 }
 
-/// Linear interpolation on AFM Fig 5.1 (Table 1) for the flap setting matching the ROC figure.
+/// Linear interpolation on AFM Table 1 for the flap setting matching the ROC figure.
 pub fn table1_kcas_from_kias(kias: f64, figure: ClimbFigure) -> Option<f64> {
     let c = curve_for_figure(figure);
     if kias < c.kias[0] || kias > *c.kias.last()? {

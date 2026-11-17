@@ -37,7 +37,7 @@ pub fn vy_kias_for_figure(figure: ClimbFigure) -> (f64, VySpeedPolicy) {
     }
 }
 
-/// Vy CAS (kt) via AFM Table 1 / Fig 5.1 interpolation for the matching flap curve.
+/// Vy CAS (kt) via AFM Table 1 interpolation for the matching flap curve.
 pub fn afm_vy_cas_kt(figure: ClimbFigure) -> f64 {
     let (kias, _) = vy_kias_for_figure(figure);
     crate::airspeed_table1::table1_kcas_from_kias(kias, figure).unwrap_or(kias)

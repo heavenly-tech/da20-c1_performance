@@ -573,7 +573,7 @@ const ES: Copy = Copy {
     climb_sweep_col_oat: "OAT (°C)",
     climb_sweep_col_isa: "ΔISA (°C)",
     climb_sweep_col_da: "DA (ft)",
-    climb_sweep_col_roc: "Vy (fpm)",
+    climb_sweep_col_roc: "ROC (fpm)",
     climb_sweep_col_time: "Tiempo acum. (min:s)",
     climb_sweep_total_time: "Tiempo total a objetivo",
     climb_sweep_service_ceiling: "Techo de servicio (ROC ≤ 100 fpm, AFM §5.3)",
@@ -919,7 +919,7 @@ const ES_METHODS: [MethodCopy; 11] = [
     MethodCopy {
         title: "Calculadora de montada (Vy)",
         afm: "AFM §4.2 / §4.4.8 Vy; Tabla 1 IAS→CAS; Figs 5.5/5.6/5.8 vía Fig 5.2; Tabla 3 solo combustible estimado",
-        summary: "Simpson 100 ft: Δt = Δh/ROC(h). Vy constante: 75 KIAS (CRUISE, AFM) → Tabla 1; 65 KIAS flaps T/O (práctica del club; AFM 68) → Tabla 1 curva T/O; 52 KIAS (balked). IAS→CAS interpolado Fig 5.1; CAS→TAS con σ(PA,OAT). Techo ROC ≤ 100 fpm. Fuera de carta en PA 16000 ft. Combustible Tabla 3 @ 2800 RPM (Sensenich); estimación probablemente baja (plena/rica).",
+        summary: "Simpson 100 ft: Δt = Δh/ROC(h). Vy constante: 75 KIAS (CRUISE, AFM) → Tabla 1; 65 KIAS flaps T/O (práctica del club; AFM 68) → Tabla 1 curva T/O; 52 KIAS (balked). IAS→CAS interpolado Tabla 1; CAS→TAS con σ(PA,OAT). Techo ROC ≤ 100 fpm. Fuera de carta en PA 16000 ft. Combustible Tabla 3 @ 2800 RPM (Sensenich); estimación probablemente baja (plena/rica).",
         interpolation: "ROC y EA: interpolación lineal; sin extrapolación. Tabla 3: igual que crucero.",
         limitations: "Sin viento ni pista. Cartas a 1764 lb / 800 kg. PA origen ≥ destino → error.",
     },
@@ -1000,7 +1000,7 @@ const EN_METHODS: [MethodCopy; 11] = [
     MethodCopy {
         title: "Climb calculator (Vy)",
         afm: "AFM §4.2 / §4.4.8 Vy; Table 1 IAS→CAS; Figs 5.5/5.6/5.8 via Fig 5.2; Table 3 fuel estimate only",
-        summary: "Simpson 100 ft: Δt = Δh/ROC(h). Vy held constant: 75 KIAS (CRUISE, AFM) via Table 1; 65 KIAS flaps T/O (club practice; AFM 68) via T/O calibration curve; 52 KIAS balked. IAS→CAS from Fig 5.1; CAS→TAS via σ(PA,OAT). Service ceiling ROC ≤ 100 fpm. Off chart at PA 16000 ft. Table 3 fuel @ 2800 RPM; likely low (full rich).",
+        summary: "Simpson 100 ft: Δt = Δh/ROC(h). Vy held constant: 75 KIAS (CRUISE, AFM) via Table 1; 65 KIAS flaps T/O (club practice; AFM 68) via T/O calibration curve; 52 KIAS balked. IAS→CAS from Table 1; CAS→TAS via σ(PA,OAT). Service ceiling ROC ≤ 100 fpm. Off chart at PA 16000 ft. Table 3 fuel @ 2800 RPM; likely low (full rich).",
         interpolation: "ROC and EA: linear interpolation; no extrapolation. Table 3: same as cruise.",
         limitations: "No wind or runway. Charts at 1764 lb / 800 kg. From PA ≥ to PA → error.",
     },
@@ -1706,5 +1706,13 @@ mod i18n_display_tests {
         assert_eq!(es.climb_calc_hide_breakdown, "Ocultar detalle");
         assert_eq!(en.climb_calc_show_breakdown, "Show breakdown");
         assert_eq!(en.climb_calc_hide_breakdown, "Hide breakdown");
+    }
+
+    #[test]
+    fn climb_sweep_roc_column_header_es_en() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.climb_sweep_col_roc, "ROC (fpm)");
+        assert_eq!(en.climb_sweep_col_roc, "ROC (fpm)");
     }
 }
