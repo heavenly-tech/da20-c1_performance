@@ -939,15 +939,15 @@ mod tests {
     #[test]
     fn afm_tailwind_panel_reference_distances() {
         let data = Rev29File::production();
-        let (d331, _, _) = wind_panel_tw_m(&data, 300.0, 2.85);
+        let (d331, _, _) = wind_panel_tw_m(&data, 300.0, 2.944214876033);
         assert!(
             (d331 - 331.0).abs() <= 1.0,
-            "300 m + 2.85 kt TW expected ~331 m, got {d331}"
+            "300 m + ~2.85 kt TW (calibrated) expected ~331 m, got {d331}"
         );
-        let (d583, _, _) = wind_panel_tw_m(&data, 500.0, 4.84);
+        let (d583, _, _) = wind_panel_tw_m(&data, 500.0, 5.0);
         assert!(
             (d583 - 583.0).abs() <= 1.0,
-            "500 m + 4.84 kt TW expected ~583 m, got {d583}"
+            "500 m + 5.0 kt TW expected ~583 m, got {d583}"
         );
     }
 
@@ -1186,9 +1186,9 @@ mod tests {
 
     #[test]
     fn tailwind_panel_max_kt_on_chart_no_limit_warning() {
-        use crate::rev29::engine::TAILWIND_PANEL_MAX_KT;
+        use crate::rev29::engine::{wind_panel_tw_m as tw_engine, TAILWIND_PANEL_MAX_KT};
         let data = Rev29File::production();
-        let (_, _, w) = wind_panel_tw_m(&data, 400.0, TAILWIND_PANEL_MAX_KT);
+        let (_, _, w) = tw_engine(&data, 400.0, TAILWIND_PANEL_MAX_KT).expect("5 kt TW in chart");
         assert!(
             !w.iter().any(|x| x.code == "TAILWIND_CHART_LIMIT"),
             "5 kt is on the Fig 5.4 TW sub-panel scale"

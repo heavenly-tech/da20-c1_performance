@@ -542,4 +542,40 @@ mod tests {
         let (d0, entry_eff, _) = wind_panel_hw_m(&d, entry, 0.0).unwrap();
         assert!((d0 - entry_eff).abs() < f64::EPSILON);
     }
+
+    /// SCTB-style worked point: PA 2130 ft, 800 kg, 15 m obstacle, 15 °C, 5 kt tailwind.
+    #[test]
+    fn fig54_sctb_five_kt_tailwind_fifteen_m_obstacle() {
+        use crate::data::PerformanceData;
+        use crate::takeoff::compute_takeoff;
+        use crate::types::{ChartPhase, FlightInputs, PaOverride};
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            pa_override: Some(PaOverride {
+                pa_ft: 2130.0,
+                phase: ChartPhase::Takeoff,
+            }),
+            oat_c: 15.0,
+            weight_lb: 800.0 / 0.45359237,
+            wind_dir_deg: 180.0,
+            wind_speed_kt: 5.0,
+            runway: "360".into(),
+            obstacle_height_m: 15.0,
+            ..Default::default()
+        };
+        let t = compute_takeoff(&data, &inputs).expect("all inputs on Fig 5.4 hulls");
+        const GROUND_TOL_M: f64 = 8.0;
+        const OVER_TOL_M: f64 = 12.0;
+        let ground_roll_m = ft_to_m(t.ground_roll_ft);
+        assert!(
+            (ground_roll_m - 560.0).abs() <= GROUND_TOL_M,
+            "ground roll {ground_roll_m} m"
+        );
+        assert!(
+            (t.distance_over_obstacle_raw_m - 747.0).abs() <= OVER_TOL_M,
+            "over obstacle {} m",
+            t.distance_over_obstacle_raw_m
+        );
+    }
 }
