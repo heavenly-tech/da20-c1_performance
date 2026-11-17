@@ -24,6 +24,13 @@ pub fn density_altitude_ft(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
 const ISA_SEA_LEVEL_TEMP_K: f64 = 288.15;
 const ISA_TEMP_EXPONENT: f64 = 5.25588;
 
+/// Density ratio σ (actual ÷ sea-level standard) for TAS from IAS.
+pub fn density_ratio_sigma(pressure_altitude_ft: f64, oat_c: f64) -> f64 {
+    let t_std_k = ISA_SEA_LEVEL_TEMP_K - ISA_LAPSE_RATE_C_PER_FT * pressure_altitude_ft;
+    let t_actual_k = oat_c + 273.15;
+    (t_std_k / ISA_SEA_LEVEL_TEMP_K).powf(ISA_TEMP_EXPONENT) * (ISA_SEA_LEVEL_TEMP_K / t_actual_k)
+}
+
 /// ISA troposphere density altitude (ft) for MT AFMS Fig 4 (standard-temperature table).
 ///
 /// Uses the same lapse rate as `crate::cruise::isa_temp_c_at_pa` (0.0019812 °C/ft).

@@ -6,6 +6,7 @@ mod chart_axes;
 mod chart_field_ooc;
 mod chart_guides;
 mod chart_inputs;
+mod climb_calculator_panel;
 mod components;
 mod ground_oat;
 mod i18n;

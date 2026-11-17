@@ -11,6 +11,8 @@ mod chart_hull_tests;
 #[cfg(test)]
 mod chart_limit_epsilon_tests;
 pub mod climb;
+pub mod climb_calculator;
+pub mod climb_integration;
 pub mod climb_sweep;
 pub mod cruise;
 pub mod cruise_sweep;

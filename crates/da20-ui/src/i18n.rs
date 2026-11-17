@@ -264,6 +264,14 @@ pub struct Copy {
     pub climb_sweep_col_time: &'static str,
     pub climb_sweep_total_time: &'static str,
     pub climb_sweep_service_ceiling: &'static str,
+    pub climb_calc_title: &'static str,
+    pub climb_calc_oat_from: &'static str,
+    pub climb_calc_total_time: &'static str,
+    pub climb_calc_still_air: &'static str,
+    pub climb_calc_avg_roc: &'static str,
+    pub climb_calc_fuel_est: &'static str,
+    pub climb_calc_fuel_est_note: &'static str,
+    pub climb_calc_range_err: &'static str,
     pub cruise_sweep_title: &'static str,
     pub cruise_sweep_col_pa: &'static str,
     pub cruise_sweep_col_oat: &'static str,
@@ -554,6 +562,14 @@ const ES: Copy = Copy {
     climb_sweep_col_time: "Tiempo acum. (min:s)",
     climb_sweep_total_time: "Tiempo total a objetivo",
     climb_sweep_service_ceiling: "Techo de servicio (Vy ≤ 0)",
+    climb_calc_title: "Calculadora de trepada",
+    climb_calc_oat_from: "OAT en PA origen (°C)",
+    climb_calc_total_time: "Tiempo total de trepada",
+    climb_calc_still_air: "Distancia en aire en calma",
+    climb_calc_avg_roc: "Vy medio",
+    climb_calc_fuel_est: "Combustible (estimación)",
+    climb_calc_fuel_est_note: "Tabla 3 @ 2800 RPM",
+    climb_calc_range_err: "PA origen debe ser menor que PA destino.",
     cruise_sweep_title: "Barrido de crucero por PA",
     cruise_sweep_col_pa: "PA (ft)",
     cruise_sweep_col_oat: "OAT (°C)",
@@ -792,6 +808,14 @@ const EN: Copy = Copy {
     climb_sweep_col_time: "Cum. time (min:s)",
     climb_sweep_total_time: "Total time to target",
     climb_sweep_service_ceiling: "Service ceiling (ROC ≤ 0)",
+    climb_calc_title: "Climb calculator",
+    climb_calc_oat_from: "OAT at from PA (°C)",
+    climb_calc_total_time: "Total climb time",
+    climb_calc_still_air: "Still-air distance",
+    climb_calc_avg_roc: "Average ROC",
+    climb_calc_fuel_est: "Fuel (estimate)",
+    climb_calc_fuel_est_note: "Table 3 @ 2800 RPM",
+    climb_calc_range_err: "From PA must be below to PA.",
     cruise_sweep_title: "Cruise altitude sweep",
     cruise_sweep_col_pa: "PA (ft)",
     cruise_sweep_col_oat: "OAT (°C)",
@@ -816,7 +840,7 @@ const EN: Copy = Copy {
     methods: &EN_METHODS,
 };
 
-const ES_METHODS: [MethodCopy; 10] = [
+const ES_METHODS: [MethodCopy; 11] = [
     MethodCopy {
         title: "Altitud de presión y densidad",
         afm: "AFM DA202-C1 Rev 29 — entradas de performance",
@@ -843,7 +867,14 @@ const ES_METHODS: [MethodCopy; 10] = [
         afm: "AFM p. 5-11, 5-12, 5-16",
         summary: "ROC (fpm) = a + b × EA; figura según flaps/fase seleccionada.",
         interpolation: "EA desde Fig 5.2; coeficientes fijos por figura.",
-        limitations: "Tiempo de trepada: estimación derivada, sin carta AFM.",
+        limitations: "Tiempo de trepada puntual: estimación derivada, sin carta AFM.",
+    },
+    MethodCopy {
+        title: "Calculadora de trepada (Vy)",
+        afm: "AFM p. 5-11–5-16 (ROC Figs 5.5/5.6/5.8 vía Fig 5.2); Vy 73 KIAS (marcas ASI); Tabla 3 solo combustible estimado",
+        summary: "Integración Simpson en pasos de 100 ft: Δt = Δh/ROC(h) con ROC de la misma cadena que el barrido (EA Fig 5.2 + a+b·EA + penalización carenados −3%). OAT sigue el gradiente térmico editable desde la PA origen. Distancia en aire en calma: ∫ TAS dt con TAS = 73 KIAS corregida por σ(PA,OAT). Combustible solo con hélice Sensenich: ∫ (GPH Tabla 3 @ 2800 RPM) dt — estimación, sin carta AFM de combustible en trepada.",
+        interpolation: "ROC y EA: interpolación lineal en cartas; sin extrapolación (Fuera de carta con PA de salida). Tabla 3: misma regla que crucero.",
+        limitations: "Sin viento ni pista. PA origen ≥ destino → error. No descenso.",
     },
     MethodCopy {
         title: "Crucero (Tabla 3)",
@@ -889,7 +920,7 @@ const ES_METHODS: [MethodCopy; 10] = [
     },
 ];
 
-const EN_METHODS: [MethodCopy; 10] = [
+const EN_METHODS: [MethodCopy; 11] = [
     MethodCopy {
         title: "Pressure & density altitude",
         afm: "AFM DA202-C1 Rev 29 — performance inputs",
@@ -917,7 +948,14 @@ const EN_METHODS: [MethodCopy; 10] = [
         afm: "AFM p. 5-11, 5-12, 5-16",
         summary: "ROC (fpm) = a + b × EA; figure from selected flap/phase.",
         interpolation: "EA from Fig 5.2; fixed coefficients per figure.",
-        limitations: "Climb time is a derived estimate — no AFM chart.",
+        limitations: "Point climb time is a derived estimate — no AFM chart.",
+    },
+    MethodCopy {
+        title: "Climb calculator (Vy)",
+        afm: "AFM pp. 5-11–5-16 (ROC Figs 5.5/5.6/5.8 via Fig 5.2); Vy 73 KIAS (ASI marking); Table 3 for fuel estimate only",
+        summary: "Simpson integration in 100 ft steps: Δt = Δh/ROC(h) using the same ROC chain as the sweep (Fig 5.2 EA + a+b·EA + wheel-fairing −3%). OAT follows the editable lapse from from-PA. Still-air distance: ∫ TAS dt with TAS = 73 KIAS corrected by σ(PA,OAT). Fuel only with Sensenich propeller: ∫ (Table 3 GPH @ 2800 RPM) dt — estimate, no AFM climb-fuel chart.",
+        interpolation: "ROC and EA: linear chart interpolation; no extrapolation (Off chart with exit PA). Table 3: same rules as cruise.",
+        limitations: "No wind or runway. From PA ≥ to PA → error. No descents.",
     },
     MethodCopy {
         title: "Cruise (Table 3)",

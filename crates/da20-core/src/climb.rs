@@ -10,6 +10,18 @@ use crate::types::{climb_roc_fairing_multiplier, CalculationWarning, ClimbResult
 pub const CLIMB_DERIVED_ESTIMATE_NOTE: &str =
     "Climb time, fuel, and distance are derived estimates (no AFM chart).";
 
+/// Best rate-of-climb airspeed (KIAS) per AFM DA202-C1 Rev 29 airspeed markings / §5 climb performance.
+pub const AFM_CLIMB_VY_IAS_KT: f64 = 73.0;
+
+pub const CLIMB_FUEL_ESTIMATE_BASIS: &str =
+    "Estimated fuel: Table 3 fuel flow at 2800 RPM (Sensenich propeller), integrated along the climb path; not an AFM climb-fuel chart.";
+
+/// Convert AFM climb IAS to TAS (kt) using tropospheric density ratio at PA and OAT.
+pub fn tas_from_ias_at_pa(ias_kt: f64, pa_ft: f64, oat_c: f64) -> f64 {
+    let sigma = crate::altitude::density_ratio_sigma(pa_ft, oat_c);
+    ias_kt / sigma.sqrt()
+}
+
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ClimbError {
     #[error("climb segment unavailable")]
