@@ -383,7 +383,7 @@ mod tests {
     fn climb_roc_strip_x_axis_title_es_en() {
         assert_eq!(
             copy(Locale::Es).strip_climb_roc_x_axis,
-            "Razón de ascenso (fpm)"
+            "Razón de montada (fpm)"
         );
         assert_eq!(
             copy(Locale::En).strip_climb_roc_x_axis,

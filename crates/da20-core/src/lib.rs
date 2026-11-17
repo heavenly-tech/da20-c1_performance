@@ -3,6 +3,7 @@
 //! All POH numeric tables are loaded from JSON; do not hard-code AFM values here.
 
 pub mod afm_tag;
+pub mod airspeed_table1;
 pub mod altitude;
 pub mod altitude_sweep;
 pub mod chart_bounds;
@@ -11,6 +12,8 @@ mod chart_hull_tests;
 #[cfg(test)]
 mod chart_limit_epsilon_tests;
 pub mod climb;
+pub mod climb_calculator;
+pub mod climb_integration;
 pub mod climb_sweep;
 pub mod cruise;
 pub mod cruise_sweep;

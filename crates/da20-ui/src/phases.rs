@@ -5,6 +5,7 @@ use da20_core::PerformanceData;
 use leptos::prelude::*;
 
 use crate::altitude_sweep_panel::{ClimbRocSweepPanel, CruiseAltitudeSweepPanel};
+use crate::climb_calculator_panel::ClimbCalculatorPanel;
 use crate::components::{ProvenanceLine, WarningsList};
 use crate::i18n::{
     afm_lookup_tag_label, copy, format_along_runway_component, format_crosswind_component,
@@ -232,6 +233,7 @@ fn PhaseGrid(
                     {move || phase_results(locale.get(), phase, bundle.get(), inputs.get(), takeoff_prefs.map(|p| p.get()))}
                     {move || match phase {
                         Phase::Climb => view! {
+                            <ClimbCalculatorPanel locale=locale data=data inputs=inputs/>
                             <ClimbRocSweepPanel locale=locale data=data inputs=inputs/>
                         }.into_any(),
                         Phase::Cruise => view! {

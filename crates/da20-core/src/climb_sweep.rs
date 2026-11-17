@@ -1,12 +1,13 @@
 //! Climb ROC vs pressure-altitude sweep (Fig 5.x).
 
-use crate::altitude::clear_pa_override;
 use crate::altitude::{effective_pressure_altitude_ft, isa_troposphere_density_altitude_ft};
 use crate::altitude_sweep::{
     build_altitude_series, oat_at_pa_with_lapse, sweep_pa_series_with_terminal,
     AltitudeSweepRangeError, DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT,
 };
 use crate::climb::compute_climb;
+use crate::climb::AFM_SERVICE_CEILING_ROC_FPM;
+use crate::climb_integration::{climb_inputs_at_pa, integrate_climb_time_min};
 use crate::cruise::disa_c;
 use crate::data::PerformanceData;
 use crate::types::{ChartPhase, FlightInputs};
@@ -62,79 +63,6 @@ pub struct ClimbSweepResult {
 
 pub type ClimbSweepError = AltitudeSweepRangeError;
 
-fn inputs_at_pa(
-    base: &FlightInputs,
-    pa_start_ft: f64,
-    oat_start_c: f64,
-    pa_ft: f64,
-    lapse: f64,
-) -> FlightInputs {
-    let mut inputs = base.clone();
-    clear_pa_override(&mut inputs);
-    inputs.pressure_altitude_input_ft = pa_ft;
-    inputs.oat_c = oat_at_pa_with_lapse(oat_start_c, pa_start_ft, pa_ft, lapse);
-    inputs
-}
-
-fn roc_fpm_at(
-    data: &PerformanceData,
-    base: &FlightInputs,
-    pa_start_ft: f64,
-    oat_start_c: f64,
-    pa_ft: f64,
-    lapse: f64,
-    target_pa_ft: f64,
-) -> Option<f64> {
-    let inputs = inputs_at_pa(base, pa_start_ft, oat_start_c, pa_ft, lapse);
-    let r = compute_climb(data, &inputs, target_pa_ft).ok()?;
-    let roc = r.rate_of_climb_fpm;
-    if roc <= 0.0 {
-        None
-    } else {
-        Some(roc)
-    }
-}
-
-const TIME_SUBSTEP_FT: f64 = 100.0;
-
-/// ∫ (1/ROC(h)) dh in minutes (ROC in ft/min).
-#[allow(clippy::too_many_arguments)]
-fn integrate_segment_time_min(
-    data: &PerformanceData,
-    base: &FlightInputs,
-    pa_start_ft: f64,
-    oat_start_c: f64,
-    lapse: f64,
-    target_pa_ft: f64,
-    from_pa: f64,
-    to_pa: f64,
-) -> Option<f64> {
-    if to_pa <= from_pa + 1e-9 {
-        return Some(0.0);
-    }
-    let dh = to_pa - from_pa;
-    let mut n = ((dh / TIME_SUBSTEP_FT).ceil() as usize).max(2);
-    if !n.is_multiple_of(2) {
-        n += 1;
-    }
-    let step = dh / n as f64;
-    let mut sum = 0.0;
-    for i in 0..=n {
-        let h = from_pa + step * i as f64;
-        let roc = roc_fpm_at(data, base, pa_start_ft, oat_start_c, h, lapse, target_pa_ft)?;
-        let f = 1.0 / roc;
-        let weight = if i == 0 || i == n {
-            1.0
-        } else if i % 2 == 1 {
-            4.0
-        } else {
-            2.0
-        };
-        sum += weight * f;
-    }
-    Some(sum * step / 3.0)
-}
-
 pub fn compute_climb_roc_sweep(
     data: &PerformanceData,
     base: &FlightInputs,
@@ -166,10 +94,12 @@ pub fn compute_climb_roc_sweep(
         let oat_c = oat_at_pa_with_lapse(oat_start_c, pa_start_ft, *pa_ft, lapse);
         let isa_dev_c = disa_c(oat_c, *pa_ft);
         let da = isa_troposphere_density_altitude_ft(*pa_ft, oat_c);
-        let inputs = inputs_at_pa(base, pa_start_ft, oat_start_c, *pa_ft, lapse);
+        let inputs = climb_inputs_at_pa(base, pa_start_ft, oat_start_c, *pa_ft, lapse);
 
         let (rate_of_climb_fpm, row_valid) = match compute_climb(data, &inputs, target_pa_ft) {
-            Ok(r) if r.rate_of_climb_fpm > 0.0 => (Some(r.rate_of_climb_fpm), true),
+            Ok(r) if r.rate_of_climb_fpm > AFM_SERVICE_CEILING_ROC_FPM => {
+                (Some(r.rate_of_climb_fpm), true)
+            }
             Ok(_) => {
                 if stop_reason.is_none() && idx > 0 {
                     stop_reason = Some(ClimbSweepStopReason::ServiceCeiling);
@@ -193,7 +123,7 @@ pub fn compute_climb_roc_sweep(
             None
         } else {
             if let Some(prev_pa) = prev_valid_pa {
-                if let Some(seg_min) = integrate_segment_time_min(
+                if let Some(seg_min) = integrate_climb_time_min(
                     data,
                     base,
                     pa_start_ft,
@@ -438,9 +368,8 @@ mod tests {
             "last pas: {:?}",
             sweep.rows.iter().map(|r| r.pa_ft).collect::<Vec<_>>()
         );
-        let ref_min =
-            integrate_segment_time_min(&data, &inputs, 2130.0, 20.0, lapse, to, 2130.0, to)
-                .expect("reference integral");
+        let ref_min = integrate_climb_time_min(&data, &inputs, 2130.0, 20.0, lapse, to, 2130.0, to)
+            .expect("reference integral");
         let ref_s = ref_min * 60.0;
         let total = sweep.total_time_s.expect("total time");
         assert!(

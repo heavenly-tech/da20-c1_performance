@@ -7,7 +7,7 @@ use crate::altitude::ISA_LAPSE_RATE_C_PER_FT;
 /// Default lapse for altitude sweeps (ISA).
 pub const DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT: f64 = ISA_LAPSE_RATE_C_PER_FT;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Clone)]
 pub enum AltitudeSweepRangeError {
     #[error("non-finite sweep value")]
     NonFinite,
