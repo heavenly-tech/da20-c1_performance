@@ -6,8 +6,8 @@ use da20_core::PerformanceData;
 
 use crate::phases::Phase;
 use crate::prefs::{
-    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, hydrate_cruise_tab_fields,
-    persist_cruise_tab_from_inputs, ClimbTabPrefs, CruiseTabPrefs, FlightPrefs, LandingTabPrefs,
+    apply_estimated_cruise_oat, hydrate_cruise_tab_fields, persist_cruise_tab_from_inputs,
+    sanitize_cruise_oat_estimate, ClimbTabPrefs, CruiseTabPrefs, FlightPrefs, LandingTabPrefs,
     TakeoffTabPrefs,
 };
 
@@ -171,7 +171,7 @@ pub fn assemble_cruise_like_inputs(
     };
     let cruise_oat_c = if tab.cruise_oat_manual {
         tab.cruise_oat_c_saved
-            .map(|oat| clamp_cruise_oat_for_propeller(&probe, oat))
+            .map(sanitize_cruise_oat_estimate)
             .unwrap_or(probe.cruise_oat_c)
     } else {
         let est = estimated_oat_c_from_ground(
@@ -179,7 +179,7 @@ pub fn assemble_cruise_like_inputs(
             tab.ground_oat_c,
             cruise_pressure_alt_ft,
         );
-        clamp_cruise_oat_for_propeller(&probe, est)
+        sanitize_cruise_oat_estimate(est)
     };
     FlightInputs {
         propeller: prefs.propeller,

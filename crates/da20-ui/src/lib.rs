@@ -3,6 +3,7 @@ use leptos::prelude::*;
 mod altitude_sweep_panel;
 mod app;
 mod chart_axes;
+mod chart_field_ooc;
 mod chart_guides;
 mod chart_inputs;
 mod components;

@@ -1,6 +1,7 @@
 use crate::chart_bounds::{self, limits, ChartOutOfRange, CHART_EDGE_TOL};
 use crate::interpolation::{interpolate_1d, ExtrapolationPolicy, InterpError};
 use crate::rev29::types::Rev29File;
+use crate::types::defaults;
 use crate::types::CalculationWarning;
 
 const M_TO_FT: f64 = 3.280839895;
@@ -291,6 +292,13 @@ pub fn obstacle_add_m(
     if obstacle_m <= 0.0 {
         return Ok((ground_after_wind_m, ground_after_wind_m, vec![]));
     }
+    chart_bounds::require_in_range(
+        "Fig 5.4 obstacle height (m)",
+        0.0,
+        defaults::OBSTACLE_HEIGHT_MAX_M,
+        obstacle_m,
+        AXIS_TOL,
+    )?;
     let lines = &data.obs_lines.value;
     require_panel_entry_m(lines, ground_after_wind_m)?;
     let (slope, _) = linear_interp(
@@ -512,6 +520,16 @@ mod tests {
         let d = prod();
         let entry = 400.0;
         assert!(wind_panel_tw_m(&d, entry, 5.01).is_err());
+    }
+
+    #[test]
+    fn t7_obstacle_height_m_at_limit_and_epsilon() {
+        let d = prod();
+        let ground = takeoff_distances_m(&d, 1000.0, 15.0, 800.0, 0.0, 0.0, 0.0)
+            .unwrap()
+            .ground_roll_m;
+        assert!(obstacle_add_m(&d, ground, defaults::OBSTACLE_HEIGHT_MAX_M).is_ok());
+        assert!(obstacle_add_m(&d, ground, defaults::OBSTACLE_HEIGHT_MAX_M + 0.1).is_err());
     }
 
     #[test]

@@ -8,6 +8,8 @@ pub mod altitude_sweep;
 pub mod chart_bounds;
 #[cfg(test)]
 mod chart_hull_tests;
+#[cfg(test)]
+mod chart_limit_epsilon_tests;
 pub mod climb;
 pub mod climb_sweep;
 pub mod cruise;

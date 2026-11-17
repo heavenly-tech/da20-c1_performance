@@ -3,7 +3,6 @@
 use std::collections::HashSet;
 
 use da20_core::altitude::effective_pressure_altitude_ft;
-use da20_core::chart_bounds::limits;
 use da20_core::climb::compute_climb;
 use da20_core::rev29::charts::{climb_roc_vs_ea, equivalent_altitude_curves, takeoff_base_curves};
 use da20_core::rev29::engine::lb_to_kg;
@@ -941,11 +940,9 @@ pub(crate) fn apply_strip_hit(
     match kind {
         StripKind::Takeoff => {
             if (TAKEOFF_OAT.x..TAKEOFF_OAT.x + TAKEOFF_OAT.w).contains(&sx) {
-                let oat = ((sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0)
-                    .clamp(limits::FIG54_OAT_C.0, limits::FIG54_OAT_C.1);
+                let oat = (sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0;
                 let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
-                let pa = lerp_axis(&inner.to_pa.value, ny)
-                    .clamp(limits::FIG54_PA_FT.0, limits::FIG54_PA_FT.1);
+                let pa = lerp_axis(&inner.to_pa.value, ny);
                 shared_airfield_set_pressure_altitude(mode, chart_phase, prefs, inputs, pa);
                 shared_airfield_set_oat_c(mode, prefs, inputs, oat);
             } else if (TAKEOFF_WEIGHT.x..TAKEOFF_WEIGHT.x + TAKEOFF_WEIGHT.w).contains(&sx) {
@@ -970,11 +967,9 @@ pub(crate) fn apply_strip_hit(
         }
         StripKind::Climb => {
             if (CLIMB_EQ.x..CLIMB_EQ.x + CLIMB_EQ.w).contains(&sx) {
-                let oat = ((sx - CLIMB_EQ.x) / CLIMB_EQ.w * 75.0 - 20.0)
-                    .clamp(limits::FIG52_OAT_C.0, limits::FIG52_OAT_C.1);
+                let oat = (sx - CLIMB_EQ.x) / CLIMB_EQ.w * 75.0 - 20.0;
                 let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
-                let pa = lerp_axis(&inner.fan_pa.value, ny)
-                    .clamp(limits::FIG52_PA_FT.0, limits::FIG52_PA_FT.1);
+                let pa = lerp_axis(&inner.fan_pa.value, ny);
                 shared_airfield_set_pressure_altitude(mode, chart_phase, prefs, inputs, pa);
                 shared_airfield_set_oat_c(mode, prefs, inputs, oat);
             }
@@ -1314,11 +1309,9 @@ mod strip_drag_tests {
         let inner = data.inner();
         let sx = TAKEOFF_OAT.x + TAKEOFF_OAT.w * 0.4;
         let sy = STRIP_TOP + (STRIP_BOTTOM - STRIP_TOP) * 0.35;
-        let oat = ((sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0)
-            .clamp(limits::FIG54_OAT_C.0, limits::FIG54_OAT_C.1);
+        let oat = (sx - TAKEOFF_OAT.x) / TAKEOFF_OAT.w * 75.0 - 20.0;
         let ny = 1.0 - (sy - STRIP_TOP) / (STRIP_BOTTOM - STRIP_TOP);
-        let pa = super::lerp_axis(&inner.to_pa.value, ny)
-            .clamp(limits::FIG54_PA_FT.0, limits::FIG54_PA_FT.1);
+        let pa = super::lerp_axis(&inner.to_pa.value, ny);
 
         let mut prefs_drag = FlightPrefs::default();
         let mut inputs_drag = FlightInputs::default();

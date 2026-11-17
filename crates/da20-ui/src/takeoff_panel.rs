@@ -1,17 +1,25 @@
 //! Takeoff numeric inputs (unit prefs), distance rounding, and parameter sweep table.
 
-use da20_core::rev29::engine::{ft_to_m, kg_to_lb, lb_to_kg, m_to_ft};
+use da20_core::chart_bounds::ChartOutOfRange;
+use da20_core::rev29::engine::{kg_to_lb, lb_to_kg};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
 use da20_core::takeoff_sweep::{
     compute_takeoff_sweep, TakeoffSweepAxis, TakeoffSweepError, TakeoffSweepRow, TakeoffSweepVar,
 };
-use da20_core::types::{defaults, FlightInputs};
+use da20_core::types::defaults::{
+    self, obstacle_chart_ft_from_m, obstacle_m_from_chart_ft, OBSTACLE_CHART_MAX_FT,
+    OBSTACLE_HEIGHT_MAX_M,
+};
+use da20_core::types::FlightInputs;
 use da20_core::wind::{runway_heading_status, signed_along_runway_kt, RunwayHeadingStatus};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 
+use crate::chart_field_ooc::{
+    field_ooc_active, takeoff_obstacle_axis_limits, takeoff_wind_axis_limits, ChartInputField,
+};
 use crate::i18n::{afm_lookup_tag_label, copy, format_takeoff_sweep_var_obs, Locale};
-use crate::inputs::{format_num_display, input_value, NumField};
+use crate::inputs::{format_num_display, input_value, note_num_draft, NumField};
 use crate::prefs::{
     persist_takeoff_tab_from_inputs, FlightPrefs, ObstacleUnit, TakeoffPrefs, WeightUnit,
 };
@@ -71,23 +79,27 @@ struct SweepVarDraft {
 pub fn obstacle_sweep_display_value(value_m: f64, unit: ObstacleUnit) -> f64 {
     match unit {
         ObstacleUnit::Meters => value_m,
-        ObstacleUnit::Feet => m_to_ft(value_m),
+        ObstacleUnit::Feet => obstacle_chart_ft_from_m(value_m),
     }
 }
 
 pub fn obstacle_sweep_commit_display(display: f64, unit: ObstacleUnit) -> f64 {
     let m = match unit {
         ObstacleUnit::Meters => display,
-        ObstacleUnit::Feet => ft_to_m(display),
+        ObstacleUnit::Feet => obstacle_m_from_chart_ft(display),
     };
-    m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M)
+    if m.is_finite() {
+        m.max(0.0)
+    } else {
+        0.0
+    }
 }
 
 /// Max shown in obstacle labels/errors (matches `TakeoffObstacleUnitField` 0–15 m / 0–50 ft).
 pub fn obstacle_unit_range_display_max(unit: ObstacleUnit) -> f64 {
     match unit {
-        ObstacleUnit::Meters => defaults::OBSTACLE_HEIGHT_MAX_M,
-        ObstacleUnit::Feet => 50.0,
+        ObstacleUnit::Meters => OBSTACLE_HEIGHT_MAX_M,
+        ObstacleUnit::Feet => OBSTACLE_CHART_MAX_FT,
     }
 }
 
@@ -107,7 +119,7 @@ pub fn obstacle_sweep_commit_if_changed(current_m: f64, display: f64, unit: Obst
 pub fn format_sweep_obstacle_cell(value_m: f64, unit: ObstacleUnit) -> String {
     match unit {
         ObstacleUnit::Meters => format!("{:.1}", value_m),
-        ObstacleUnit::Feet => format!("{:.1}", m_to_ft(value_m)),
+        ObstacleUnit::Feet => format!("{:.1}", obstacle_chart_ft_from_m(value_m)),
     }
 }
 
@@ -118,10 +130,12 @@ pub fn TakeoffNumericBlock(
     prefs: RwSignal<TakeoffPrefs>,
     flight_prefs: RwSignal<FlightPrefs>,
 ) -> impl IntoView {
+    let takeoff_ooc =
+        use_context::<Memo<Option<ChartOutOfRange>>>().unwrap_or_else(|| Memo::new(move |_| None));
     view! {
-        <TakeoffWeightField locale=locale inputs=inputs prefs=prefs flight_prefs=flight_prefs/>
-        <TakeoffSignedHeadwindField locale=locale inputs=inputs flight_prefs=flight_prefs/>
-        <TakeoffObstacleUnitField locale=locale inputs=inputs prefs=prefs flight_prefs=flight_prefs/>
+        <TakeoffWeightField locale=locale inputs=inputs prefs=prefs flight_prefs=flight_prefs takeoff_ooc=takeoff_ooc/>
+        <TakeoffSignedHeadwindField locale=locale inputs=inputs flight_prefs=flight_prefs takeoff_ooc=takeoff_ooc/>
+        <TakeoffObstacleUnitField locale=locale inputs=inputs prefs=prefs flight_prefs=flight_prefs takeoff_ooc=takeoff_ooc/>
         <TakeoffRoundingToggle locale=locale prefs=prefs/>
     }
 }
@@ -147,7 +161,11 @@ fn TakeoffWeightField(
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
     flight_prefs: RwSignal<FlightPrefs>,
+    takeoff_ooc: Memo<Option<ChartOutOfRange>>,
 ) -> impl IntoView {
+    let weight_ooc = Memo::new(move |_| {
+        field_ooc_active(takeoff_ooc.get().as_ref(), ChartInputField::TakeoffWeight)
+    });
     let editing = RwSignal::new(false);
     let draft = RwSignal::new(String::new());
     let input_ref = NodeRef::<leptos::html::Input>::new();
@@ -173,7 +191,7 @@ fn TakeoffWeightField(
     };
 
     view! {
-        <div class="f">
+        <div class="f" class:out-of-chart=move || weight_ooc.get()>
             <label>
                 {move || {
                     let c = copy(locale.get());
@@ -240,34 +258,73 @@ fn TakeoffSignedHeadwindField(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     flight_prefs: RwSignal<FlightPrefs>,
+    takeoff_ooc: Memo<Option<ChartOutOfRange>>,
 ) -> impl IntoView {
+    let editing = RwSignal::new(false);
+    let draft = RwSignal::new(String::new());
+    let input_ref = NodeRef::<leptos::html::Input>::new();
+    let wind_ooc = Memo::new(move |_| {
+        field_ooc_active(
+            takeoff_ooc.get().as_ref(),
+            ChartInputField::TakeoffSignedWind,
+        )
+    });
+
+    Effect::new(move |_| {
+        if editing.get() {
+            return;
+        }
+        let Some(el) = input_ref.get() else {
+            return;
+        };
+        let text = if runway_heading_status(&inputs.get().runway) != RunwayHeadingStatus::Valid {
+            String::new()
+        } else {
+            signed_along_runway_kt(&inputs.get())
+                .map(|v| format!("{v:.1}"))
+                .unwrap_or_default()
+        };
+        el.set_value(&text);
+    });
+
+    let commit = move |raw: String| {
+        let Ok(v) = raw.trim().replace(',', ".").parse::<f64>() else {
+            editing.set(false);
+            return;
+        };
+        if !v.is_finite() {
+            editing.set(false);
+            return;
+        }
+        flight_prefs.update(|p| {
+            inputs.update(|i| {
+                da20_core::wind::apply_signed_along_runway_wind(i, v);
+                persist_takeoff_tab_from_inputs(p, i);
+            });
+        });
+        editing.set(false);
+    };
+
     view! {
-        <div class="f">
+        <div class="f" class:out-of-chart=move || wind_ooc.get()>
             <label>{move || copy(locale.get()).takeoff_signed_headwind.to_string()}</label>
-            <input type="number" step="any" class="mono"
-                min=-5.0
-                max=20.0
-                prop:value=move || {
-                    if runway_heading_status(&inputs.get().runway) != RunwayHeadingStatus::Valid {
-                        String::new()
-                    } else {
-                        signed_along_runway_kt(&inputs.get())
-                            .map(|v| format!("{v:.1}"))
-                            .unwrap_or_default()
-                    }
-                }
+            <input node_ref=input_ref type="text" inputmode="decimal" autocomplete="off" class="mono"
+                on:focus=move |_| editing.set(true)
                 on:input=move |ev| {
-                    if let Ok(v) = input_value(&ev).parse::<f64>() {
-                        flight_prefs.update(|p| {
-                            inputs.update(|i| {
-                                let v = v.clamp(-5.0, 20.0);
-                                da20_core::wind::apply_signed_along_runway_wind(i, v);
-                                persist_takeoff_tab_from_inputs(p, i);
-                            });
-                        });
+                    let mut next = String::new();
+                    note_num_draft(&mut next, &input_value(&ev));
+                    draft.set(next);
+                }
+                on:blur=move |ev| commit(input_value(&ev))
+                on:keydown=move |ev: leptos::ev::KeyboardEvent| {
+                    if ev.key() == "Enter" {
+                        commit(input_value(&ev));
                     }
                 }
             />
+            {move || wind_ooc.get().then(|| view! {
+                <p class="lab field-error">{takeoff_wind_axis_limits(locale.get())}</p>
+            })}
         </div>
     }
 }
@@ -278,7 +335,11 @@ fn TakeoffObstacleUnitField(
     inputs: RwSignal<FlightInputs>,
     prefs: RwSignal<TakeoffPrefs>,
     flight_prefs: RwSignal<FlightPrefs>,
+    takeoff_ooc: Memo<Option<ChartOutOfRange>>,
 ) -> impl IntoView {
+    let obstacle_ooc = Memo::new(move |_| {
+        field_ooc_active(takeoff_ooc.get().as_ref(), ChartInputField::TakeoffObstacle)
+    });
     view! {
         {move || {
             let c = copy(locale.get());
@@ -288,39 +349,42 @@ fn TakeoffObstacleUnitField(
                 ObstacleUnit::Feet => format!("{} (0–50)", c.obstacle_ft),
             };
             view! {
-                <div class="f">
+                <div class="f" class:out-of-chart=move || obstacle_ooc.get()>
                     <label>{label}</label>
                     <div class="unit-row">
                         <input type="number" step="any" class="mono"
                             min=0.0
-                            max=move || match prefs.get().obstacle {
-                                ObstacleUnit::Meters => defaults::OBSTACLE_HEIGHT_MAX_M,
-                                ObstacleUnit::Feet => m_to_ft(defaults::OBSTACLE_HEIGHT_MAX_M),
-                            }
                             prop:value=move || {
                                 let unit = prefs.get().obstacle;
                                 let v = match unit {
                                     ObstacleUnit::Meters => inputs.get().obstacle_height_m,
-                                    ObstacleUnit::Feet => m_to_ft(inputs.get().obstacle_height_m),
+                                    ObstacleUnit::Feet => {
+                                        obstacle_chart_ft_from_m(inputs.get().obstacle_height_m)
+                                    }
                                 };
                                 format!("{v:.1}")
                             }
                             on:input=move |ev| {
                                 if let Ok(v) = input_value(&ev).parse::<f64>() {
+                                    if !v.is_finite() {
+                                        return;
+                                    }
                                     flight_prefs.update(|p| {
                                         inputs.update(|i| {
                                             let m = match prefs.get_untracked().obstacle {
                                                 ObstacleUnit::Meters => v,
-                                                ObstacleUnit::Feet => ft_to_m(v),
+                                                ObstacleUnit::Feet => obstacle_m_from_chart_ft(v),
                                             };
-                                            i.obstacle_height_m =
-                                                m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M);
+                                            i.obstacle_height_m = m.max(0.0);
                                             persist_takeoff_tab_from_inputs(p, i);
                                         });
                                     });
                                 }
                             }
                         />
+                        {move || obstacle_ooc.get().then(|| view! {
+                            <p class="lab field-error">{takeoff_obstacle_axis_limits(locale.get())}</p>
+                        })}
                         <div class="toggle-row unit-toggle">
                             <button type="button" class="btn g"
                                 class:on=move || prefs.get().obstacle == ObstacleUnit::Meters
