@@ -5,21 +5,52 @@ use crate::data::PerformanceData;
 use crate::equivalent_altitude::equivalent_altitude_ft;
 use crate::provenance::provenance_for;
 use crate::rev29::engine::rate_of_climb_fpm;
-use crate::types::{climb_roc_fairing_multiplier, CalculationWarning, ClimbResult, FlightInputs};
+use crate::types::{
+    climb_roc_fairing_multiplier, CalculationWarning, ClimbFigure, ClimbResult, FlightInputs,
+};
 
 pub const CLIMB_DERIVED_ESTIMATE_NOTE: &str =
     "Climb time, fuel, and distance are derived estimates (no AFM chart).";
 
-/// Best rate-of-climb airspeed (KIAS) per AFM DA202-C1 Rev 29 airspeed markings / §5 climb performance.
-pub const AFM_CLIMB_VY_IAS_KT: f64 = 73.0;
+/// AFM §5.3 service ceiling: ROC falls to this value (fpm).
+pub const AFM_SERVICE_CEILING_ROC_FPM: f64 = 100.0;
 
 pub const CLIMB_FUEL_ESTIMATE_BASIS: &str =
-    "Estimated fuel: Table 3 fuel flow at 2800 RPM (Sensenich propeller), integrated along the climb path; not an AFM climb-fuel chart.";
+    "Estimated fuel: Table 3 GPH at 2800 RPM (Sensenich), integrated along climb; climb is full throttle/full rich per AFM — estimate likely low vs rich mixture; no AFM climb-fuel chart.";
 
-/// Convert AFM climb IAS to TAS (kt) using tropospheric density ratio at PA and OAT.
-pub fn tas_from_ias_at_pa(ias_kt: f64, pa_ft: f64, oat_c: f64) -> f64 {
+/// Whether displayed Vy follows AFM §4.2 or club operating practice.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VySpeedPolicy {
+    Afm,
+    /// Club practice IAS; `afm_kias` is the AFM published value for reference.
+    ClubPractice {
+        afm_kias: f64,
+    },
+}
+
+/// Vy (KIAS) held constant for still-air distance: AFM or club (T/O flaps).
+pub fn vy_kias_for_figure(figure: ClimbFigure) -> (f64, VySpeedPolicy) {
+    match figure {
+        ClimbFigure::Fig55CruiseFlaps => (75.0, VySpeedPolicy::Afm),
+        ClimbFigure::Fig56TakeoffFlaps => (65.0, VySpeedPolicy::ClubPractice { afm_kias: 68.0 }),
+        ClimbFigure::Fig58BalkedLanding => (52.0, VySpeedPolicy::Afm),
+    }
+}
+
+/// Vy CAS (kt) via AFM Table 1 / Fig 5.1 interpolation for the matching flap curve.
+pub fn afm_vy_cas_kt(figure: ClimbFigure) -> f64 {
+    let (kias, _) = vy_kias_for_figure(figure);
+    crate::airspeed_table1::table1_kcas_from_kias(kias, figure).unwrap_or(kias)
+}
+
+/// TAS (kt) with Vy held constant: Table 1 CAS → TAS via σ(PA, OAT).
+pub fn tas_from_vy_cas_at_pa(cas_kt: f64, pa_ft: f64, oat_c: f64) -> f64 {
     let sigma = crate::altitude::density_ratio_sigma(pa_ft, oat_c);
-    ias_kt / sigma.sqrt()
+    cas_kt / sigma.sqrt()
+}
+
+pub fn tas_from_vy_held(figure: ClimbFigure, pa_ft: f64, oat_c: f64) -> f64 {
+    tas_from_vy_cas_at_pa(afm_vy_cas_kt(figure), pa_ft, oat_c)
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]

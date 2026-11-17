@@ -272,6 +272,19 @@ pub struct Copy {
     pub climb_calc_fuel_est: &'static str,
     pub climb_calc_fuel_est_note: &'static str,
     pub climb_calc_range_err: &'static str,
+    pub climb_calc_invalid_lapse: &'static str,
+    pub climb_calc_run: &'static str,
+    pub climb_calc_vy_held: &'static str,
+    pub climb_calc_max_weight_note: &'static str,
+    pub climb_calc_assumptions: &'static str,
+    pub climb_calc_stale: &'static str,
+    pub climb_calc_fuel_omitted: &'static str,
+    pub climb_calc_fuel_omit_mt: &'static str,
+    pub climb_calc_fuel_omit_pa: &'static str,
+    pub climb_calc_fuel_omit_disa: &'static str,
+    pub climb_calc_fuel_omit_ooc: &'static str,
+    pub climb_calc_fairings_on: &'static str,
+    pub climb_calc_fairings_off: &'static str,
     pub cruise_sweep_title: &'static str,
     pub cruise_sweep_col_pa: &'static str,
     pub cruise_sweep_col_oat: &'static str,
@@ -553,7 +566,7 @@ const ES: Copy = Copy {
     altitude_sweep_lapse_note:
         "ISA por defecto; en Santiago a menudo hay inversiones — ajuste si corresponde.",
     altitude_sweep_off_chart: "Fuera de carta",
-    climb_sweep_title: "Barrido de trepada (Vy)",
+    climb_sweep_title: "Barrido de ascenso (Vy)",
     climb_sweep_col_pa: "PA (ft)",
     climb_sweep_col_oat: "OAT (°C)",
     climb_sweep_col_isa: "ΔISA (°C)",
@@ -561,15 +574,29 @@ const ES: Copy = Copy {
     climb_sweep_col_roc: "Vy (fpm)",
     climb_sweep_col_time: "Tiempo acum. (min:s)",
     climb_sweep_total_time: "Tiempo total a objetivo",
-    climb_sweep_service_ceiling: "Techo de servicio (Vy ≤ 0)",
-    climb_calc_title: "Calculadora de trepada",
+    climb_sweep_service_ceiling: "Techo de servicio (ROC ≤ 100 fpm, AFM §5.3)",
+    climb_calc_title: "Calculadora de ascenso",
     climb_calc_oat_from: "OAT en PA origen (°C)",
-    climb_calc_total_time: "Tiempo total de trepada",
+    climb_calc_total_time: "Tiempo total de ascenso",
     climb_calc_still_air: "Distancia en aire en calma",
-    climb_calc_avg_roc: "Vy medio",
+    climb_calc_avg_roc: "ROC medio",
     climb_calc_fuel_est: "Combustible (estimación)",
-    climb_calc_fuel_est_note: "Tabla 3 @ 2800 RPM",
+    climb_calc_fuel_est_note: "Tabla 3 @ 2800 RPM; probablemente bajo (potencia/comb. rica)",
     climb_calc_range_err: "PA origen debe ser menor que PA destino.",
+    climb_calc_invalid_lapse: "Gradiente térmico no válido.",
+    climb_calc_run: "Calcular ascenso",
+    climb_calc_vy_held: "Vy constante",
+    climb_calc_max_weight_note:
+        "Cartas ROC a 1764 lb / 800 kg (máximo AFM); sin eje de peso — lectura conservadora.",
+    climb_calc_assumptions: "Carta / peso / carenados",
+    climb_calc_stale: "Entradas cambiaron; vuelva a calcular.",
+    climb_calc_fuel_omitted: "Combustible no estimado",
+    climb_calc_fuel_omit_mt: "hélice MT 175 R (sin Tabla 3)",
+    climb_calc_fuel_omit_pa: "PA por debajo de Tabla 3 (2000 ft)",
+    climb_calc_fuel_omit_disa: "ΔISA fuera de columnas Tabla 3 (−20…+10 °C)",
+    climb_calc_fuel_omit_ooc: "Tabla 3 fuera de carta en el trayecto",
+    climb_calc_fairings_on: "Carenados instalados",
+    climb_calc_fairings_off: "Sin cubiertas de rueda (−3% ROC)",
     cruise_sweep_title: "Barrido de crucero por PA",
     cruise_sweep_col_pa: "PA (ft)",
     cruise_sweep_col_oat: "OAT (°C)",
@@ -807,15 +834,29 @@ const EN: Copy = Copy {
     climb_sweep_col_roc: "ROC (fpm)",
     climb_sweep_col_time: "Cum. time (min:s)",
     climb_sweep_total_time: "Total time to target",
-    climb_sweep_service_ceiling: "Service ceiling (ROC ≤ 0)",
+    climb_sweep_service_ceiling: "Service ceiling (ROC ≤ 100 fpm, AFM §5.3)",
     climb_calc_title: "Climb calculator",
     climb_calc_oat_from: "OAT at from PA (°C)",
     climb_calc_total_time: "Total climb time",
     climb_calc_still_air: "Still-air distance",
     climb_calc_avg_roc: "Average ROC",
     climb_calc_fuel_est: "Fuel (estimate)",
-    climb_calc_fuel_est_note: "Table 3 @ 2800 RPM",
+    climb_calc_fuel_est_note: "Table 3 @ 2800 RPM; likely low (full rich)",
     climb_calc_range_err: "From PA must be below to PA.",
+    climb_calc_invalid_lapse: "Invalid lapse rate.",
+    climb_calc_run: "Calculate climb",
+    climb_calc_vy_held: "Vy held constant",
+    climb_calc_max_weight_note:
+        "ROC charts at 1764 lb / 800 kg (AFM max); no weight axis — conservative read.",
+    climb_calc_assumptions: "Chart / weight / fairings",
+    climb_calc_stale: "Inputs changed; recalculate.",
+    climb_calc_fuel_omitted: "Fuel not estimated",
+    climb_calc_fuel_omit_mt: "MT 175 R propeller (no Table 3)",
+    climb_calc_fuel_omit_pa: "PA below Table 3 (2000 ft)",
+    climb_calc_fuel_omit_disa: "ΔISA outside Table 3 columns (−20…+10 °C)",
+    climb_calc_fuel_omit_ooc: "Table 3 off chart along path",
+    climb_calc_fairings_on: "Wheel fairings installed",
+    climb_calc_fairings_off: "Wheel fairings not installed (−3% ROC)",
     cruise_sweep_title: "Cruise altitude sweep",
     cruise_sweep_col_pa: "PA (ft)",
     cruise_sweep_col_oat: "OAT (°C)",
@@ -870,11 +911,11 @@ const ES_METHODS: [MethodCopy; 11] = [
         limitations: "Tiempo de trepada puntual: estimación derivada, sin carta AFM.",
     },
     MethodCopy {
-        title: "Calculadora de trepada (Vy)",
-        afm: "AFM p. 5-11–5-16 (ROC Figs 5.5/5.6/5.8 vía Fig 5.2); Vy 73 KIAS (marcas ASI); Tabla 3 solo combustible estimado",
-        summary: "Integración Simpson en pasos de 100 ft: Δt = Δh/ROC(h) con ROC de la misma cadena que el barrido (EA Fig 5.2 + a+b·EA + penalización carenados −3%). OAT sigue el gradiente térmico editable desde la PA origen. Distancia en aire en calma: ∫ TAS dt con TAS = 73 KIAS corregida por σ(PA,OAT). Combustible solo con hélice Sensenich: ∫ (GPH Tabla 3 @ 2800 RPM) dt — estimación, sin carta AFM de combustible en trepada.",
-        interpolation: "ROC y EA: interpolación lineal en cartas; sin extrapolación (Fuera de carta con PA de salida). Tabla 3: misma regla que crucero.",
-        limitations: "Sin viento ni pista. PA origen ≥ destino → error. No descenso.",
+        title: "Calculadora de ascenso (Vy)",
+        afm: "AFM §4.2 / §4.4.8 Vy; Tabla 1 IAS→CAS; Figs 5.5/5.6/5.8 vía Fig 5.2; Tabla 3 solo combustible estimado",
+        summary: "Simpson 100 ft: Δt = Δh/ROC(h). Vy constante: 75 KIAS (CRUISE, AFM) → Tabla 1; 65 KIAS flaps T/O (práctica del club; AFM 68) → Tabla 1 curva T/O; 52 KIAS (balked). IAS→CAS interpolado Fig 5.1; CAS→TAS con σ(PA,OAT). Techo ROC ≤ 100 fpm. Fuera de carta en PA 16000 ft. Combustible Tabla 3 @ 2800 RPM (Sensenich); estimación probablemente baja (plena/rica).",
+        interpolation: "ROC y EA: interpolación lineal; sin extrapolación. Tabla 3: igual que crucero.",
+        limitations: "Sin viento ni pista. Cartas a 1764 lb / 800 kg. PA origen ≥ destino → error.",
     },
     MethodCopy {
         title: "Crucero (Tabla 3)",
@@ -952,10 +993,10 @@ const EN_METHODS: [MethodCopy; 11] = [
     },
     MethodCopy {
         title: "Climb calculator (Vy)",
-        afm: "AFM pp. 5-11–5-16 (ROC Figs 5.5/5.6/5.8 via Fig 5.2); Vy 73 KIAS (ASI marking); Table 3 for fuel estimate only",
-        summary: "Simpson integration in 100 ft steps: Δt = Δh/ROC(h) using the same ROC chain as the sweep (Fig 5.2 EA + a+b·EA + wheel-fairing −3%). OAT follows the editable lapse from from-PA. Still-air distance: ∫ TAS dt with TAS = 73 KIAS corrected by σ(PA,OAT). Fuel only with Sensenich propeller: ∫ (Table 3 GPH @ 2800 RPM) dt — estimate, no AFM climb-fuel chart.",
-        interpolation: "ROC and EA: linear chart interpolation; no extrapolation (Off chart with exit PA). Table 3: same rules as cruise.",
-        limitations: "No wind or runway. From PA ≥ to PA → error. No descents.",
+        afm: "AFM §4.2 / §4.4.8 Vy; Table 1 IAS→CAS; Figs 5.5/5.6/5.8 via Fig 5.2; Table 3 fuel estimate only",
+        summary: "Simpson 100 ft: Δt = Δh/ROC(h). Vy held constant: 75 KIAS (CRUISE, AFM) via Table 1; 65 KIAS flaps T/O (club practice; AFM 68) via T/O calibration curve; 52 KIAS balked. IAS→CAS from Fig 5.1; CAS→TAS via σ(PA,OAT). Service ceiling ROC ≤ 100 fpm. Off chart at PA 16000 ft. Table 3 fuel @ 2800 RPM; likely low (full rich).",
+        interpolation: "ROC and EA: linear interpolation; no extrapolation. Table 3: same as cruise.",
+        limitations: "No wind or runway. Charts at 1764 lb / 800 kg. From PA ≥ to PA → error.",
     },
     MethodCopy {
         title: "Cruise (Table 3)",
@@ -1288,6 +1329,60 @@ pub fn format_out_of_chart(
     ooc: &da20_core::chart_bounds::ChartOutOfRange,
 ) -> String {
     warn_text(locale, &ooc.warning())
+}
+
+pub fn format_climb_fuel_omit_reason(
+    locale: Locale,
+    reason: da20_core::climb_integration::ClimbFuelOmitReason,
+) -> String {
+    use da20_core::climb_integration::ClimbFuelOmitReason;
+    let c = copy(locale);
+    let detail = match reason {
+        ClimbFuelOmitReason::MtPropeller => c.climb_calc_fuel_omit_mt,
+        ClimbFuelOmitReason::BelowTable3Pa => c.climb_calc_fuel_omit_pa,
+        ClimbFuelOmitReason::DisaOutsideTable3 => c.climb_calc_fuel_omit_disa,
+        ClimbFuelOmitReason::Table3OffChart => c.climb_calc_fuel_omit_ooc,
+    };
+    format!("{}: {}", c.climb_calc_fuel_omitted, detail)
+}
+
+pub fn format_climb_vy_held(
+    locale: Locale,
+    kias: f64,
+    cas: f64,
+    policy: da20_core::climb::VySpeedPolicy,
+) -> String {
+    let c = copy(locale);
+    match policy {
+        da20_core::climb::VySpeedPolicy::Afm => {
+            format!(
+                "{}: {:.0} KIAS → {:.1} KCAS (AFM Tabla 1)",
+                c.climb_calc_vy_held, kias, cas
+            )
+        }
+        da20_core::climb::VySpeedPolicy::ClubPractice { afm_kias } => match locale {
+            Locale::Es => format!(
+                "Vy {:.0} KIAS (práctica del club; AFM {:.0}) → {:.1} KCAS (Tabla 1)",
+                kias, afm_kias, cas
+            ),
+            Locale::En => format!(
+                "Vy {:.0} KIAS (club practice; AFM {:.0}) → {:.1} KCAS (Table 1)",
+                kias, afm_kias, cas
+            ),
+        },
+    }
+}
+
+pub fn format_climb_figure_placard(
+    locale: Locale,
+    figure: da20_core::types::ClimbFigure,
+) -> &'static str {
+    let c = copy(locale);
+    match figure {
+        da20_core::types::ClimbFigure::Fig55CruiseFlaps => c.climb_flaps_up,
+        da20_core::types::ClimbFigure::Fig56TakeoffFlaps => c.climb_flaps_to,
+        da20_core::types::ClimbFigure::Fig58BalkedLanding => c.climb_flaps_ldg,
+    }
 }
 
 pub fn warn_text(locale: Locale, w: &da20_core::types::CalculationWarning) -> String {

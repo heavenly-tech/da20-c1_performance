@@ -6,7 +6,8 @@ use crate::altitude_sweep::{
     AltitudeSweepRangeError, DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT,
 };
 use crate::climb::compute_climb;
-use crate::climb_integration::integrate_climb_time_min;
+use crate::climb::AFM_SERVICE_CEILING_ROC_FPM;
+use crate::climb_integration::{climb_inputs_at_pa, integrate_climb_time_min};
 use crate::cruise::disa_c;
 use crate::data::PerformanceData;
 use crate::types::{ChartPhase, FlightInputs};
@@ -62,22 +63,6 @@ pub struct ClimbSweepResult {
 
 pub type ClimbSweepError = AltitudeSweepRangeError;
 
-use crate::altitude::clear_pa_override;
-
-fn inputs_at_pa(
-    base: &FlightInputs,
-    pa_start_ft: f64,
-    oat_start_c: f64,
-    pa_ft: f64,
-    lapse: f64,
-) -> FlightInputs {
-    let mut inputs = base.clone();
-    clear_pa_override(&mut inputs);
-    inputs.pressure_altitude_input_ft = pa_ft;
-    inputs.oat_c = oat_at_pa_with_lapse(oat_start_c, pa_start_ft, pa_ft, lapse);
-    inputs
-}
-
 pub fn compute_climb_roc_sweep(
     data: &PerformanceData,
     base: &FlightInputs,
@@ -109,10 +94,12 @@ pub fn compute_climb_roc_sweep(
         let oat_c = oat_at_pa_with_lapse(oat_start_c, pa_start_ft, *pa_ft, lapse);
         let isa_dev_c = disa_c(oat_c, *pa_ft);
         let da = isa_troposphere_density_altitude_ft(*pa_ft, oat_c);
-        let inputs = inputs_at_pa(base, pa_start_ft, oat_start_c, *pa_ft, lapse);
+        let inputs = climb_inputs_at_pa(base, pa_start_ft, oat_start_c, *pa_ft, lapse);
 
         let (rate_of_climb_fpm, row_valid) = match compute_climb(data, &inputs, target_pa_ft) {
-            Ok(r) if r.rate_of_climb_fpm > 0.0 => (Some(r.rate_of_climb_fpm), true),
+            Ok(r) if r.rate_of_climb_fpm > AFM_SERVICE_CEILING_ROC_FPM => {
+                (Some(r.rate_of_climb_fpm), true)
+            }
             Ok(_) => {
                 if stop_reason.is_none() && idx > 0 {
                     stop_reason = Some(ClimbSweepStopReason::ServiceCeiling);

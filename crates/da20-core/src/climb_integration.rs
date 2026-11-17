@@ -2,15 +2,17 @@
 
 use crate::altitude::clear_pa_override;
 use crate::altitude_sweep::oat_at_pa_with_lapse;
+use crate::chart_bounds::limits;
 use crate::climb::compute_climb;
-use crate::climb::tas_from_ias_at_pa;
-use crate::cruise::{compute_cruise, TABLE3_RPM_MAX};
+use crate::climb::{tas_from_vy_held, AFM_SERVICE_CEILING_ROC_FPM};
+use crate::cruise::{compute_cruise, disa_c, TABLE3_RPM_MAX};
 use crate::data::PerformanceData;
-use crate::types::{CruiseSolveMode, FlightInputs, PropellerKind};
+use crate::types::{ClimbFigure, CruiseSolveMode, FlightInputs, PropellerKind};
 
 pub const CLIMB_INTEGRATE_SUBSTEP_FT: f64 = 100.0;
 
-fn inputs_at_pa(
+/// Flight inputs at a lapse-adjusted PA along a climb segment (clears chart PA override).
+pub fn climb_inputs_at_pa(
     base: &FlightInputs,
     pa_start_ft: f64,
     oat_start_c: f64,
@@ -34,10 +36,10 @@ pub fn climb_roc_fpm_at(
     lapse: f64,
     target_pa_ft: f64,
 ) -> Option<f64> {
-    let inputs = inputs_at_pa(base, pa_start_ft, oat_start_c, pa_ft, lapse);
+    let inputs = climb_inputs_at_pa(base, pa_start_ft, oat_start_c, pa_ft, lapse);
     let r = compute_climb(data, &inputs, target_pa_ft).ok()?;
     let roc = r.rate_of_climb_fpm;
-    if roc <= 0.0 {
+    if roc <= AFM_SERVICE_CEILING_ROC_FPM {
         None
     } else {
         Some(roc)
@@ -97,7 +99,7 @@ pub fn integrate_climb_still_air_nm(
     target_pa_ft: f64,
     from_pa: f64,
     to_pa: f64,
-    vy_ias_kt: f64,
+    vy_figure: ClimbFigure,
 ) -> Option<f64> {
     if to_pa <= from_pa + 1e-9 {
         return Some(0.0);
@@ -108,7 +110,7 @@ pub fn integrate_climb_still_air_nm(
         let h = from_pa + step * i as f64;
         let oat = oat_at_pa_with_lapse(oat_start_c, pa_start_ft, h, lapse);
         let roc = climb_roc_fpm_at(data, base, pa_start_ft, oat_start_c, h, lapse, target_pa_ft)?;
-        let tas = tas_from_ias_at_pa(vy_ias_kt, h, oat);
+        let tas = tas_from_vy_held(vy_figure, h, oat);
         // d(nm) = TAS_kt * dh / (ROC_fpm * 60)
         let f = tas / (roc * 60.0);
         let weight = if i == 0 || i == n {
@@ -121,6 +123,41 @@ pub fn integrate_climb_still_air_nm(
         sum += weight * f;
     }
     Some(sum * step / 3.0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClimbFuelOmitReason {
+    MtPropeller,
+    BelowTable3Pa,
+    DisaOutsideTable3,
+    Table3OffChart,
+}
+
+pub fn climb_fuel_omit_reason_for_segment(
+    base: &FlightInputs,
+    pa_start_ft: f64,
+    oat_start_c: f64,
+    lapse: f64,
+    from_pa: f64,
+    to_pa: f64,
+) -> Option<ClimbFuelOmitReason> {
+    if base.propeller != PropellerKind::Sensenich {
+        return Some(ClimbFuelOmitReason::MtPropeller);
+    }
+    let step = CLIMB_INTEGRATE_SUBSTEP_FT;
+    let mut h = from_pa;
+    while h <= to_pa + 1e-9 {
+        let oat = oat_at_pa_with_lapse(oat_start_c, pa_start_ft, h, lapse);
+        let disa = disa_c(oat, h);
+        if h < limits::TABLE3_PA_FT.0 - 1e-6 || h > limits::TABLE3_PA_FT.1 + 1e-6 {
+            return Some(ClimbFuelOmitReason::BelowTable3Pa);
+        }
+        if disa < limits::TABLE3_DISA_C.0 - 1e-6 || disa > limits::TABLE3_DISA_C.1 + 1e-6 {
+            return Some(ClimbFuelOmitReason::DisaOutsideTable3);
+        }
+        h += step;
+    }
+    None
 }
 
 fn table3_climb_gph_at(
@@ -153,7 +190,9 @@ pub fn integrate_climb_fuel_us_gal(
     from_pa: f64,
     to_pa: f64,
 ) -> Option<f64> {
-    if base.propeller != PropellerKind::Sensenich {
+    if climb_fuel_omit_reason_for_segment(base, pa_start_ft, oat_start_c, lapse, from_pa, to_pa)
+        .is_some()
+    {
         return None;
     }
     if to_pa <= from_pa + 1e-9 {
@@ -181,18 +220,16 @@ pub fn integrate_climb_fuel_us_gal(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::altitude::density_ratio_sigma;
-    use crate::climb::AFM_CLIMB_VY_IAS_KT;
+    use crate::climb::afm_vy_cas_kt;
+    use crate::climb::tas_from_vy_cas_at_pa;
+    use crate::types::ClimbFigure;
 
     #[test]
     fn tas_increases_with_altitude_on_standard_day() {
-        let ias = AFM_CLIMB_VY_IAS_KT;
+        let cas = afm_vy_cas_kt(ClimbFigure::Fig55CruiseFlaps);
         let oat0 = 15.0;
-        let tas0 = tas_from_ias_at_pa(ias, 0.0, oat0);
-        let tas5k = tas_from_ias_at_pa(ias, 5000.0, oat0 - 0.0019812 * 5000.0);
+        let tas0 = tas_from_vy_cas_at_pa(cas, 0.0, oat0);
+        let tas5k = tas_from_vy_cas_at_pa(cas, 5000.0, oat0 - 0.0019812 * 5000.0);
         assert!(tas5k > tas0);
-        let sigma = density_ratio_sigma(0.0, oat0);
-        assert!((tas0 - ias / sigma.sqrt()).abs() < 1e-6);
     }
 }

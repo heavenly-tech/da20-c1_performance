@@ -25,7 +25,7 @@ async function shotClimbCalc(page, locale) {
   await page.waitForTimeout(600);
   const calc = page.locator(".sweep-card").first();
   await calc.waitFor({ state: "visible", timeout: 30_000 });
-  await calc.getByRole("button", { name: /Calcular tabla|Build table/i }).click();
+  await calc.getByRole("button", { name: /Calcular ascenso|Calculate climb/i }).click();
   await page.waitForSelector(".sweep-table tbody tr", { timeout: 30_000 });
   await page.waitForTimeout(500);
   await calc.screenshot({

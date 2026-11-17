@@ -3,6 +3,7 @@
 //! All POH numeric tables are loaded from JSON; do not hard-code AFM values here.
 
 pub mod afm_tag;
+pub mod airspeed_table1;
 pub mod altitude;
 pub mod altitude_sweep;
 pub mod chart_bounds;
