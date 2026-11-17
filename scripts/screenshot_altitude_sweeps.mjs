@@ -69,7 +69,7 @@ async function main() {
     const fromInput = climbSweep.locator(".sweep-range input").first();
     await fromInput.fill("2800");
     await fromInput.press("Tab");
-    await page.getByRole("button", { name: /Without fairings|Sin carenado/i }).click();
+    await page.getByRole("button", { name: /Wheel fairings not installed|Sin cubiertas de rueda/i }).click();
     await page.waitForTimeout(600);
     const fromAfter = await fromInput.inputValue();
     console.log(`From after OAT/fairings change: ${fromAfter}`);
