@@ -127,9 +127,9 @@ mod tests {
 
     #[test]
     fn terminal_appended_when_step_grid_misses_end() {
-        let grid = build_altitude_series(2130.0, 6500.0, 500.0, 60).unwrap();
-        assert!((grid.last().unwrap() - 6130.0).abs() < 1e-3);
-        let with_end = sweep_pa_series_with_terminal(grid, 6500.0, 60).unwrap();
-        assert!((with_end.last().unwrap() - 6500.0).abs() < 1e-3);
+        let grid = build_altitude_series(2130.0, 4000.0, 500.0, 60).unwrap();
+        assert!((grid.last().unwrap() - 3630.0).abs() < 1e-3);
+        let with_end = sweep_pa_series_with_terminal(grid, 4000.0, 60).unwrap();
+        assert!((with_end.last().unwrap() - 4000.0).abs() < 1e-3);
     }
 }

@@ -13,6 +13,8 @@ use crate::types::{ChartPhase, FlightInputs};
 
 pub const CLIMB_SWEEP_MAX_ROWS: usize = 60;
 pub const CLIMB_SWEEP_DEFAULT_STEP_FT: f64 = 500.0;
+/// Default climb-sweep upper PA (Fig 5.2 panel), independent of climb-target input.
+pub const CLIMB_SWEEP_DEFAULT_TO_PA_FT: f64 = 4000.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClimbSweepParams {
@@ -411,33 +413,33 @@ mod tests {
     }
 
     #[test]
-    fn sweep_2130_to_6500_includes_terminal_and_total_time_matches_integral() {
+    fn sweep_2130_to_4000_includes_terminal_and_total_time_matches_integral() {
         let data = PerformanceData::production();
         let inputs = FlightInputs {
             pressure_altitude_input_ft: 2130.0,
             oat_c: 20.0,
-            cruise_pressure_alt_ft: 6500.0,
             ..Default::default()
         };
         let lapse = DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT;
+        let to = CLIMB_SWEEP_DEFAULT_TO_PA_FT;
         let sweep = compute_climb_roc_sweep(
             &data,
             &inputs,
             &ClimbSweepParams {
                 from_pa_ft: 2130.0,
-                to_pa_ft: 6500.0,
-                step_ft: 500.0,
+                to_pa_ft: to,
+                step_ft: CLIMB_SWEEP_DEFAULT_STEP_FT,
                 lapse_rate_c_per_ft: lapse,
             },
         )
         .unwrap();
         assert!(
-            sweep.rows.iter().any(|r| (r.pa_ft - 6500.0).abs() < 1e-3),
+            sweep.rows.iter().any(|r| (r.pa_ft - to).abs() < 1e-3),
             "last pas: {:?}",
             sweep.rows.iter().map(|r| r.pa_ft).collect::<Vec<_>>()
         );
         let ref_min =
-            integrate_segment_time_min(&data, &inputs, 2130.0, 20.0, lapse, 6500.0, 2130.0, 6500.0)
+            integrate_segment_time_min(&data, &inputs, 2130.0, 20.0, lapse, to, 2130.0, to)
                 .expect("reference integral");
         let ref_s = ref_min * 60.0;
         let total = sweep.total_time_s.expect("total time");

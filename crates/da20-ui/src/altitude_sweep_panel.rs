@@ -4,7 +4,7 @@ use da20_core::altitude::effective_pressure_altitude_ft;
 use da20_core::altitude_sweep::{AltitudeSweepRangeError, DEFAULT_SWEEP_LAPSE_RATE_C_PER_FT};
 use da20_core::climb_sweep::{
     compute_climb_roc_sweep, ClimbSweepParams, ClimbSweepResult, ClimbSweepStopReason,
-    CLIMB_SWEEP_DEFAULT_STEP_FT,
+    CLIMB_SWEEP_DEFAULT_STEP_FT, CLIMB_SWEEP_DEFAULT_TO_PA_FT,
 };
 use da20_core::cruise_sweep::{
     compute_cruise_altitude_sweep, default_cruise_sweep_to_pa, CruiseSweepParams,
@@ -69,6 +69,15 @@ fn step_with_direction(from: f64, to: f64, step: f64) -> f64 {
     }
 }
 
+/// Re-sync sweep **From** to tab PA only while the user has not edited From (`from_dirty`).
+pub fn maybe_sync_sweep_from(tab_pa_ft: f64, from_dirty: bool, draft: &mut PaSweepDraft) {
+    if from_dirty {
+        return;
+    }
+    draft.from = tab_pa_ft;
+    draft.step = step_with_direction(draft.from, draft.to, draft.step);
+}
+
 pub fn format_altitude_sweep_err(locale: Locale, err: AltitudeSweepRangeError) -> String {
     match locale {
         Locale::Es => match err {
@@ -97,6 +106,7 @@ fn AltitudePaSweepFields(
     locale: RwSignal<Locale>,
     range: RwSignal<PaSweepDraft>,
     lapse: RwSignal<LapseDraft>,
+    from_dirty: RwSignal<bool>,
     pa_min: f64,
     pa_max: f64,
 ) -> impl IntoView {
@@ -106,10 +116,13 @@ fn AltitudePaSweepFields(
                 min=pa_min
                 max=pa_max
                 get=move || range.get().from
-                set=move |v| range.update(|d| {
-                    d.from = v;
-                    d.step = step_with_direction(d.from, d.to, d.step);
-                })/>
+                set=move |v| {
+                    from_dirty.set(true);
+                    range.update(|d| {
+                        d.from = v;
+                        d.step = step_with_direction(d.from, d.to, d.step);
+                    });
+                }/>
             <NumField label=move || copy(locale.get()).altitude_sweep_to_ft.to_string()
                 min=pa_min
                 max=pa_max
@@ -139,24 +152,26 @@ pub fn ClimbRocSweepPanel(
 ) -> impl IntoView {
     let range = RwSignal::new(PaSweepDraft::default());
     let lapse = RwSignal::new(LapseDraft::default());
+    let from_dirty = RwSignal::new(false);
     let error = RwSignal::new(Option::<String>::None);
     let result = RwSignal::new(Option::<ClimbSweepResult>::None);
 
     let init_defaults = move || {
         let i = inputs.get_untracked();
         let from = effective_pressure_altitude_ft(&i, Some(ChartPhase::Climb));
-        let to = i.cruise_pressure_alt_ft;
+        let to = CLIMB_SWEEP_DEFAULT_TO_PA_FT;
         let step = step_with_direction(from, to, CLIMB_SWEEP_DEFAULT_STEP_FT);
+        from_dirty.set(false);
         range.set(PaSweepDraft { from, to, step });
     };
     init_defaults();
 
+    let tab_pa =
+        Memo::new(move |_| effective_pressure_altitude_ft(&inputs.get(), Some(ChartPhase::Climb)));
     Effect::new(move |_| {
-        let i = inputs.get();
-        let from = effective_pressure_altitude_ft(&i, Some(ChartPhase::Climb));
+        let pa = tab_pa.get();
         range.update(|d| {
-            d.from = from;
-            d.step = step_with_direction(d.from, d.to, d.step);
+            maybe_sync_sweep_from(pa, from_dirty.get_untracked(), d);
         });
     });
 
@@ -179,7 +194,7 @@ pub fn ClimbRocSweepPanel(
     view! {
         <div class="card sweep-card">
             <h3>{move || copy(locale.get()).climb_sweep_title.to_string()}</h3>
-            <AltitudePaSweepFields locale=locale range=range lapse=lapse
+            <AltitudePaSweepFields locale=locale range=range lapse=lapse from_dirty=from_dirty
                 pa_min=da20_core::chart_bounds::limits::FIG52_PA_FT.0
                 pa_max=da20_core::chart_bounds::limits::FIG52_PA_FT.1/>
             <button type="button" class="btn g" on:click=run>
@@ -263,6 +278,7 @@ pub fn CruiseAltitudeSweepPanel(
 ) -> impl IntoView {
     let range = RwSignal::new(PaSweepDraft::default());
     let lapse = RwSignal::new(LapseDraft::default());
+    let from_dirty = RwSignal::new(false);
     let error = RwSignal::new(Option::<String>::None);
     let result = RwSignal::new(Option::<CruiseSweepResult>::None);
 
@@ -272,16 +288,16 @@ pub fn CruiseAltitudeSweepPanel(
         let from = i.cruise_pressure_alt_ft;
         let to = default_cruise_sweep_to_pa(&d, from);
         let step = step_with_direction(from, to, CRUISE_SWEEP_DEFAULT_STEP_FT);
+        from_dirty.set(false);
         range.set(PaSweepDraft { from, to, step });
     };
     init_defaults();
 
+    let tab_pa = Memo::new(move |_| inputs.get().cruise_pressure_alt_ft);
     Effect::new(move |_| {
-        let i = inputs.get();
-        let from = i.cruise_pressure_alt_ft;
+        let pa = tab_pa.get();
         range.update(|d| {
-            d.from = from;
-            d.step = step_with_direction(d.from, d.to, d.step);
+            maybe_sync_sweep_from(pa, from_dirty.get_untracked(), d);
         });
     });
 
@@ -304,7 +320,7 @@ pub fn CruiseAltitudeSweepPanel(
     view! {
         <div class="card sweep-card">
             <h3>{move || copy(locale.get()).cruise_sweep_title.to_string()}</h3>
-            <AltitudePaSweepFields locale=locale range=range lapse=lapse
+            <AltitudePaSweepFields locale=locale range=range lapse=lapse from_dirty=from_dirty
                 pa_min=da20_core::chart_bounds::limits::TABLE3_PA_FT.0
                 pa_max=da20_core::chart_bounds::limits::TABLE3_PA_FT.1/>
             <button type="button" class="btn g" on:click=run>
@@ -414,5 +430,46 @@ fn CruiseSweepTable(
                 </div>
             }.into_any()
         }}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_from_survives_sync_when_from_dirty() {
+        let mut draft = PaSweepDraft {
+            from: 2800.0,
+            to: 4000.0,
+            step: 500.0,
+        };
+        maybe_sync_sweep_from(2130.0, true, &mut draft);
+        assert!((draft.from - 2800.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn tab_pa_resyncs_from_only_when_not_dirty() {
+        let mut draft = PaSweepDraft {
+            from: 2130.0,
+            to: 4000.0,
+            step: 500.0,
+        };
+        maybe_sync_sweep_from(2500.0, false, &mut draft);
+        assert!((draft.from - 2500.0).abs() < 1e-9);
+        draft.from = 3000.0;
+        maybe_sync_sweep_from(2600.0, true, &mut draft);
+        assert!((draft.from - 3000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn oat_change_does_not_alter_from_via_sync_when_dirty() {
+        let mut draft = PaSweepDraft {
+            from: 3200.0,
+            to: 4000.0,
+            step: 500.0,
+        };
+        maybe_sync_sweep_from(2130.0, true, &mut draft);
+        assert!((draft.from - 3200.0).abs() < 1e-9);
     }
 }

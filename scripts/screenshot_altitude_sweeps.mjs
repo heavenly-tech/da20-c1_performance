@@ -56,6 +56,37 @@ async function main() {
   const climbTab = { Es: "Ascenso", En: "Climb" };
   const cruiseTab = { Es: "Crucero y potencia", En: "Cruise & power" };
 
+  if (process.env.REVIEW_SHOTS === "1") {
+    await setup(page, "light", "En");
+    await page.getByRole("button", { name: "Climb" }).click();
+    await page.waitForTimeout(600);
+    const climbSweep = page.locator(".sweep-card").first();
+    await climbSweep.waitFor({ state: "visible", timeout: 30_000 });
+    await page.screenshot({
+      path: path.join(outDir, "climb_default_2130_4000_en_light.png"),
+      fullPage: true,
+    });
+    const fromInput = climbSweep.locator(".sweep-range input").first();
+    await fromInput.fill("2800");
+    await fromInput.press("Tab");
+    await page.getByRole("button", { name: /Without fairings|Sin carenado/i }).click();
+    await page.waitForTimeout(600);
+    const fromAfter = await fromInput.inputValue();
+    console.log(`From after OAT/fairings change: ${fromAfter}`);
+    await page.screenshot({
+      path: path.join(outDir, "climb_custom_from_2800_after_fairings_en_light.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize(narrowVp);
+    await page.waitForTimeout(400);
+    await page.screenshot({
+      path: path.join(outDir, "climb_default_2130_4000_en_light_390px.png"),
+      fullPage: true,
+    });
+    await browser.close();
+    return;
+  }
+
   for (const theme of themes) {
     for (const loc of locales) {
       await setup(page, theme, loc);
