@@ -153,6 +153,28 @@ mod epsilon {
     }
 
     #[test]
+    fn takeoff_obstacle_height_m_epsilon() {
+        use crate::types::defaults;
+        let data = d();
+        let mut ok = takeoff_in_chart();
+        ok.obstacle_height_m = defaults::OBSTACLE_HEIGHT_MAX_M;
+        assert!(compute_takeoff(&data, &ok).is_ok());
+        ok.obstacle_height_m = defaults::OBSTACLE_HEIGHT_MAX_M + EPS;
+        assert!(matches!(
+            compute_takeoff(&data, &ok),
+            Err(TakeoffError::OutOfChart(_))
+        ));
+        ok.obstacle_height_m = defaults::obstacle_m_from_chart_ft(defaults::OBSTACLE_CHART_MAX_FT);
+        assert!(compute_takeoff(&data, &ok).is_ok());
+        ok.obstacle_height_m =
+            defaults::obstacle_m_from_chart_ft(defaults::OBSTACLE_CHART_MAX_FT + EPS);
+        assert!(matches!(
+            compute_takeoff(&data, &ok),
+            Err(TakeoffError::OutOfChart(_))
+        ));
+    }
+
+    #[test]
     fn landing_pa_epsilon() {
         let data = d();
         let mut ok = FlightInputs {
@@ -172,5 +194,4 @@ mod epsilon {
             Err(LandingError::OutOfChart(_))
         ));
     }
-
 }

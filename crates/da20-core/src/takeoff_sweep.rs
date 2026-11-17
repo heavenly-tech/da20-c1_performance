@@ -1,6 +1,6 @@
 use crate::data::PerformanceData;
 use crate::takeoff::compute_takeoff;
-use crate::types::{defaults, FlightInputs, TakeoffResult};
+use crate::types::{FlightInputs, TakeoffResult};
 use thiserror::Error;
 
 /// Maximum sweep rows before the UI rejects the request (avoid browser freeze).
@@ -180,11 +180,6 @@ pub fn compute_takeoff_sweep(
         let oat = if has_oat { oat_v } else { base_oat };
         let hw = if has_hw { hw_v } else { base_hw };
         let obs = if has_obs { obs_v } else { base_obs };
-        if !(0.0..=defaults::OBSTACLE_HEIGHT_MAX_M).contains(&obs) {
-            return Err(TakeoffSweepError::ObstacleOutOfRange {
-                max: defaults::OBSTACLE_HEIGHT_MAX_M,
-            });
-        }
         let mut inputs = base.clone();
         inputs.oat_c = oat;
         inputs.obstacle_height_m = obs;
@@ -265,6 +260,23 @@ mod tests {
         ];
         let rows = compute_takeoff_sweep(&data, &base, &axes, hw).unwrap();
         assert_eq!(rows.len(), 6);
+    }
+
+    #[test]
+    fn sweep_obstacle_over_chart_yields_none_result_not_error() {
+        let data = PerformanceData::production();
+        let base = base_inputs();
+        let hw = signed_along_runway_kt(&base).unwrap();
+        let axes = vec![TakeoffSweepAxis {
+            var: TakeoffSweepVar::ObstacleHeightM,
+            start: defaults::OBSTACLE_HEIGHT_MAX_M,
+            end: defaults::OBSTACLE_HEIGHT_MAX_M + 0.1,
+            step: 0.1,
+        }];
+        let rows = compute_takeoff_sweep(&data, &base, &axes, hw).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].result.is_some());
+        assert!(rows[1].result.is_none());
     }
 
     #[test]

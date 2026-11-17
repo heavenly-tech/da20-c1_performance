@@ -52,6 +52,11 @@ pub fn takeoff_wind_axis_limits(locale: crate::i18n::Locale) -> String {
     c.takeoff_wind_chart_limits.to_string()
 }
 
+pub fn takeoff_obstacle_axis_limits(locale: crate::i18n::Locale) -> String {
+    let c = crate::i18n::copy(locale);
+    c.takeoff_obstacle_chart_limits.to_string()
+}
+
 pub fn field_ooc_active(ooc: Option<&ChartOutOfRange>, field: ChartInputField) -> bool {
     ooc.is_some_and(|e| chart_ooc_matches_field(e, field))
 }

@@ -57,10 +57,9 @@ function fieldByLabel(page, pattern) {
 
 async function commitField(page, input, value) {
   await input.click();
-  await page.keyboard.press("Control+a");
-  await page.keyboard.type(value);
-  await page.keyboard.press("Tab");
-  await page.waitForTimeout(400);
+  await input.fill(value);
+  await input.press("Tab");
+  await page.waitForTimeout(600);
 }
 
 async function assertOocVisible(page) {
@@ -111,6 +110,46 @@ async function main() {
     await assertOocVisible(page);
     await commitField(page, weight, "800.0");
     await assertComputes(page);
+
+    const obstacleBox = page
+      .locator(".card .f")
+      .filter({ has: page.locator("label", { hasText: /Altura obstáculo|Obstacle height/i }) });
+    await obstacleBox.getByRole("button", { name: /^m$/i }).click();
+    const obstacle = obstacleBox.locator("input.mono").first();
+    await commitField(page, obstacle, "15.1");
+    await assertOocVisible(page);
+    const obsLimit = page.locator(".field-error").filter({
+      hasText: /15 m \/ 50 ft|Max obstacle height 15 m/i,
+    });
+    await obsLimit.first().waitFor({ state: "visible", timeout: 5000 });
+    await commitField(page, obstacle, "15.0");
+    await assertComputes(page);
+
+    await obstacleBox.getByRole("button", { name: /^ft$/i }).click();
+    const obstacleFt = obstacleBox.locator("input.mono").first();
+    await commitField(page, obstacleFt, "50.1");
+    await assertOocVisible(page);
+    await commitField(page, obstacleFt, "50.0");
+    await assertComputes(page);
+
+    // Obstacle sweep: 15.0 m in-chart, 15.1 m -> row without numeric result
+    await obstacleBox.getByRole("button", { name: /^m$/i }).click();
+    const sweepObs = page.locator(".sweep-var").filter({
+      has: page.locator("label", { hasText: /Obstáculo \(m\)|Obstacle \(m\)/i }),
+    });
+    await sweepObs.locator('input[type="checkbox"]').check();
+    const sweepStart = sweepObs.locator(".sweep-range input.mono").nth(0);
+    const sweepEnd = sweepObs.locator(".sweep-range input.mono").nth(1);
+    const sweepStep = sweepObs.locator(".sweep-range input.mono").nth(2);
+    await commitField(page, sweepStart, "15.0");
+    await commitField(page, sweepEnd, "15.1");
+    await commitField(page, sweepStep, "0.1");
+    await page.getByRole("button", { name: /Calcular tabla|Build table/i }).click();
+    await page.waitForTimeout(800);
+    const dash = page.locator(".sweep-table td").filter({ hasText: /^—$/ });
+    if ((await dash.count()) < 1) {
+      throw new Error("expected sweep OOC row (—)");
+    }
 
     console.log("ooc_input_limits: ok");
   } finally {

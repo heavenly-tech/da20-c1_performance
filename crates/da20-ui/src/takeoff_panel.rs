@@ -1,17 +1,23 @@
 //! Takeoff numeric inputs (unit prefs), distance rounding, and parameter sweep table.
 
 use da20_core::chart_bounds::ChartOutOfRange;
-use da20_core::rev29::engine::{ft_to_m, kg_to_lb, lb_to_kg, m_to_ft};
+use da20_core::rev29::engine::{kg_to_lb, lb_to_kg};
 use da20_core::takeoff_rounding::{apply_takeoff_distance_rounding, TakeoffDistanceRounding};
 use da20_core::takeoff_sweep::{
     compute_takeoff_sweep, TakeoffSweepAxis, TakeoffSweepError, TakeoffSweepRow, TakeoffSweepVar,
 };
-use da20_core::types::{defaults, FlightInputs};
+use da20_core::types::defaults::{
+    self, obstacle_chart_ft_from_m, obstacle_m_from_chart_ft, OBSTACLE_CHART_MAX_FT,
+    OBSTACLE_HEIGHT_MAX_M,
+};
+use da20_core::types::FlightInputs;
 use da20_core::wind::{runway_heading_status, signed_along_runway_kt, RunwayHeadingStatus};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 
-use crate::chart_field_ooc::{field_ooc_active, takeoff_wind_axis_limits, ChartInputField};
+use crate::chart_field_ooc::{
+    field_ooc_active, takeoff_obstacle_axis_limits, takeoff_wind_axis_limits, ChartInputField,
+};
 use crate::i18n::{afm_lookup_tag_label, copy, format_takeoff_sweep_var_obs, Locale};
 use crate::inputs::{format_num_display, input_value, note_num_draft, NumField};
 use crate::prefs::{
@@ -73,14 +79,14 @@ struct SweepVarDraft {
 pub fn obstacle_sweep_display_value(value_m: f64, unit: ObstacleUnit) -> f64 {
     match unit {
         ObstacleUnit::Meters => value_m,
-        ObstacleUnit::Feet => m_to_ft(value_m),
+        ObstacleUnit::Feet => obstacle_chart_ft_from_m(value_m),
     }
 }
 
 pub fn obstacle_sweep_commit_display(display: f64, unit: ObstacleUnit) -> f64 {
     let m = match unit {
         ObstacleUnit::Meters => display,
-        ObstacleUnit::Feet => ft_to_m(display),
+        ObstacleUnit::Feet => obstacle_m_from_chart_ft(display),
     };
     if m.is_finite() {
         m.max(0.0)
@@ -92,8 +98,8 @@ pub fn obstacle_sweep_commit_display(display: f64, unit: ObstacleUnit) -> f64 {
 /// Max shown in obstacle labels/errors (matches `TakeoffObstacleUnitField` 0–15 m / 0–50 ft).
 pub fn obstacle_unit_range_display_max(unit: ObstacleUnit) -> f64 {
     match unit {
-        ObstacleUnit::Meters => defaults::OBSTACLE_HEIGHT_MAX_M,
-        ObstacleUnit::Feet => 50.0,
+        ObstacleUnit::Meters => OBSTACLE_HEIGHT_MAX_M,
+        ObstacleUnit::Feet => OBSTACLE_CHART_MAX_FT,
     }
 }
 
@@ -113,7 +119,7 @@ pub fn obstacle_sweep_commit_if_changed(current_m: f64, display: f64, unit: Obst
 pub fn format_sweep_obstacle_cell(value_m: f64, unit: ObstacleUnit) -> String {
     match unit {
         ObstacleUnit::Meters => format!("{:.1}", value_m),
-        ObstacleUnit::Feet => format!("{:.1}", m_to_ft(value_m)),
+        ObstacleUnit::Feet => format!("{:.1}", obstacle_chart_ft_from_m(value_m)),
     }
 }
 
@@ -352,7 +358,9 @@ fn TakeoffObstacleUnitField(
                                 let unit = prefs.get().obstacle;
                                 let v = match unit {
                                     ObstacleUnit::Meters => inputs.get().obstacle_height_m,
-                                    ObstacleUnit::Feet => m_to_ft(inputs.get().obstacle_height_m),
+                                    ObstacleUnit::Feet => {
+                                        obstacle_chart_ft_from_m(inputs.get().obstacle_height_m)
+                                    }
                                 };
                                 format!("{v:.1}")
                             }
@@ -365,7 +373,7 @@ fn TakeoffObstacleUnitField(
                                         inputs.update(|i| {
                                             let m = match prefs.get_untracked().obstacle {
                                                 ObstacleUnit::Meters => v,
-                                                ObstacleUnit::Feet => ft_to_m(v),
+                                                ObstacleUnit::Feet => obstacle_m_from_chart_ft(v),
                                             };
                                             i.obstacle_height_m = m.max(0.0);
                                             persist_takeoff_tab_from_inputs(p, i);
@@ -374,6 +382,9 @@ fn TakeoffObstacleUnitField(
                                 }
                             }
                         />
+                        {move || obstacle_ooc.get().then(|| view! {
+                            <p class="lab field-error">{takeoff_obstacle_axis_limits(locale.get())}</p>
+                        })}
                         <div class="toggle-row unit-toggle">
                             <button type="button" class="btn g"
                                 class:on=move || prefs.get().obstacle == ObstacleUnit::Meters

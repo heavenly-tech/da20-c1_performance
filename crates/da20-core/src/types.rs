@@ -28,8 +28,20 @@ pub mod defaults {
     pub const TAKEOFF_CHART_WEIGHT_KG: f64 = 800.0;
     /// Obstacle panel x-axis (AFM Fig 5.4 sheet 2, p. 5-10).
     pub const OBSTACLE_HEIGHT_MAX_M: f64 = 15.0;
+    /// AFM Fig 5.4 obstacle panel ft scale (same span as 0–15 m).
+    pub const OBSTACLE_CHART_MAX_FT: f64 = 50.0;
     pub const OBSTACLE_HEIGHT_DEFAULT_M: f64 = 15.0;
     pub const OBSTACLE_PRESET_AFM_EXAMPLE_M: f64 = 5.0;
+
+    /// Map Fig 5.4 ft axis (0–50 ft) to stored metres (0–15 m).
+    pub fn obstacle_m_from_chart_ft(ft: f64) -> f64 {
+        (ft / OBSTACLE_CHART_MAX_FT) * OBSTACLE_HEIGHT_MAX_M
+    }
+
+    /// Display obstacle height on the Fig 5.4 ft axis.
+    pub fn obstacle_chart_ft_from_m(m: f64) -> f64 {
+        (m / OBSTACLE_HEIGHT_MAX_M) * OBSTACLE_CHART_MAX_FT
+    }
     /// AFM §1.8 — total / usable / unusable (US gal), standard tanks.
     pub const FUEL_TOTAL_US_GAL: f64 = 24.5;
     pub const FUEL_USABLE_US_GAL: f64 = 24.0;
