@@ -620,6 +620,11 @@ button {
   font: inherit;
 }
 
+.f.out-of-chart input {
+  border-color: var(--text-warning);
+  color: var(--ooc-fg);
+}
+
 .btn {
   background: var(--ui-btn-primary-bg);
   color: var(--ui-btn-primary-fg);

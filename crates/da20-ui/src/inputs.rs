@@ -5,23 +5,24 @@ use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::types::CruiseSolveMode;
 use da20_core::types::{ChartPhase, ClimbFigure, FlightInputs, PropellerKind};
 use da20_core::wind::{
-    apply_signed_along_runway_wind, runway_heading_deg, runway_heading_status,
-    signed_along_runway_kt, wind_chart_panel_needs_crosswind_note, wind_components,
-    RunwayHeadingStatus,
+    runway_heading_deg, runway_heading_status, wind_chart_panel_needs_crosswind_note,
+    wind_components, RunwayHeadingStatus,
 };
 use da20_core::wind_format::{format_wind, parse_wind};
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 
+use crate::chart_field_ooc::{field_ooc_active, ChartInputField};
 use crate::ground_oat::display_disa_c;
 use crate::i18n::{copy, format_along_runway_component, format_crosswind_component, Locale};
 use crate::phase_state::{apply_cruise_ground_elevation, apply_cruise_ground_oat, cruise_tab_mut};
 use crate::phases::Phase;
 use crate::prefs::{
-    apply_estimated_cruise_oat, clamp_cruise_oat_for_propeller, persist_climb_tab_from_inputs,
-    persist_landing_tab_from_inputs, persist_manual_cruise_oat, persist_takeoff_tab_from_inputs,
+    apply_estimated_cruise_oat, persist_climb_tab_from_inputs, persist_landing_tab_from_inputs,
+    persist_manual_cruise_oat, persist_takeoff_tab_from_inputs, sanitize_cruise_oat_estimate,
     snapshot_and_save_flight_prefs, FlightPrefs,
 };
+use da20_core::chart_bounds::ChartOutOfRange;
 
 /// Takeoff vs climb vs landing (full) airfield blocks.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -52,10 +53,10 @@ pub fn strip_airfield_target(phase: Phase) -> (AirfieldInputsMode, Option<ChartP
 
 /// Same path as the takeoff weight NumField after chart drag.
 pub fn takeoff_set_weight_lb(prefs: &mut FlightPrefs, inputs: &mut FlightInputs, lb: f64) {
-    let (kg_min, kg_max) = limits::FIG54_WEIGHT_KG;
-    let lb_min = kg_min / 0.45359237;
-    let lb_max = kg_max / 0.45359237;
-    inputs.weight_lb = lb.clamp(lb_min, lb_max);
+    if !lb.is_finite() || lb <= 0.0 {
+        return;
+    }
+    inputs.weight_lb = lb;
     prefs.takeoff.weight_lb = inputs.weight_lb;
 }
 
@@ -65,8 +66,10 @@ pub fn takeoff_set_obstacle_height_m(
     inputs: &mut FlightInputs,
     height_m: f64,
 ) {
-    inputs.obstacle_height_m =
-        height_m.clamp(0.0, da20_core::types::defaults::OBSTACLE_HEIGHT_MAX_M);
+    if !height_m.is_finite() {
+        return;
+    }
+    inputs.obstacle_height_m = height_m.max(0.0);
     prefs.takeoff.obstacle_height_m = inputs.obstacle_height_m;
 }
 
@@ -81,7 +84,6 @@ pub fn takeoff_apply_wind_from_strip(
     inputs.wind_dir_deg = wind_dir_deg;
     inputs.wind_speed_kt = wind_speed_kt;
     inputs.wind_strip_crosswind_clamped = crosswind_clamped;
-    clamp_along_runway_wind(inputs);
     prefs.takeoff.wind_dir_deg = inputs.wind_dir_deg;
     prefs.takeoff.wind_speed_kt = inputs.wind_speed_kt;
 }
@@ -158,22 +160,8 @@ pub fn shared_airfield_set_oat_c(
 
 pub(crate) const CHART_CLAMP_UNSET: f64 = f64::NAN;
 
-/// Fig 5.4 panel: tailwind up to 5 kt (signed −5), headwind up to 20 kt.
-fn clamp_along_runway_wind(inputs: &mut da20_core::types::FlightInputs) {
-    if runway_heading_status(&inputs.runway) != RunwayHeadingStatus::Valid {
-        return;
-    }
-    let Some(signed) = signed_along_runway_kt(inputs) else {
-        return;
-    };
-    let lo = -limits::FIG54_TAILWIND_KT.1;
-    let hi = limits::FIG54_HEADWIND_KT.1;
-    let clamped = signed.clamp(lo, hi);
-    if (clamped - signed).abs() > 1e-9 {
-        apply_signed_along_runway_wind(inputs, clamped);
-    }
-}
-
+/// Legacy display helper for sweep previews; never applied to stored flight inputs.
+#[allow(dead_code)]
 pub fn clamp_chart(v: f64, min: f64, max: f64) -> f64 {
     let mut x = v;
     if min.is_finite() {
@@ -210,14 +198,18 @@ pub fn num_field_display(
     }
 }
 
-/// Parse and clamp on commit (blur / Enter / change). Empty input is ignored.
-pub fn commit_num_raw(raw: &str, min: f64, max: f64) -> Option<f64> {
-    let trimmed = raw.trim();
+/// Parse on commit (blur / Enter). Empty or non-finite input is ignored (no chart clamp).
+pub fn commit_num_raw(raw: &str, _min: f64, _max: f64) -> Option<f64> {
+    let trimmed = raw.trim().replace(',', ".");
     if trimmed.is_empty() {
         return None;
     }
     let v = trimmed.parse::<f64>().ok()?;
-    Some(clamp_chart(v, min, max))
+    if v.is_finite() {
+        Some(v)
+    } else {
+        None
+    }
 }
 
 #[component]
@@ -230,6 +222,7 @@ pub fn NumField(
     /// Display formatting only; stored value keeps full precision.
     #[prop(default = None)]
     display_fraction_digits: Option<u32>,
+    #[prop(optional)] out_of_chart: Option<Memo<bool>>,
 ) -> impl IntoView {
     let editing = RwSignal::new(false);
     let draft = StoredValue::new(String::new());
@@ -254,7 +247,7 @@ pub fn NumField(
     };
 
     view! {
-        <div class="f">
+        <div class="f" class:out-of-chart=move || out_of_chart.is_some_and(|m| m.get())>
             <label>{move || label()}</label>
             <input node_ref=input_ref type="text" inputmode="decimal" autocomplete="off" class="mono"
                 on:focus=move |_| editing.set(true)
@@ -422,12 +415,29 @@ pub fn SharedAirfieldInputs(
     let (pa_min, pa_max, oat_min, oat_max) = airfield_chart_limits(chart_phase, mode);
     let show_oat = !matches!(mode, AirfieldInputsMode::Landing);
     let show_runway_wind = mode == AirfieldInputsMode::Takeoff;
+    let tab_ooc = use_context::<Memo<Option<ChartOutOfRange>>>();
+    let pa_ooc = Memo::new(move |_| {
+        tab_ooc
+            .as_ref()
+            .is_some_and(|m| field_ooc_active(m.get().as_ref(), ChartInputField::SharedPressureAlt))
+    });
+    let oat_ooc = Memo::new(move |_| {
+        tab_ooc
+            .as_ref()
+            .is_some_and(|m| field_ooc_active(m.get().as_ref(), ChartInputField::SharedOat))
+    });
+    let wind_ooc = Memo::new(move |_| {
+        tab_ooc
+            .as_ref()
+            .is_some_and(|m| field_ooc_active(m.get().as_ref(), ChartInputField::Wind))
+    });
 
     view! {
         {(!hide_pa_oat).then(|| view! {
             <NumField label=move || copy(locale.get()).pressure_altitude_ft.to_string()
                 min=pa_min
                 max=pa_max
+                out_of_chart=pa_ooc
                 get=move || {
                     shared_airfield_pressure_altitude_display(&inputs.get(), chart_phase)
                 }
@@ -447,6 +457,7 @@ pub fn SharedAirfieldInputs(
                 display_fraction_digits=Some(1)
                 min=oat_min
                 max=oat_max
+                out_of_chart=oat_ooc
                 get=move || inputs.get().oat_c
                 set=move |v| {
                     flight_prefs.update(|p| {
@@ -484,7 +495,7 @@ pub fn SharedAirfieldInputs(
                     }
                 }}
             </div>
-            <WindField locale=locale inputs=inputs flight_prefs=flight_prefs/>
+            <WindField locale=locale inputs=inputs flight_prefs=flight_prefs out_of_chart=wind_ooc/>
         })}
         <SharedAirfieldPaReadout
             locale=locale
@@ -648,7 +659,7 @@ pub fn CruiseInputs(
             tab.cruise_oat_manual = true;
             inputs.update(|i| {
                 let isa = isa_temp_c_at_pa(i.cruise_pressure_alt_ft);
-                i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, isa + deviation);
+                i.cruise_oat_c = sanitize_cruise_oat_estimate(isa + deviation);
             });
             persist_manual_cruise_oat(tab, &inputs.get_untracked());
             p.save();
@@ -676,10 +687,6 @@ pub fn CruiseInputs(
                         tab.cruise_pressure_alt_ft = v;
                         if !tab.cruise_oat_manual {
                             apply_estimated_cruise_oat(tab, i);
-                        } else if i.propeller == PropellerKind::Sensenich {
-                            let isa = isa_temp_c_at_pa(v);
-                            let (dmin, dmax) = limits::TABLE3_DISA_C;
-                            i.cruise_oat_c = i.cruise_oat_c.clamp(isa + dmin, isa + dmax);
                         }
                     });
                     p.save();
@@ -702,7 +709,7 @@ pub fn CruiseInputs(
                     let tab = cruise_tab_mut(p, phase);
                     tab.cruise_oat_manual = true;
                     inputs.update(|i| {
-                        i.cruise_oat_c = clamp_cruise_oat_for_propeller(i, v);
+                        i.cruise_oat_c = sanitize_cruise_oat_estimate(v);
                     });
                     persist_manual_cruise_oat(tab, &inputs.get_untracked());
                     p.save();
@@ -812,9 +819,10 @@ pub fn WindField(
     locale: RwSignal<Locale>,
     inputs: RwSignal<FlightInputs>,
     #[prop(optional)] flight_prefs: Option<RwSignal<FlightPrefs>>,
+    #[prop(optional)] out_of_chart: Option<Memo<bool>>,
 ) -> impl IntoView {
     view! {
-        <div class="f">
+        <div class="f" class:out-of-chart=move || out_of_chart.as_ref().is_some_and(|m| m.get())>
             <label>{move || copy(locale.get()).wind}</label>
             <input class="mono"
                 prop:value=move || {
@@ -830,7 +838,6 @@ pub fn WindField(
                                     i.wind_dir_deg = d;
                                     i.wind_speed_kt = s;
                                     i.wind_strip_crosswind_clamped = false;
-                                    clamp_along_runway_wind(i);
                                     persist_takeoff_tab_from_inputs(p, i);
                                 });
                             });
@@ -839,7 +846,6 @@ pub fn WindField(
                                 i.wind_dir_deg = d;
                                 i.wind_speed_kt = s;
                                 i.wind_strip_crosswind_clamped = false;
-                                clamp_along_runway_wind(i);
                             });
                         }
                     }
@@ -853,7 +859,6 @@ pub fn WindField(
                                     i.wind_dir_deg = d;
                                     i.wind_speed_kt = s;
                                     i.wind_strip_crosswind_clamped = false;
-                                    clamp_along_runway_wind(i);
                                     persist_takeoff_tab_from_inputs(p, i);
                                 });
                             });
@@ -862,7 +867,6 @@ pub fn WindField(
                                 i.wind_dir_deg = d;
                                 i.wind_speed_kt = s;
                                 i.wind_strip_crosswind_clamped = false;
-                                clamp_along_runway_wind(i);
                             });
                         }
                     }
@@ -1070,13 +1074,13 @@ mod num_field_tests {
     }
 
     #[test]
-    fn out_of_range_clamps_only_on_commit() {
+    fn out_of_range_keeps_raw_value_on_commit() {
         let (min, max) = limits::TABLE3_PA_FT;
         let (_, v) = type_num_draft(5000.0, min, max, "99999", None);
-        assert!((v - max).abs() < 1e-9);
+        assert!((v - 99999.0).abs() < 1e-9);
 
         let (_, v) = type_num_draft(5000.0, min, max, "1", None);
-        assert!((v - min).abs() < 1e-9);
+        assert!((v - 1.0).abs() < 1e-9);
     }
 }
 

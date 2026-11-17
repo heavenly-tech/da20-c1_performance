@@ -58,6 +58,12 @@ jobs:
         run: cargo test --workspace
       - name: build server
         run: cargo build --release -p da20-server
+      - name: install Playwright
+        run: npm install
+      - name: install Playwright Chromium
+        run: npx playwright install chromium
+      - name: E2E out-of-chart inputs
+        run: node scripts/ooc_input_limits.mjs
 
   docker:
     strategy:

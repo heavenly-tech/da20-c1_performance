@@ -66,14 +66,12 @@ pub fn PhaseShell(
                     <NumField label=move || copy(locale.get()).weight.to_string()
                         get=move || inputs.get().weight_lb
                         set=move |v| {
-                            let kg_min = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.0;
-                            let kg_max = da20_core::chart_bounds::limits::FIG54_WEIGHT_KG.1;
-                            let lb_min = kg_min / 0.45359237;
-                            let lb_max = kg_max / 0.45359237;
-                            let w = v.clamp(lb_min, lb_max);
+                            if !v.is_finite() || v <= 0.0 {
+                                return;
+                            }
                             flight_prefs.update(|p| {
-                                inputs.update(|i| i.weight_lb = w);
-                                p.climb.weight_lb = w;
+                                inputs.update(|i| i.weight_lb = v);
+                                p.climb.weight_lb = v;
                                 p.save();
                             });
                         }/>
@@ -171,6 +169,14 @@ fn PhaseGrid(
             b
         }
     });
+    let tab_ooc = Memo::new(move |_| match phase {
+        Phase::Takeoff => bundle.get().takeoff_ooc,
+        Phase::Climb => bundle.get().climb_ooc,
+        Phase::Landing => bundle.get().landing_ooc,
+        Phase::Cruise | Phase::Endurance => bundle.get().cruise_ooc,
+        Phase::Manual => None,
+    });
+    provide_context(tab_ooc);
 
     view! {
         <section class="phase scr on">

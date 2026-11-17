@@ -1,6 +1,4 @@
-use da20_core::chart_bounds::limits;
 use da20_core::cruise::compute_cruise;
-use da20_core::cruise::isa_temp_c_at_pa;
 use da20_core::takeoff_rounding::TakeoffDistanceRounding;
 use da20_core::types::{
     defaults, ChartPhase, ClimbFigure, CruiseSolveMode, FlightInputs, PaOverride, PropellerKind,
@@ -404,13 +402,11 @@ impl FlightPrefs {
     }
 }
 
-pub fn clamp_cruise_oat_for_propeller(inputs: &FlightInputs, oat: f64) -> f64 {
-    if inputs.propeller == PropellerKind::Mt175R {
-        oat.clamp(limits::FIG52_OAT_C.0, limits::FIG52_OAT_C.1)
+pub fn sanitize_cruise_oat_estimate(oat: f64) -> f64 {
+    if oat.is_finite() {
+        oat
     } else {
-        let isa = isa_temp_c_at_pa(inputs.cruise_pressure_alt_ft);
-        let (dmin, dmax) = limits::TABLE3_DISA_C;
-        oat.clamp(isa + dmin, isa + dmax)
+        defaults::OAT_C
     }
 }
 
@@ -420,7 +416,7 @@ pub fn apply_estimated_cruise_oat(tab: &CruiseTabPrefs, inputs: &mut FlightInput
         tab.ground_oat_c,
         inputs.cruise_pressure_alt_ft,
     );
-    inputs.cruise_oat_c = clamp_cruise_oat_for_propeller(inputs, est);
+    inputs.cruise_oat_c = sanitize_cruise_oat_estimate(est);
 }
 
 /// Picks the preferred 65 %BHP when both propellers are in-chart at default PA/OAT; otherwise the first in-chart candidate.
@@ -526,7 +522,7 @@ pub fn hydrate_cruise_tab_fields(
         .unwrap_or_else(|| resolved_default_cruise_percent_bhp(data));
     if tab.cruise_oat_manual {
         if let Some(oat) = tab.cruise_oat_c_saved {
-            inputs.cruise_oat_c = clamp_cruise_oat_for_propeller(inputs, oat);
+            inputs.cruise_oat_c = sanitize_cruise_oat_estimate(oat);
         }
     } else {
         apply_estimated_cruise_oat(tab, inputs);
@@ -708,8 +704,7 @@ mod tests {
         };
         apply_estimated_cruise_oat(&prefs.cruise, &mut inputs);
         let raw = estimated_oat_c_from_ground(2000.0, 25.0, inputs.cruise_pressure_alt_ft);
-        let expected = clamp_cruise_oat_for_propeller(&inputs, raw);
-        assert!((inputs.cruise_oat_c - expected).abs() < f64::EPSILON);
+        assert!((inputs.cruise_oat_c - raw).abs() < f64::EPSILON);
         assert_eq!(prefs.takeoff.oat_c, defaults::OAT_C);
     }
 
