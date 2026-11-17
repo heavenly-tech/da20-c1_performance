@@ -54,46 +54,19 @@ pub enum TakeoffSweepError {
 }
 
 pub fn build_value_series(start: f64, end: f64, step: f64) -> Result<Vec<f64>, TakeoffSweepError> {
-    if !(start.is_finite() && end.is_finite() && step.is_finite()) {
-        return Err(TakeoffSweepError::NonFinite);
+    crate::altitude_sweep::build_altitude_series(start, end, step, TAKEOFF_SWEEP_MAX_ROWS)
+        .map_err(map_altitude_sweep_err)
+}
+
+fn map_altitude_sweep_err(e: crate::altitude_sweep::AltitudeSweepRangeError) -> TakeoffSweepError {
+    use crate::altitude_sweep::AltitudeSweepRangeError::*;
+    match e {
+        NonFinite => TakeoffSweepError::NonFinite,
+        ZeroStep => TakeoffSweepError::ZeroStep,
+        RangeDirection => TakeoffSweepError::RangeDirection,
+        EmptyRange => TakeoffSweepError::EmptyRange,
+        TooManyRows { max } => TakeoffSweepError::TooManyCombinations { max },
     }
-    if step == 0.0 {
-        return Err(TakeoffSweepError::ZeroStep);
-    }
-    let mut values = Vec::new();
-    if step > 0.0 {
-        if start > end {
-            return Err(TakeoffSweepError::RangeDirection);
-        }
-        let mut v = start;
-        let mut guard = 0usize;
-        while v <= end + step.abs() * 1e-9 {
-            values.push(v);
-            v += step;
-            guard += 1;
-            if guard > TAKEOFF_SWEEP_MAX_ROWS + 10 {
-                break;
-            }
-        }
-    } else {
-        if start < end {
-            return Err(TakeoffSweepError::RangeDirection);
-        }
-        let mut v = start;
-        let mut guard = 0usize;
-        while v >= end - step.abs() * 1e-9 {
-            values.push(v);
-            v += step;
-            guard += 1;
-            if guard > TAKEOFF_SWEEP_MAX_ROWS + 10 {
-                break;
-            }
-        }
-    }
-    if values.is_empty() {
-        return Err(TakeoffSweepError::EmptyRange);
-    }
-    Ok(values)
 }
 
 pub fn validate_sweep_axes(axes: &[TakeoffSweepAxis]) -> Result<(), TakeoffSweepError> {

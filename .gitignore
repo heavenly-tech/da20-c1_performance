@@ -4,3 +4,4 @@ scripts/node_modules/
 scripts/package-lock.json
 scripts/package.json
 **/*.swp
+node_modules/

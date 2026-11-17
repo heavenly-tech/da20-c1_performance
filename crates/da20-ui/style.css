@@ -576,6 +576,11 @@ button {
   padding: 14px;
 }
 
+.chart-card {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .card h2,
 .card h3 {
   margin: 0 0 10px;

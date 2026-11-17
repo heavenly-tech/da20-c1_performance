@@ -4,11 +4,14 @@
 
 pub mod afm_tag;
 pub mod altitude;
+pub mod altitude_sweep;
 pub mod chart_bounds;
 #[cfg(test)]
 mod chart_hull_tests;
 pub mod climb;
+pub mod climb_sweep;
 pub mod cruise;
+pub mod cruise_sweep;
 pub mod data;
 pub mod endurance;
 pub mod equivalent_altitude;
