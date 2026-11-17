@@ -10,8 +10,8 @@ use da20_core::wind::{runway_heading_status, signed_along_runway_kt, RunwayHeadi
 use da20_core::PerformanceData;
 use leptos::prelude::*;
 
-use crate::i18n::{afm_lookup_tag_label, copy, Locale};
-use crate::inputs::{input_value, NumField};
+use crate::i18n::{afm_lookup_tag_label, copy, format_takeoff_sweep_var_obs, Locale};
+use crate::inputs::{format_num_display, input_value, NumField};
 use crate::prefs::{
     persist_takeoff_tab_from_inputs, FlightPrefs, ObstacleUnit, TakeoffPrefs, WeightUnit,
 };
@@ -65,6 +65,50 @@ struct SweepVarDraft {
     start: f64,
     end: f64,
     step: f64,
+}
+
+/// Sweep obstacle axis values are stored in metres (core unit).
+pub fn obstacle_sweep_display_value(value_m: f64, unit: ObstacleUnit) -> f64 {
+    match unit {
+        ObstacleUnit::Meters => value_m,
+        ObstacleUnit::Feet => m_to_ft(value_m),
+    }
+}
+
+pub fn obstacle_sweep_commit_display(display: f64, unit: ObstacleUnit) -> f64 {
+    let m = match unit {
+        ObstacleUnit::Meters => display,
+        ObstacleUnit::Feet => ft_to_m(display),
+    };
+    m.clamp(0.0, defaults::OBSTACLE_HEIGHT_MAX_M)
+}
+
+/// Max shown in obstacle labels/errors (matches `TakeoffObstacleUnitField` 0–15 m / 0–50 ft).
+pub fn obstacle_unit_range_display_max(unit: ObstacleUnit) -> f64 {
+    match unit {
+        ObstacleUnit::Meters => defaults::OBSTACLE_HEIGHT_MAX_M,
+        ObstacleUnit::Feet => 50.0,
+    }
+}
+
+/// Avoid re-committing a 1-decimal display value on blur (ft→m drift).
+pub fn obstacle_sweep_commit_if_changed(current_m: f64, display: f64, unit: ObstacleUnit) -> f64 {
+    let current_display = obstacle_sweep_display_value(current_m, unit);
+    let formatted = format_num_display(current_display, Some(1));
+    let Ok(formatted_val) = formatted.parse::<f64>() else {
+        return obstacle_sweep_commit_display(display, unit);
+    };
+    if (display - formatted_val).abs() < 1e-9 {
+        return current_m;
+    }
+    obstacle_sweep_commit_display(display, unit)
+}
+
+pub fn format_sweep_obstacle_cell(value_m: f64, unit: ObstacleUnit) -> String {
+    match unit {
+        ObstacleUnit::Meters => format!("{:.1}", value_m),
+        ObstacleUnit::Feet => format!("{:.1}", m_to_ft(value_m)),
+    }
 }
 
 #[component]
@@ -415,6 +459,7 @@ pub fn TakeoffSweepPanel(
             error.set(Some(sweep_err_msg(
                 locale.get(),
                 TakeoffSweepError::InvalidRunway,
+                prefs.get_untracked().obstacle,
             )));
             return;
         }
@@ -422,6 +467,7 @@ pub fn TakeoffSweepPanel(
             error.set(Some(sweep_err_msg(
                 locale.get(),
                 TakeoffSweepError::InvalidRunway,
+                prefs.get_untracked().obstacle,
             )));
             return;
         };
@@ -442,7 +488,11 @@ pub fn TakeoffSweepPanel(
         }
         match compute_takeoff_sweep(&data.get(), &base, &axes, hw_base) {
             Ok(r) => rows.set(r),
-            Err(e) => error.set(Some(sweep_err_msg(locale.get(), e))),
+            Err(e) => error.set(Some(sweep_err_msg(
+                locale.get(),
+                e,
+                prefs.get_untracked().obstacle,
+            ))),
         }
     };
 
@@ -451,12 +501,89 @@ pub fn TakeoffSweepPanel(
             <h3>{move || copy(locale.get()).takeoff_sweep_title.to_string()}</h3>
             <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_oat.to_string() draft=oat/>
             <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_hw.to_string() draft=hw range_min=-5.0 range_max=20.0/>
-            <SweepVarRow locale=locale label=move || copy(locale.get()).takeoff_sweep_var_obs.to_string() draft=obs range_min=0.0 range_max=defaults::OBSTACLE_HEIGHT_MAX_M/>
+            <ObstacleSweepVarRow locale=locale prefs=prefs draft=obs/>
             <button type="button" class="btn g" on:click=run>
                 {move || copy(locale.get()).takeoff_sweep_run.to_string()}
             </button>
             {move || error.get().map(|e| view! { <p class="lab field-error">{e}</p> })}
             <TakeoffSweepTable locale=locale rows=rows prefs=prefs/>
+        </div>
+    }
+}
+
+#[component]
+fn ObstacleSweepVarRow(
+    locale: RwSignal<Locale>,
+    prefs: RwSignal<TakeoffPrefs>,
+    draft: RwSignal<SweepVarDraft>,
+) -> impl IntoView {
+    view! {
+        <div class="sweep-var">
+            <label class="sweep-check">
+                <input type="checkbox"
+                    prop:checked=move || draft.get().enabled
+                    on:change=move |ev| {
+                        let on = event_checked(&ev);
+                        draft.update(|d| d.enabled = on);
+                    }
+                />
+                {move || format_takeoff_sweep_var_obs(locale.get(), prefs.get().obstacle)}
+            </label>
+            {move || {
+                let unit = prefs.get().obstacle;
+                let min = obstacle_sweep_display_value(0.0, unit);
+                let max = obstacle_sweep_display_value(defaults::OBSTACLE_HEIGHT_MAX_M, unit);
+                view! {
+                    <div class="sweep-range">
+                        <NumField label=move || copy(locale.get()).takeoff_sweep_start.to_string()
+                            min=min
+                            max=max
+                            display_fraction_digits=Some(1)
+                            get=move || {
+                                obstacle_sweep_display_value(draft.get().start, prefs.get().obstacle)
+                            }
+                            set=move |display| {
+                                draft.update(|d| {
+                                    d.start = obstacle_sweep_commit_if_changed(
+                                        d.start,
+                                        display,
+                                        prefs.get_untracked().obstacle,
+                                    );
+                                });
+                            }/>
+                        <NumField label=move || copy(locale.get()).takeoff_sweep_end.to_string()
+                            min=min
+                            max=max
+                            display_fraction_digits=Some(1)
+                            get=move || {
+                                obstacle_sweep_display_value(draft.get().end, prefs.get().obstacle)
+                            }
+                            set=move |display| {
+                                draft.update(|d| {
+                                    d.end = obstacle_sweep_commit_if_changed(
+                                        d.end,
+                                        display,
+                                        prefs.get_untracked().obstacle,
+                                    );
+                                });
+                            }/>
+                        <NumField label=move || copy(locale.get()).takeoff_sweep_step.to_string()
+                            display_fraction_digits=Some(1)
+                            get=move || {
+                                obstacle_sweep_display_value(draft.get().step, prefs.get().obstacle)
+                            }
+                            set=move |display| {
+                                draft.update(|d| {
+                                    d.step = obstacle_sweep_commit_if_changed(
+                                        d.step,
+                                        display,
+                                        prefs.get_untracked().obstacle,
+                                    );
+                                });
+                            }/>
+                    </div>
+                }.into_any()
+            }}
         </div>
     }
 }
@@ -514,6 +641,8 @@ fn TakeoffSweepTable(
             }
             let c = copy(locale.get());
             let mode = prefs.get().distance_rounding;
+            let obs_unit = prefs.get().obstacle;
+            let obs_col = format_takeoff_sweep_var_obs(locale.get(), obs_unit);
             view! {
                 <div class="sweep-table-wrap">
                     <table class="sweep-table mono">
@@ -521,7 +650,7 @@ fn TakeoffSweepTable(
                             <tr>
                                 <th>{c.takeoff_sweep_var_oat}</th>
                                 <th>{c.takeoff_sweep_var_hw}</th>
-                                <th>{c.takeoff_sweep_var_obs}</th>
+                                <th>{obs_col}</th>
                                 <th>{c.takeoff_sweep_col_gr}</th>
                                 <th>{c.takeoff_sweep_col_to}</th>
                                 <th>{c.takeoff_sweep_col_tag}</th>
@@ -531,10 +660,8 @@ fn TakeoffSweepTable(
                             {list.iter().map(|row| {
                                 let loc = locale.get();
                                 let Some(ref result) = row.result else {
-                                    let obs_display = match prefs.get_untracked().obstacle {
-                                        ObstacleUnit::Meters => format!("{:.0} m", row.obstacle_height_m),
-                                        ObstacleUnit::Feet => format!("{:.0} ft", m_to_ft(row.obstacle_height_m)),
-                                    };
+                                    let obs_display =
+                                        format_sweep_obstacle_cell(row.obstacle_height_m, obs_unit);
                                     return view! {
                                         <tr>
                                             <td>{format!("{:.1}", row.oat_c)}</td>
@@ -549,10 +676,8 @@ fn TakeoffSweepTable(
                                 };
                                 let rounded = apply_takeoff_distance_rounding(result, mode);
                                 let tag = afm_lookup_tag_label(loc, result.afm_lookup_tag);
-                                let obs_display = match prefs.get_untracked().obstacle {
-                                    ObstacleUnit::Meters => format!("{:.0} m", row.obstacle_height_m),
-                                    ObstacleUnit::Feet => format!("{:.0} ft", m_to_ft(row.obstacle_height_m)),
-                                };
+                                let obs_display =
+                                    format_sweep_obstacle_cell(row.obstacle_height_m, obs_unit);
                                 view! {
                                     <tr>
                                         <td>{format!("{:.1}", row.oat_c)}</td>
@@ -582,7 +707,12 @@ fn TakeoffSweepTable(
     }
 }
 
-fn sweep_err_msg(locale: Locale, err: TakeoffSweepError) -> String {
+fn sweep_err_msg(locale: Locale, err: TakeoffSweepError, obstacle_unit: ObstacleUnit) -> String {
+    let obs_max_display = obstacle_unit_range_display_max(obstacle_unit);
+    let obs_unit_suffix = match obstacle_unit {
+        ObstacleUnit::Meters => "m",
+        ObstacleUnit::Feet => "ft",
+    };
     match locale {
         Locale::Es => match err {
             TakeoffSweepError::NoAxes => "Seleccione 1–3 variables para el barrido.".into(),
@@ -596,8 +726,8 @@ fn sweep_err_msg(locale: Locale, err: TakeoffSweepError) -> String {
                 format!("Demasiadas combinaciones (máx. {max}).")
             }
             TakeoffSweepError::InvalidRunway => "Rumbo de pista inválido.".into(),
-            TakeoffSweepError::ObstacleOutOfRange { max } => {
-                format!("Obstáculo fuera de rango (0–{max:.0} m).")
+            TakeoffSweepError::ObstacleOutOfRange { max: _ } => {
+                format!("Obstáculo fuera de rango (0–{obs_max_display:.0} {obs_unit_suffix}).")
             }
         },
         Locale::En => match err {
@@ -612,8 +742,8 @@ fn sweep_err_msg(locale: Locale, err: TakeoffSweepError) -> String {
                 format!("Too many combinations (max {max}).")
             }
             TakeoffSweepError::InvalidRunway => "Invalid runway heading.".into(),
-            TakeoffSweepError::ObstacleOutOfRange { max } => {
-                format!("Obstacle out of range (0–{max:.0} m).")
+            TakeoffSweepError::ObstacleOutOfRange { max: _ } => {
+                format!("Obstacle out of range (0–{obs_max_display:.0} {obs_unit_suffix}).")
             }
         },
     }
@@ -773,6 +903,133 @@ mod tests {
         ));
         let restored = takeoff_weight_field_display(false, "", other, WeightUnit::Lb);
         assert_eq!(restored, back);
+    }
+
+    #[test]
+    fn obstacle_sweep_blur_without_edit_keeps_exact_metres() {
+        let m = 5.0;
+        let display_ft =
+            format_num_display(obstacle_sweep_display_value(m, ObstacleUnit::Feet), Some(1))
+                .parse::<f64>()
+                .unwrap();
+        let after = obstacle_sweep_commit_if_changed(m, display_ft, ObstacleUnit::Feet);
+        assert_eq!(after, m);
+        let naive = obstacle_sweep_commit_display(display_ft, ObstacleUnit::Feet);
+        assert!(
+            (naive - m).abs() > 1e-6,
+            "naive commit drifts: {naive} vs {m}"
+        );
+    }
+
+    #[test]
+    fn obstacle_sweep_oob_error_max_matches_main_field_labels() {
+        let es_ft = sweep_err_msg(
+            Locale::Es,
+            TakeoffSweepError::ObstacleOutOfRange {
+                max: defaults::OBSTACLE_HEIGHT_MAX_M,
+            },
+            ObstacleUnit::Feet,
+        );
+        assert!(es_ft.contains("0–50 ft"), "{es_ft}");
+        let en_m = sweep_err_msg(
+            Locale::En,
+            TakeoffSweepError::ObstacleOutOfRange {
+                max: defaults::OBSTACLE_HEIGHT_MAX_M,
+            },
+            ObstacleUnit::Meters,
+        );
+        assert!(en_m.contains("0–15 m"), "{en_m}");
+    }
+
+    #[test]
+    fn obstacle_sweep_display_round_trip_preserves_metres() {
+        let samples = [0.0, 5.0, 10.0, defaults::OBSTACLE_HEIGHT_MAX_M];
+        for &m in &samples {
+            for unit in [ObstacleUnit::Meters, ObstacleUnit::Feet] {
+                let display = obstacle_sweep_display_value(m, unit);
+                let back = obstacle_sweep_commit_display(display, unit);
+                assert!(
+                    (back - m).abs() < 1e-9,
+                    "m={m} unit={unit:?} display={display} back={back}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn obstacle_sweep_labels_es_en_ft_and_m() {
+        use crate::i18n::format_takeoff_sweep_var_obs;
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::Es, ObstacleUnit::Meters),
+            "Obstáculo (m)"
+        );
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::Es, ObstacleUnit::Feet),
+            "Obstáculo (ft)"
+        );
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::En, ObstacleUnit::Meters),
+            "Obstacle (m)"
+        );
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::En, ObstacleUnit::Feet),
+            "Obstacle (ft)"
+        );
+    }
+
+    #[test]
+    fn obstacle_sweep_ft_and_m_axes_produce_identical_core_results() {
+        use da20_core::takeoff_sweep::{compute_takeoff_sweep, TakeoffSweepAxis, TakeoffSweepVar};
+
+        let data = PerformanceData::production();
+        let inputs = FlightInputs {
+            pa_override: Some(da20_core::types::PaOverride {
+                pa_ft: 1000.0,
+                phase: da20_core::types::ChartPhase::Takeoff,
+            }),
+            oat_c: 21.0,
+            weight_lb: defaults::TAKEOFF_REF_WEIGHT_KG / 0.45359237,
+            runway: "360".into(),
+            wind_dir_deg: 0.0,
+            wind_speed_kt: 4.0,
+            obstacle_height_m: 5.0,
+            ..Default::default()
+        };
+        let hw = signed_along_runway_kt(&inputs).unwrap();
+        let axes_m = vec![TakeoffSweepAxis {
+            var: TakeoffSweepVar::ObstacleHeightM,
+            start: 5.0,
+            end: 10.0,
+            step: 5.0,
+        }];
+        let rows_m = compute_takeoff_sweep(&data, &inputs, &axes_m, hw).unwrap();
+
+        let start_ft = obstacle_sweep_display_value(5.0, ObstacleUnit::Feet);
+        let end_ft = obstacle_sweep_display_value(10.0, ObstacleUnit::Feet);
+        let step_ft = obstacle_sweep_display_value(5.0, ObstacleUnit::Feet);
+        let axes_ft = vec![TakeoffSweepAxis {
+            var: TakeoffSweepVar::ObstacleHeightM,
+            start: obstacle_sweep_commit_display(start_ft, ObstacleUnit::Feet),
+            end: obstacle_sweep_commit_display(end_ft, ObstacleUnit::Feet),
+            step: obstacle_sweep_commit_display(step_ft, ObstacleUnit::Feet),
+        }];
+        let rows_ft = compute_takeoff_sweep(&data, &inputs, &axes_ft, hw).unwrap();
+
+        assert_eq!(rows_m.len(), rows_ft.len());
+        for (a, b) in rows_m.iter().zip(rows_ft.iter()) {
+            assert!((a.obstacle_height_m - b.obstacle_height_m).abs() < 1e-9);
+            match (&a.result, &b.result) {
+                (Some(ra), Some(rb)) => {
+                    assert!((ra.ground_roll_ft - rb.ground_roll_ft).abs() < 1e-6);
+                    assert!(
+                        (ra.distance_over_obstacle_raw_ft - rb.distance_over_obstacle_raw_ft).abs()
+                            < 1e-6
+                    );
+                }
+                (None, None) => {}
+                _ => panic!("result mismatch for obs {}", a.obstacle_height_m),
+            }
+        }
     }
 
     #[test]

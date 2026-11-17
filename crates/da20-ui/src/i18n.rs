@@ -501,7 +501,7 @@ const ES: Copy = Copy {
     takeoff_sweep_run: "Calcular tabla",
     takeoff_sweep_var_oat: "OAT (°C)",
     takeoff_sweep_var_hw: "Viento de frente (kt)",
-    takeoff_sweep_var_obs: "Obstáculo (m)",
+    takeoff_sweep_var_obs: "Obstáculo",
     takeoff_sweep_start: "Desde",
     takeoff_sweep_end: "Hasta",
     takeoff_sweep_step: "Paso",
@@ -708,7 +708,7 @@ const EN: Copy = Copy {
     takeoff_sweep_run: "Build table",
     takeoff_sweep_var_oat: "OAT (°C)",
     takeoff_sweep_var_hw: "Headwind (kt)",
-    takeoff_sweep_var_obs: "Obstacle (m)",
+    takeoff_sweep_var_obs: "Obstacle",
     takeoff_sweep_start: "From",
     takeoff_sweep_end: "To",
     takeoff_sweep_step: "Step",
@@ -871,6 +871,15 @@ const EN_METHODS: [MethodCopy; 10] = [
         limitations: "Derived, not an AFM chart. Usable fuel 24.0 US gal (24.5 total per AFM §1.8). Placards: 21.3 / 19.8 gal. See AFM §5.3.10.",
     },
 ];
+
+pub fn format_takeoff_sweep_var_obs(locale: Locale, unit: crate::prefs::ObstacleUnit) -> String {
+    let c = copy(locale);
+    let suffix = match unit {
+        crate::prefs::ObstacleUnit::Meters => c.unit_m,
+        crate::prefs::ObstacleUnit::Feet => c.unit_ft,
+    };
+    format!("{} ({})", c.takeoff_sweep_var_obs, suffix)
+}
 
 pub fn format_obstacle_over(locale: Locale, height_m: f64) -> String {
     let c = copy(locale);
@@ -1358,12 +1367,27 @@ mod i18n_display_tests {
 
     #[test]
     fn takeoff_sweep_axis_labels_include_units_and_headwind_wording() {
+        use crate::prefs::ObstacleUnit;
         let es = copy(Locale::Es);
         let en = copy(Locale::En);
         assert_eq!(es.takeoff_sweep_var_hw, "Viento de frente (kt)");
-        assert_eq!(es.takeoff_sweep_var_obs, "Obstáculo (m)");
         assert_eq!(en.takeoff_sweep_var_hw, "Headwind (kt)");
-        assert_eq!(en.takeoff_sweep_var_obs, "Obstacle (m)");
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::Es, ObstacleUnit::Meters),
+            "Obstáculo (m)"
+        );
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::Es, ObstacleUnit::Feet),
+            "Obstáculo (ft)"
+        );
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::En, ObstacleUnit::Meters),
+            "Obstacle (m)"
+        );
+        assert_eq!(
+            format_takeoff_sweep_var_obs(Locale::En, ObstacleUnit::Feet),
+            "Obstacle (ft)"
+        );
         assert_ne!(es.takeoff_sweep_var_hw, es.takeoff_signed_headwind);
         assert_ne!(en.takeoff_sweep_var_hw, en.takeoff_signed_headwind);
     }

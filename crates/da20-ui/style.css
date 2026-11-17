@@ -1053,6 +1053,8 @@ img.afm-figure {
 
 .sweep-card {
   margin-top: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sweep-var {
@@ -1075,8 +1077,16 @@ img.afm-figure {
 }
 
 .sweep-table-wrap {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   margin-top: 0.75rem;
+}
+
+@media (max-width: 480px) {
+  .sweep-range {
+    grid-template-columns: 1fr;
+  }
 }
 
 .sweep-table {
