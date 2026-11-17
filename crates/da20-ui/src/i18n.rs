@@ -285,6 +285,8 @@ pub struct Copy {
     pub climb_calc_fuel_omit_ooc: &'static str,
     pub climb_calc_fairings_on: &'static str,
     pub climb_calc_fairings_off: &'static str,
+    pub climb_calc_show_breakdown: &'static str,
+    pub climb_calc_hide_breakdown: &'static str,
     pub cruise_sweep_title: &'static str,
     pub cruise_sweep_col_pa: &'static str,
     pub cruise_sweep_col_oat: &'static str,
@@ -597,6 +599,8 @@ const ES: Copy = Copy {
     climb_calc_fuel_omit_ooc: "Tabla 3 fuera de carta en el trayecto",
     climb_calc_fairings_on: "Carenados instalados",
     climb_calc_fairings_off: "Sin cubiertas de rueda (−3% ROC)",
+    climb_calc_show_breakdown: "Ver detalle",
+    climb_calc_hide_breakdown: "Ocultar detalle",
     cruise_sweep_title: "Barrido de crucero por PA",
     cruise_sweep_col_pa: "PA (ft)",
     cruise_sweep_col_oat: "OAT (°C)",
@@ -857,6 +861,8 @@ const EN: Copy = Copy {
     climb_calc_fuel_omit_ooc: "Table 3 off chart along path",
     climb_calc_fairings_on: "Wheel fairings installed",
     climb_calc_fairings_off: "Wheel fairings not installed (−3% ROC)",
+    climb_calc_show_breakdown: "Show breakdown",
+    climb_calc_hide_breakdown: "Hide breakdown",
     cruise_sweep_title: "Cruise altitude sweep",
     cruise_sweep_col_pa: "PA (ft)",
     cruise_sweep_col_oat: "OAT (°C)",
@@ -1690,5 +1696,15 @@ mod i18n_display_tests {
         assert!(!entry.summary.contains("Parámetros compartidos"));
         assert!(!entry.summary.contains("En despegue alimentan"));
         assert!(entry.summary.contains("independiente en cada ficha"));
+    }
+
+    #[test]
+    fn climb_calc_breakdown_toggle_es_en() {
+        let es = copy(Locale::Es);
+        let en = copy(Locale::En);
+        assert_eq!(es.climb_calc_show_breakdown, "Ver detalle");
+        assert_eq!(es.climb_calc_hide_breakdown, "Ocultar detalle");
+        assert_eq!(en.climb_calc_show_breakdown, "Show breakdown");
+        assert_eq!(en.climb_calc_hide_breakdown, "Hide breakdown");
     }
 }

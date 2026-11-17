@@ -75,6 +75,7 @@ pub fn ClimbCalculatorPanel(
     let error = RwSignal::new(Option::<String>::None);
     let result = RwSignal::new(Option::<ClimbCalculatorResult>::None);
     let run_fingerprint = RwSignal::new(Option::<CalcRunFingerprint>::None);
+    let breakdown_open = RwSignal::new(false);
 
     let sync_from_tab = move || {
         let i = inputs.get_untracked();
@@ -111,6 +112,7 @@ pub fn ClimbCalculatorPanel(
         error.set(None);
         result.set(None);
         run_fingerprint.set(None);
+        breakdown_open.set(false);
         let d = draft.get();
         let params = ClimbCalculatorParams {
             from_pa_ft: d.from_pa_ft,
@@ -178,7 +180,7 @@ pub fn ClimbCalculatorPanel(
                 {move || copy(locale.get()).climb_calc_run.to_string()}
             </button>
             {move || error.get().map(|e| view! { <p class="lab field-error">{e}</p> })}
-            <ClimbCalculatorResults locale=locale result=result stale=stale/>
+            <ClimbCalculatorResults locale=locale result=result stale=stale breakdown_open=breakdown_open/>
         </div>
     }
 }
@@ -188,6 +190,7 @@ fn ClimbCalculatorResults(
     locale: RwSignal<Locale>,
     result: RwSignal<Option<ClimbCalculatorResult>>,
     stale: Memo<bool>,
+    breakdown_open: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
         {move || {
@@ -254,37 +257,54 @@ fn ClimbCalculatorResults(
                         None => None,
                     }}
                 </div>
-                <div class="sweep-table-wrap">
-                    <table class="sweep-table mono">
-                        <thead>
-                            <tr>
-                                <th>{c.climb_sweep_col_pa}</th>
-                                <th>{c.climb_sweep_col_oat}</th>
-                                <th>{c.climb_sweep_col_isa}</th>
-                                <th>{c.climb_sweep_col_da}</th>
-                                <th>{c.climb_sweep_col_roc}</th>
-                                <th>{c.climb_sweep_col_time}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {res.rows.iter().map(|row| {
-                                let roc = row.rate_of_climb_fpm.map(|v| format!("{:.0}", v.round()));
-                                let da = row.density_altitude_ft.map(|v| format!("{:.0}", v.round()));
-                                let t = row.cumulative_time_s.map(format_min_sec);
-                                view! {
-                                    <tr>
-                                        <td>{format!("{:.0}", row.pa_ft.round())}</td>
-                                        <td>{format!("{:.1}", row.oat_c)}</td>
-                                        <td>{format!("{:.1}", row.isa_dev_c)}</td>
-                                        <td>{da.unwrap_or_else(|| oob.into())}</td>
-                                        <td>{roc.unwrap_or_else(|| oob.into())}</td>
-                                        <td>{t.unwrap_or_else(|| "—".into())}</td>
-                                    </tr>
-                                }
-                            }).collect_view()}
-                        </tbody>
-                    </table>
-                </div>
+                <button
+                    type="button"
+                    class="btn g climb-calc-breakdown-toggle"
+                    aria-controls="climb-calc-breakdown"
+                    aria-expanded=move || breakdown_open.get()
+                    on:click=move |_| breakdown_open.update(|open| *open = !*open)
+                >
+                    {move || {
+                        if breakdown_open.get() {
+                            c.climb_calc_hide_breakdown.to_string()
+                        } else {
+                            c.climb_calc_show_breakdown.to_string()
+                        }
+                    }}
+                </button>
+                <Show when=move || breakdown_open.get()>
+                    <div id="climb-calc-breakdown" class="sweep-table-wrap" tabindex="-1">
+                        <table class="sweep-table mono">
+                            <thead>
+                                <tr>
+                                    <th>{c.climb_sweep_col_pa}</th>
+                                    <th>{c.climb_sweep_col_oat}</th>
+                                    <th>{c.climb_sweep_col_isa}</th>
+                                    <th>{c.climb_sweep_col_da}</th>
+                                    <th>{c.climb_sweep_col_roc}</th>
+                                    <th>{c.climb_sweep_col_time}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {res.rows.iter().map(|row| {
+                                    let roc = row.rate_of_climb_fpm.map(|v| format!("{:.0}", v.round()));
+                                    let da = row.density_altitude_ft.map(|v| format!("{:.0}", v.round()));
+                                    let t = row.cumulative_time_s.map(format_min_sec);
+                                    view! {
+                                        <tr>
+                                            <td>{format!("{:.0}", row.pa_ft.round())}</td>
+                                            <td>{format!("{:.1}", row.oat_c)}</td>
+                                            <td>{format!("{:.1}", row.isa_dev_c)}</td>
+                                            <td>{da.unwrap_or_else(|| oob.into())}</td>
+                                            <td>{roc.unwrap_or_else(|| oob.into())}</td>
+                                            <td>{t.unwrap_or_else(|| "—".into())}</td>
+                                        </tr>
+                                    }
+                                }).collect_view()}
+                            </tbody>
+                        </table>
+                    </div>
+                </Show>
             }.into_any()
         }}
     }

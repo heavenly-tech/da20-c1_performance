@@ -26,10 +26,20 @@ async function shotClimbCalc(page, locale) {
   const calc = page.locator(".sweep-card").first();
   await calc.waitFor({ state: "visible", timeout: 30_000 });
   await calc.getByRole("button", { name: /Calcular montada|Calculate climb/i }).click();
-  await page.waitForSelector(".sweep-table tbody tr", { timeout: 30_000 });
-  await page.waitForTimeout(500);
+  await page.waitForSelector(".climb-calc-results .readout-text", { timeout: 30_000 });
+  await page.waitForTimeout(400);
+  const loc = locale.toLowerCase();
   await calc.screenshot({
-    path: path.join(outDir, `climb_calculator_${locale.toLowerCase()}.png`),
+    path: path.join(outDir, `climb_calculator_${loc}_collapsed.png`),
+  });
+
+  const showDetail =
+    locale === "Es" ? "Ver detalle" : "Show breakdown";
+  await calc.getByRole("button", { name: showDetail }).click();
+  await page.waitForSelector("#climb-calc-breakdown tbody tr", { timeout: 30_000 });
+  await page.waitForTimeout(400);
+  await calc.screenshot({
+    path: path.join(outDir, `climb_calculator_${loc}_expanded.png`),
   });
 }
 
