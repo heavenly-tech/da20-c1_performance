@@ -5,7 +5,7 @@ Versión en español del README principal. La interfaz usa **español por defect
 ## Fases (pestañas)
 
 1. **Despegue** — Fig 5.4 + panel de viento Fig 5.3; entradas junto al gráfico interactivo.
-2. **Ascenso** — Fig 5.5 / 5.6 / 5.8 según flaps (DES / UP / aborto).
+2. **Montada** — Fig 5.5 / 5.6 / 5.8 según flaps (DES / UP / aborto).
 3. **Crucero y potencia** — Tabla 3 (Fig 5.7 no digitalizada).
 4. **Autonomía y alcance** — Derivado de Tabla 3, combustible utilizable AFM (Sec. 1) y reserva del usuario; **no es carta AFM**.
 5. **Aterrizaje** — Tabla 4; sin corrección por viento, temperatura ni peso.
@@ -34,6 +34,6 @@ No es fuente oficial. No aprobado por Diamond Aircraft ni DGAC. El AFM aprobado 
 
 ![Pestaña Despegue (Fig 5.4)](docs/screenshots/takeoff-phase.png)
 
-![Pestaña Ascenso (Fig 5.2 → ROC)](docs/screenshots/climb-phase.png)
+![Pestaña Montada (Fig 5.2 → ROC)](docs/screenshots/climb-phase.png)
 
 ![Manual de métodos](docs/screenshots/manual-tab.png)

@@ -53,7 +53,7 @@ async function main() {
   const page = await browser.newPage({ viewport: wideVp });
   await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 120_000 });
 
-  const climbTab = { Es: "Ascenso", En: "Climb" };
+  const climbTab = { Es: "Montada", En: "Climb" };
   const cruiseTab = { Es: "Crucero y potencia", En: "Cruise & power" };
 
   if (process.env.REVIEW_SHOTS === "1") {

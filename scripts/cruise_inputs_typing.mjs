@@ -21,7 +21,7 @@ const manageServer = process.env.MANAGE_SERVER !== "0";
 
 const TAB = {
   takeoff: { es: "Despegue", en: "Takeoff" },
-  climb: { es: "Ascenso", en: "Climb" },
+  climb: { es: "Montada", en: "Climb" },
   cruise: { es: "Crucero y potencia", en: "Cruise & power" },
   endurance: { es: "Autonomía y alcance", en: "Endurance & range" },
   landing: { es: "Aterrizaje", en: "Landing" },
@@ -144,7 +144,7 @@ async function runClimbChecks(page, en) {
   const oatLabel = "OAT (°C)";
   const targetLabel = en
     ? "Climb target PA (ft)"
-    : "Altitud objetivo de trepada (ft)";
+    : "Altitud objetivo de montada (ft)";
   await assertStableTyping(page, fieldByLabel(page, paLabel), "3500", "3500");
   await assertStableTyping(page, fieldByLabel(page, oatLabel), "12", "12.0");
   await assertStableTyping(page, fieldByLabel(page, targetLabel), "4500", "4500");
