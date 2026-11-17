@@ -1,5 +1,6 @@
 //! AFM DA202-C1 Rev 29 Chapter 5 digitized dataset (native JSON layout).
 
+pub mod axis_calibration;
 pub mod charts;
 pub mod ea_inverse;
 pub mod engine;

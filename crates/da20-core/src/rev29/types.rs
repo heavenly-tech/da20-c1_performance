@@ -92,6 +92,7 @@ pub struct CruiseTableValue {
 impl Rev29File {
     pub fn from_json_str(s: &str) -> Result<Self, serde_json::Error> {
         let mut file: Self = serde_json::from_str(s)?;
+        file.calibrate_axis_endpoints();
         file.normalize_wind_grids();
         Ok(file)
     }
@@ -103,6 +104,23 @@ impl Rev29File {
 
     pub fn is_production(&self) -> bool {
         self.meta.data_status.as_deref() == Some("production")
+    }
+
+    fn calibrate_axis_endpoints(&mut self) {
+        use super::axis_calibration::calibrate_rev29_axes;
+        let _audit = calibrate_rev29_axes(
+            &mut self.tw_kt.value,
+            &mut self.hw_kt.value,
+            &mut self.wt_kg.value,
+            &mut self.to_t.value,
+            &mut self.to_pa.value,
+            &mut self.fan_t.value,
+            &mut self.fan_pa.value,
+            &mut self.land_alt.value,
+            &mut self.hw_lines.value,
+            &mut self.tw_lines.value,
+            &mut self.obs_lines.value,
+        );
     }
 
     /// AFM wind panels store distances as [wind_kt][guide_line]. JSON `tw_m` is [line][kt] until transposed.
