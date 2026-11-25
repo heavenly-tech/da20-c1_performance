@@ -1,0 +1,45 @@
+# Multi-arch Docker image builds (one workflow permutation per platform).
+matrix:
+  ARCH: [amd64, arm64]
+
+when:
+  - event: pull_request
+    path:
+      include:
+        - Dockerfile
+        - crates/**
+        - Cargo.toml
+        - Cargo.lock
+  - event: push
+    branch: main
+
+labels:
+  platform: linux/${ARCH}
+
+variables:
+  - &alpine_image alpine:3.20
+  - &docker_cli_image docker:27.4.0-cli-alpine3.20
+
+steps:
+  - name: wasm-bindgen-cli pin matches Cargo.lock
+    image: *alpine_image
+    pull: false
+    commands:
+      - apk add --no-cache bash
+      - bash scripts/check-wasm-bindgen-pin.sh
+
+  - name: docker-${ARCH}
+    image: *docker_cli_image
+    pull: false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    commands:
+      - docker buildx build --platform linux/${ARCH} --progress=plain .
+
+  - name: cleanup workspace caches
+    image: *alpine_image
+    pull: false
+    when:
+      - status: [success, failure]
+    commands:
+      - rm -rf target .ci-cache
