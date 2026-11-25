@@ -1,0 +1,109 @@
+# Rust workspace CI on the Mac mini agent (linux/arm64).
+when:
+  - event: pull_request
+  - event: push
+    branch: main
+
+labels:
+  platform: linux/arm64
+
+variables:
+  - &da20_ci_image registry.heavenly.cl/da20-ci:1.89-0.22.1-0.2.130
+  - &alpine_image alpine:3.20
+  - &ci_env_setup |
+      set -a
+      . ./.ci-env
+      set +a
+
+steps:
+  - name: prepare-cache
+    image: *alpine_image
+    pull: false
+    commands:
+      - mkdir -p .ci-cache/cargo-home .ci-cache/target .ci-cache/npm \
+          .ci-cache/ms-playwright
+      - |
+        cat > .ci-env <<'EOF'
+        export CARGO_HOME=.ci-cache/cargo-home
+        export CARGO_TARGET_DIR=.ci-cache/target
+        export CARGO_TERM_COLOR=always
+        export PLAYWRIGHT_BROWSERS_PATH=.ci-cache/ms-playwright
+        export NPM_CONFIG_CACHE=.ci-cache/npm
+        EOF
+
+  - name: fmt
+    image: *da20_ci_image
+    pull: false
+    commands:
+      - *ci_env_setup
+      - cargo fmt --all -- --check
+
+  - name: wasm-bindgen-cli pin matches Cargo.lock
+    image: *alpine_image
+    pull: false
+    commands:
+      - apk add --no-cache bash
+      - bash scripts/check-wasm-bindgen-pin.sh
+
+  - name: wasm build
+    image: *da20_ci_image
+    pull: false
+    directory: crates/da20-ui
+    commands:
+      - *ci_env_setup
+      - |
+        set -eu
+        for attempt in 1 2 3; do
+          if trunk build --release; then
+            exit 0
+          fi
+          echo "trunk build failed (attempt ${attempt}/3), retrying..."
+          sleep $((attempt * 20))
+        done
+        exit 1
+
+  - name: clippy
+    image: *da20_ci_image
+    pull: false
+    commands:
+      - *ci_env_setup
+      - cargo clippy --workspace --all-targets -- -D warnings
+
+  - name: test
+    image: *da20_ci_image
+    pull: false
+    commands:
+      - *ci_env_setup
+      - cargo test --workspace
+
+  - name: build server
+    image: *da20_ci_image
+    pull: false
+    commands:
+      - *ci_env_setup
+      - cargo build --release -p da20-server
+
+  - name: install Playwright Chromium
+    image: *da20_ci_image
+    pull: false
+    commands:
+      - *ci_env_setup
+      - npm ci --cache .ci-cache/npm
+      - npx playwright install chromium
+
+  - name: e2e out-of-chart inputs
+    image: *da20_ci_image
+    pull: false
+    environment:
+      MANAGE_SERVER: "1"
+    commands:
+      - *ci_env_setup
+      - node scripts/ooc_input_limits.mjs
+
+  - name: cleanup workspace caches
+    image: *alpine_image
+    pull: false
+    when:
+      - status: [success, failure]
+    commands:
+      - rm -rf target .ci-cache
