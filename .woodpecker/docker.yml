@@ -3,13 +3,6 @@ matrix:
   ARCH: [amd64, arm64]
 
 when:
-  - event: pull_request
-    path:
-      include:
-        - Dockerfile
-        - crates/**
-        - Cargo.toml
-        - Cargo.lock
   - event: push
     branch: main
 
@@ -18,7 +11,7 @@ labels:
 
 variables:
   - &alpine_image alpine:3.20
-  - &docker_cli_image docker:27.4.0-cli-alpine3.20
+  - &docker_cli_image docker:27.4.0-cli
 
 steps:
   - name: wasm-bindgen-cli pin matches Cargo.lock
